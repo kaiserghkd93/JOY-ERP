@@ -1,8 +1,8 @@
 from datetime import date
 from sqlalchemy.orm import Session
 from app.models.production import ProductionOrder, Mold, POrdStatus
-from app.models.master import Item
-from app.models.ledger import LedgerType
+from app.models.master import Item, BomLine
+from app.models.ledger import LedgerType, StockLedger
 from app.services.doc_no import next_doc_no
 from app.services.ledger_service import post_ledger
 from fastapi import HTTPException
@@ -40,12 +40,33 @@ def post_production_result(
     pord.complete_date = complete_date
     pord.status = POrdStatus.completed
 
-    # 생산입고 → 재고원장 (외주입고와 같은 풀)
+    # 생산입고 → 재고원장
     post_ledger(
         db, pord.part_no, complete_date,
         LedgerType.production, +actual_qty, 0.0,
         ref_type="WO", ref_no=pord_no, note=f"생산실적 {actual_qty}",
     )
+
+    # BOM 기준 부품 소모 → 재고원장 차감 (멱등: 같은 WO 중복 방지)
+    already_consumed = db.query(StockLedger).filter(
+        StockLedger.ref_no == pord_no,
+        StockLedger.ref_type == "WO-BOM",
+    ).first()
+    if not already_consumed:
+        bom_lines = db.query(BomLine).filter(BomLine.product_part_no == pord.part_no).all()
+        for b in bom_lines:
+            consume_qty = int(float(b.qty_per) * actual_qty)
+            if consume_qty == 0:
+                continue
+            component = db.get(Item, b.component_part_no)
+            price = float(component.std_buy_price or 0) if component else 0.0
+            post_ledger(
+                db, b.component_part_no, complete_date,
+                LedgerType.consumption, -consume_qty, price,
+                ref_type="WO-BOM", ref_no=pord_no,
+                note=f"생산투입({pord.part_no}×{actual_qty}EA)",
+            )
+
     # 금형 누적타수 가산
     if pord.mold_no:
         mold = db.get(Mold, pord.mold_no)

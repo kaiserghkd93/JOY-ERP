@@ -51,3 +51,5 @@ class ReceiptOut(BaseModel):
     unit_price: float
     status: ReceiptStatus
     note: str | None
+    partner_id: str | None = None
+    outsource_price: float | None = None

@@ -10,3 +10,4 @@ httpx==0.28.0
 pytest==8.3.4
 pytest-asyncio==0.24.0
 openpyxl==3.1.5
+psycopg2-binary==2.9.10

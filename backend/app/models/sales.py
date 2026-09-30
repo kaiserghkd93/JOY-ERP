@@ -5,16 +5,22 @@ from app.database import Base
 import enum
 
 
-class SOStatus(str, enum.Enum):
-    open = "수주"
-    partial = "일부출하"
-    closed = "출하완료"
+class InvoiceStatus(str, enum.Enum):
+    draft = "작성중"
+    issued = "발행완료"
     cancelled = "취소"
+
+
+class SOStatus(str, enum.Enum):
+    open = "open"
+    partial = "partial"
+    closed = "closed"
+    cancelled = "cancelled"
 
 
 class ShipmentStatus(str, enum.Enum):
-    confirmed = "확정"
-    cancelled = "취소"
+    confirmed = "confirmed"
+    cancelled = "cancelled"
 
 
 class SalesOrder(Base):
@@ -49,4 +55,31 @@ class Shipment(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
 
     sales_order: Mapped["SalesOrder"] = relationship(back_populates="shipments")
+    item: Mapped["Item"] = relationship()
+
+
+class Invoice(Base):
+    __tablename__ = "invoice"
+
+    inv_no: Mapped[str] = mapped_column(String(30), primary_key=True)
+    partner_id: Mapped[str] = mapped_column(ForeignKey("partner.partner_id"), nullable=False)
+    issue_date: Mapped[date] = mapped_column(Date, nullable=False)
+    status: Mapped[InvoiceStatus] = mapped_column(SAEnum(InvoiceStatus), default=InvoiceStatus.draft)
+    note: Mapped[str | None] = mapped_column(String(500))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+
+    partner: Mapped["Partner"] = relationship()
+    lines: Mapped[list["InvoiceLine"]] = relationship(back_populates="invoice", cascade="all, delete-orphan")
+
+
+class InvoiceLine(Base):
+    __tablename__ = "invoice_line"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    inv_no: Mapped[str] = mapped_column(ForeignKey("invoice.inv_no"), nullable=False)
+    part_no: Mapped[str] = mapped_column(ForeignKey("item.part_no"), nullable=False)
+    qty: Mapped[int] = mapped_column(Integer, nullable=False)
+    unit_price: Mapped[float] = mapped_column(Numeric(15, 2), nullable=False)
+
+    invoice: Mapped["Invoice"] = relationship(back_populates="lines")
     item: Mapped["Item"] = relationship()

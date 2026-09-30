@@ -9,8 +9,10 @@ class LedgerType(str, enum.Enum):
     receipt = "입고"
     shipment = "출고"
     production = "생산입고"
+    consumption = "생산소모"
     adjustment = "재고조정"
     cancel = "취소"
+    issue = "issue"  # 외주처 출고 (손익보고서용)
 
 
 class StockLedger(Base):

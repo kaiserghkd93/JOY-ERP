@@ -17,11 +17,13 @@ class SOOut(BaseModel):
     so_no: str
     partner_id: str
     part_no: str
+    item_name: str | None = None
     qty: int
     order_date: date
     due_date: date
     status: SOStatus
     note: str | None
+    remaining_qty: int | None = None
 
 
 class SOSummary(BaseModel):
@@ -51,3 +53,7 @@ class ShipmentOut(BaseModel):
     unit_price: float
     status: ShipmentStatus
     note: str | None
+    partner_id: str | None = None
+    partner_name: str | None = None
+    due_date: date | None = None
+    item_name: str | None = None

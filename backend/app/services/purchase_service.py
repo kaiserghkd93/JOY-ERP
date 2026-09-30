@@ -46,8 +46,6 @@ def create_receipt(
         raise HTTPException(400, "취소된 발주에는 입고 불가")
 
     remaining = get_remaining_qty(db, po_no)
-    if qty > remaining:
-        raise HTTPException(400, f"미입고잔량({remaining}) 초과")
 
     gr_no = next_doc_no(db, "GR", "receipt", "gr_no")
     receipt = Receipt(
@@ -72,6 +70,10 @@ def get_remaining_qty(db: Session, po_no: str) -> int:
         Receipt.status != ReceiptStatus.cancelled,
     ).scalar()
     return po.qty - int(received)
+
+
+def update_po_status(db: Session, po: PurchaseOrder):
+    return _update_po_status(db, po)
 
 
 def _update_po_status(db: Session, po: PurchaseOrder):

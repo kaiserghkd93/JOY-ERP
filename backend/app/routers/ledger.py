@@ -21,8 +21,8 @@ def confirm(gr_no: str, db: Session = Depends(get_db)):
 
 
 @router.post("/receipts/{gr_no}/cancel", response_model=LedgerOut)
-def cancel(gr_no: str, db: Session = Depends(get_db)):
-    entry = cancel_receipt(db, gr_no)
+def cancel(gr_no: str, force: bool = False, db: Session = Depends(get_db)):
+    entry = cancel_receipt(db, gr_no, force=force)
     db.commit()
     db.refresh(entry)
     return entry
@@ -34,6 +34,25 @@ def adjust(body: AdjustRequest, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(entry)
     return entry
+
+
+@router.post("/set-stock")
+def set_stock(part_no: str, target_qty: int, note: str = "수동재고입력", db: Session = Depends(get_db)):
+    """현재고를 target_qty로 강제 설정 (재고조정 전표 자동 생성)"""
+    from datetime import date
+    item = db.get(Item, part_no)
+    if not item:
+        raise HTTPException(404)
+    current = get_stock(db, part_no)
+    delta = target_qty - current
+    if delta == 0:
+        return {"part_no": part_no, "before": current, "after": target_qty, "delta": 0}
+    avg = get_avg_price(db, part_no)
+    unit_price = avg if avg > 0 else float(item.std_buy_price)
+    entry = adjust_stock(db, part_no, delta, date.today(), note)
+    entry.unit_price = unit_price
+    db.commit()
+    return {"part_no": part_no, "before": current, "after": target_qty, "delta": delta}
 
 
 @router.get("/snapshot", response_model=list[StockSnapshot])

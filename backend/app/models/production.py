@@ -1,5 +1,5 @@
 from datetime import date, datetime
-from sqlalchemy import String, Integer, Text, Date, DateTime, ForeignKey, Enum as SAEnum
+from sqlalchemy import String, Integer, Numeric, Text, Date, DateTime, ForeignKey, Enum as SAEnum, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database import Base
 import enum
@@ -49,3 +49,33 @@ class Mold(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
 
     production_orders: Mapped[list["ProductionOrder"]] = relationship(back_populates="mold")
+
+
+class MonthlyPlan(Base):
+    """월 생산계획 헤더 — 제품별 월 목표수량"""
+    __tablename__ = "monthly_plan"
+    __table_args__ = (UniqueConstraint("year", "month", "part_no", name="uq_monthly_plan"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    year: Mapped[int] = mapped_column(Integer, nullable=False)
+    month: Mapped[int] = mapped_column(Integer, nullable=False)
+    part_no: Mapped[str] = mapped_column(ForeignKey("item.part_no"), nullable=False)
+    planned_qty: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_at: Mapped[date] = mapped_column(Date, default=date.today)
+
+    item: Mapped["Item"] = relationship()
+    actuals: Mapped[list["DailyActual"]] = relationship(back_populates="plan", cascade="all, delete-orphan")
+
+
+class DailyActual(Base):
+    """일별 생산실적"""
+    __tablename__ = "daily_actual"
+    __table_args__ = (UniqueConstraint("plan_id", "prod_date", name="uq_daily_actual"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    plan_id: Mapped[int] = mapped_column(ForeignKey("monthly_plan.id"), nullable=False)
+    prod_date: Mapped[date] = mapped_column(Date, nullable=False)
+    actual_qty: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    note: Mapped[str | None] = mapped_column(String(200))
+
+    plan: Mapped["MonthlyPlan"] = relationship(back_populates="actuals")

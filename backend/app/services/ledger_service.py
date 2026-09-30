@@ -77,7 +77,7 @@ def confirm_receipt(db: Session, gr_no: str) -> StockLedger:
     return entry
 
 
-def cancel_receipt(db: Session, gr_no: str) -> StockLedger:
+def cancel_receipt(db: Session, gr_no: str, force: bool = False) -> StockLedger:
     """입고 취소 → 취소전표(마이너스) 추가. 원본은 삭제하지 않음."""
     from app.models.purchase import Receipt, ReceiptStatus
     receipt = db.get(Receipt, gr_no)
@@ -87,17 +87,27 @@ def cancel_receipt(db: Session, gr_no: str) -> StockLedger:
         raise HTTPException(400, "확정된 입고만 취소 가능")
 
     stock_after = get_stock(db, receipt.part_no) - receipt.qty
-    if stock_after < 0:
-        raise HTTPException(400, f"취소 시 재고 음수 ({stock_after}) — 불가")
+    if stock_after < 0 and not force:
+        raise HTTPException(400, f"취소 시 재고 음수 ({stock_after:,}) — 이미 출하된 수량이 있습니다. 강제취소하려면 force=true로 요청하세요.")
 
     receipt.status = ReceiptStatus.cancelled
     avg = get_avg_price(db, receipt.part_no)
+    note = "입고취소전표(강제)" if stock_after < 0 else "입고취소전표"
     entry = post_ledger(
         db, receipt.part_no, receipt.receipt_date,
         LedgerType.cancel, -receipt.qty, avg,
-        ref_type="CANCEL", ref_no=gr_no, note="입고취소전표",
+        ref_type="CANCEL", ref_no=gr_no, note=note,
     )
     db.flush()
+
+    # PO 상태 재계산 (직접입고가 아닌 경우만)
+    if receipt.po_no != receipt.gr_no:
+        from app.models.purchase import PurchaseOrder
+        from app.services.purchase_service import _update_po_status
+        po = db.get(PurchaseOrder, receipt.po_no)
+        if po:
+            _update_po_status(db, po)
+
     return entry
 
 

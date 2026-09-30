@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+*.egg-info/
+
+# DB 파일 (로컬 전용 — 운영은 PostgreSQL)
+backend/joy_erp.db
+backend/joy_erp.db-wal
+backend/joy_erp.db-shm
+
+# Node
+node_modules/
+frontend/dist/
+
+# 환경변수
+.env
+.env.local
+.env.production
+
+# 기타
+*.log
+.DS_Store
+Thumbs.db
