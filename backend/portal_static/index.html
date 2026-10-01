@@ -83,28 +83,64 @@ tr:last-child td { border-bottom: none; }
 .remove-btn { background: #fee2e2; color: #dc2626; border: none; border-radius: 6px; padding: 4px 10px; cursor: pointer; font-size: 12px; }
 
 /* 거래명세서 */
-#invoice-modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; overflow-y: auto; }
-.invoice-wrap { background: white; max-width: 800px; margin: 30px auto; padding: 40px; border-radius: 8px; }
-.inv-title { text-align: center; font-size: 24px; font-weight: 700; margin-bottom: 4px; }
-.inv-sub { text-align: center; font-size: 13px; color: #666; margin-bottom: 24px; }
-.inv-meta { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px; }
-.inv-meta-box { border: 1px solid #ddd; padding: 12px 16px; border-radius: 6px; }
-.inv-meta-box .key { font-size: 11px; color: #888; margin-bottom: 4px; }
-.inv-meta-box .val { font-size: 14px; font-weight: 600; }
-.inv-table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
-.inv-table th { background: #1a1a2e; color: white; padding: 10px 12px; text-align: left; font-size: 13px; }
-.inv-table td { padding: 10px 12px; border-bottom: 1px solid #e0e0e0; font-size: 13px; }
-.inv-total { text-align: right; font-size: 16px; font-weight: 700; margin-bottom: 24px; padding: 12px 16px; background: #f8f9fa; border-radius: 6px; }
-.inv-sign { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 20px; }
-.sign-box { border: 1px solid #ddd; padding: 16px; text-align: center; border-radius: 6px; min-height: 80px; }
-.sign-box .sign-label { font-size: 12px; color: #888; margin-bottom: 8px; }
-.modal-btns { display: flex; gap: 12px; justify-content: center; margin-top: 20px; }
+#invoice-modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); z-index: 1000; overflow-y: auto; }
+.invoice-wrap { background: white; max-width: 860px; margin: 24px auto; padding: 0; border-radius: 4px; box-shadow: 0 8px 40px rgba(0,0,0,0.25); }
+.inv-screen-btns { display: flex; gap: 10px; justify-content: center; padding: 16px; background: #f1f5f9; border-radius: 0 0 4px 4px; }
+
+/* 인쇄 영역 */
+.inv-doc { padding: 32px 36px 28px; font-family: 'Malgun Gothic', '맑은 고딕', sans-serif; }
+
+/* 제목 */
+.inv-header-row { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 18px; }
+.inv-title-block { text-align: center; flex: 1; }
+.inv-title-block h1 { font-size: 28px; font-weight: 900; letter-spacing: 12px; color: #111; margin-bottom: 4px; }
+.inv-title-block .inv-docno { font-size: 12px; color: #666; letter-spacing: 0; }
+.inv-stamp-area { width: 72px; height: 72px; border: 2px solid #ccc; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; color: #aaa; flex-shrink: 0; }
+
+/* 공급자/공급받는자 2단 */
+.inv-parties { display: grid; grid-template-columns: 1fr 1fr; gap: 0; border: 2px solid #222; margin-bottom: 0; }
+.inv-party { padding: 0; }
+.inv-party-title { background: #222; color: white; font-size: 13px; font-weight: 700; padding: 6px 12px; text-align: center; letter-spacing: 2px; }
+.inv-party-body { display: grid; grid-template-columns: 1fr 1fr; }
+.inv-party-field { border-top: 1px solid #ccc; border-right: 1px solid #ccc; padding: 5px 10px; }
+.inv-party-field:nth-child(even) { border-right: none; }
+.inv-party-field .f-label { font-size: 10px; color: #777; margin-bottom: 2px; }
+.inv-party-field .f-val { font-size: 13px; font-weight: 600; color: #111; }
+.inv-party-divider { border-right: 2px solid #222; }
+
+/* 합계금액 띠 */
+.inv-total-bar { border: 2px solid #222; border-top: none; display: flex; align-items: center; padding: 8px 16px; gap: 24px; margin-bottom: 16px; }
+.inv-total-bar .tl { font-size: 13px; font-weight: 700; }
+.inv-total-bar .tv { font-size: 18px; font-weight: 900; color: #111; margin-left: 8px; }
+.inv-total-bar .th { font-size: 12px; color: #666; margin-left: auto; }
+
+/* 품목 테이블 */
+.inv-items { width: 100%; border-collapse: collapse; border: 2px solid #222; margin-bottom: 16px; font-size: 13px; }
+.inv-items th { background: #222; color: white; padding: 7px 10px; text-align: center; font-size: 12px; font-weight: 700; border-right: 1px solid #555; }
+.inv-items th:last-child { border-right: none; }
+.inv-items td { padding: 7px 10px; border-top: 1px solid #ddd; border-right: 1px solid #ddd; text-align: center; }
+.inv-items td:nth-child(2) { text-align: left; }
+.inv-items td:last-child { border-right: none; }
+.inv-items tr:last-child td { border-bottom: none; }
+.inv-items .empty-row td { color: #ddd; }
+
+/* 하단 서명란 */
+.inv-footer { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 8px; }
+.inv-sign-box { border: 1px solid #aaa; }
+.inv-sign-box .s-title { background: #f0f0f0; font-size: 12px; font-weight: 700; padding: 5px 12px; border-bottom: 1px solid #aaa; text-align: center; letter-spacing: 2px; }
+.inv-sign-box .s-body { display: flex; align-items: center; justify-content: space-between; padding: 10px 16px; min-height: 56px; }
+.inv-sign-box .s-name { font-size: 15px; font-weight: 700; }
+.inv-sign-box .s-seal { width: 48px; height: 48px; border: 1.5px solid #bbb; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 10px; color: #aaa; }
+
+.inv-note { font-size: 11px; color: #888; margin-top: 10px; text-align: right; }
 
 @media print {
   body > *:not(#invoice-modal) { display: none !important; }
   #invoice-modal { display: block !important; position: static; background: none; }
-  .invoice-wrap { box-shadow: none; margin: 0; }
-  .modal-btns { display: none; }
+  .invoice-wrap { box-shadow: none; margin: 0; border-radius: 0; }
+  .inv-screen-btns { display: none !important; }
+  .inv-doc { padding: 16px 20px; }
+  @page { margin: 10mm; size: A4; }
 }
 </style>
 </head>
@@ -207,26 +243,98 @@ tr:last-child td { border-bottom: none; }
 <!-- 거래명세서 모달 -->
 <div id="invoice-modal">
   <div class="invoice-wrap">
-    <div class="inv-title">거 래 명 세 서</div>
-    <div class="inv-sub">조이산업(주) 협력사 납품 확인서</div>
-    <div class="inv-meta">
-      <div class="inv-meta-box"><div class="key">공급받는자</div><div class="val">조이산업(주)</div></div>
-      <div class="inv-meta-box"><div class="key">공급자</div><div class="val" id="inv-supplier"></div></div>
-      <div class="inv-meta-box"><div class="key">납품일</div><div class="val" id="inv-date"></div></div>
-      <div class="inv-meta-box"><div class="key">입고번호</div><div class="val" id="inv-grno"></div></div>
-    </div>
-    <table class="inv-table">
-      <thead><tr><th>No</th><th>품목명</th><th>발주번호</th><th>수량</th><th>단가(원)</th><th>금액(원)</th></tr></thead>
-      <tbody id="inv-tbody"></tbody>
-    </table>
-    <div class="inv-total" id="inv-total"></div>
-    <div class="inv-sign">
-      <div class="sign-box"><div class="sign-label">공급자 확인</div><div id="inv-sign-supplier" style="font-size:15px;font-weight:700;margin-top:16px"></div><div style="font-size:12px;color:#888;margin-top:4px">(인)</div></div>
-      <div class="sign-box"><div class="sign-label">수령자 확인</div><div style="font-size:15px;font-weight:700;margin-top:16px">조이산업(주)</div><div style="font-size:12px;color:#888;margin-top:4px">(인)</div></div>
-    </div>
-    <div class="modal-btns">
+    <!-- 인쇄 영역 -->
+    <div class="inv-doc">
+
+      <!-- 제목 -->
+      <div class="inv-header-row">
+        <div style="width:72px"></div>
+        <div class="inv-title-block">
+          <h1>거 래 명 세 서</h1>
+          <div class="inv-docno">No. <span id="inv-grno"></span> &nbsp;|&nbsp; 발행일: <span id="inv-date"></span></div>
+        </div>
+        <div class="inv-stamp-area">인수<br>확인</div>
+      </div>
+
+      <!-- 공급받는자 / 공급자 -->
+      <div class="inv-parties">
+        <div class="inv-party inv-party-divider">
+          <div class="inv-party-title">공 급 받 는 자</div>
+          <div class="inv-party-body">
+            <div class="inv-party-field" style="grid-column:1/3">
+              <div class="f-label">상호</div><div class="f-val">조이산업(주)</div>
+            </div>
+            <div class="inv-party-field"><div class="f-label">담당부서</div><div class="f-val">구매팀</div></div>
+            <div class="inv-party-field"><div class="f-label">납품장소</div><div class="f-val">본사창고</div></div>
+          </div>
+        </div>
+        <div class="inv-party">
+          <div class="inv-party-title">공 급 자</div>
+          <div class="inv-party-body">
+            <div class="inv-party-field" style="grid-column:1/3">
+              <div class="f-label">상호</div><div class="f-val" id="inv-supplier"></div>
+            </div>
+            <div class="inv-party-field"><div class="f-label">납품일자</div><div class="f-val" id="inv-date2"></div></div>
+            <div class="inv-party-field"><div class="f-label">담당자</div><div class="f-val" id="inv-contact"></div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 합계금액 -->
+      <div class="inv-total-bar">
+        <span class="tl">공급가액 합계</span>
+        <span class="tv" id="inv-total-amt"></span>
+        <span class="th">※ 부가세 별도</span>
+      </div>
+
+      <!-- 품목 테이블 -->
+      <table class="inv-items">
+        <thead>
+          <tr>
+            <th style="width:36px">No</th>
+            <th style="width:auto">품목명 / 규격</th>
+            <th style="width:100px">발주번호</th>
+            <th style="width:80px">수량</th>
+            <th style="width:56px">단위</th>
+            <th style="width:96px">단가(원)</th>
+            <th style="width:110px">금액(원)</th>
+            <th style="width:80px">비고</th>
+          </tr>
+        </thead>
+        <tbody id="inv-tbody"></tbody>
+      </table>
+
+      <!-- 서명란 -->
+      <div class="inv-footer">
+        <div class="inv-sign-box">
+          <div class="s-title">공 급 자 확 인</div>
+          <div class="s-body">
+            <div>
+              <div style="font-size:11px;color:#888;margin-bottom:4px">상호</div>
+              <div class="s-name" id="inv-sign-supplier"></div>
+            </div>
+            <div class="s-seal">인</div>
+          </div>
+        </div>
+        <div class="inv-sign-box">
+          <div class="s-title">수 령 자 확 인</div>
+          <div class="s-body">
+            <div>
+              <div style="font-size:11px;color:#888;margin-bottom:4px">상호</div>
+              <div class="s-name">조이산업(주)</div>
+            </div>
+            <div class="s-seal">인</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="inv-note">본 명세서는 납품 확인용 서류입니다. 조이산업(주) 구매팀 보관용</div>
+    </div><!-- /inv-doc -->
+
+    <!-- 화면 전용 버튼 -->
+    <div class="inv-screen-btns">
       <button class="btn btn-print" onclick="window.print()">🖨️ 인쇄</button>
-      <button class="btn" style="background:#e5e7eb" onclick="closeInvoice()">닫기</button>
+      <button class="btn" style="background:#e5e7eb;color:#333" onclick="closeInvoice()">닫기</button>
     </div>
   </div>
 </div>
@@ -444,25 +552,37 @@ async function submitAndPrint() {
 
   const grNos = r.receipts.map(x=>x.gr_no).join(', ');
   document.getElementById('inv-supplier').textContent = currentUser.name;
-  document.getElementById('inv-date').textContent = date;
-  document.getElementById('inv-grno').textContent = grNos;
   document.getElementById('inv-sign-supplier').textContent = currentUser.name;
+  document.getElementById('inv-contact').textContent = currentUser.name;
+  document.getElementById('inv-date').textContent = date;
+  document.getElementById('inv-date2').textContent = date;
+  document.getElementById('inv-grno').textContent = grNos;
 
   let total = 0;
-  document.getElementById('inv-tbody').innerHTML = lines.map((l,i) => {
-    const amt = l.qty * l.unit_price;
-    total += amt;
-    return `<tr>
-      <td>${i+1}</td>
-      <td>${l.item_name}</td>
-      <td style="font-size:12px;color:#666">${l.po_no}</td>
-      <td style="text-align:right">${l.qty.toLocaleString()} ${l.item_unit||'EA'}</td>
-      <td style="text-align:right">${Math.round(l.unit_price).toLocaleString()}</td>
-      <td style="text-align:right;font-weight:600">${Math.round(amt).toLocaleString()}</td>
-    </tr>`;
-  }).join('');
-
-  document.getElementById('inv-total').innerHTML = `공급가액 합계: <strong style="font-size:20px;color:#1a1a2e">${Math.round(total).toLocaleString()}원</strong>`;
+  // 최소 10행 표시 (빈 행 포함)
+  const minRows = Math.max(lines.length, 10);
+  let rows = '';
+  for (let i = 0; i < minRows; i++) {
+    const l = lines[i];
+    if (l) {
+      const amt = l.qty * l.unit_price;
+      total += amt;
+      rows += `<tr>
+        <td>${i+1}</td>
+        <td style="text-align:left">${l.item_name}</td>
+        <td style="font-size:11px;color:#555">${l.po_no}</td>
+        <td>${l.qty.toLocaleString()}</td>
+        <td>${l.item_unit||'EA'}</td>
+        <td style="text-align:right">${Math.round(l.unit_price).toLocaleString()}</td>
+        <td style="text-align:right;font-weight:700">${Math.round(amt).toLocaleString()}</td>
+        <td></td>
+      </tr>`;
+    } else {
+      rows += `<tr class="empty-row"><td>&nbsp;</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>`;
+    }
+  }
+  document.getElementById('inv-tbody').innerHTML = rows;
+  document.getElementById('inv-total-amt').textContent = `￦ ${Math.round(total).toLocaleString()} 원`;
   document.getElementById('invoice-modal').style.display = 'block';
 
   selectedPOs = {};
