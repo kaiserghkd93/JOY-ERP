@@ -176,7 +176,7 @@ def monthly_summary(user: User = Depends(get_current_user), db: Session = Depend
         m["items"][iname]["amount"] += r.qty * float(r.unit_price)
 
     result = []
-    for ym in sorted(monthly.keys(), reverse=True):
+    for ym in sorted((k for k in monthly.keys() if k >= "2026-10"), reverse=True):
         m = monthly[ym]
         result.append({
             "month": ym,
