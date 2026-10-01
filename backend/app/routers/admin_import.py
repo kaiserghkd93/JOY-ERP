@@ -11,6 +11,8 @@ router = APIRouter(prefix="/admin", tags=["관리자"])
 @router.post("/import-data")
 def import_data(data: dict, db: Session = Depends(get_db), _: User = Depends(require_admin)):
     results = {}
+    # FK 제약 일시 비활성화
+    db.execute(text("SET session_replication_role = replica"))
     for table, rows in data.items():
         if not rows:
             results[table] = 0
@@ -27,5 +29,6 @@ def import_data(data: dict, db: Session = Depends(get_db), _: User = Depends(req
             results[table] = count
         except Exception as e:
             db.rollback()
-            results[table] = f"오류: {str(e)[:100]}"
+            results[table] = f"오류: {str(e)[:150]}"
+    db.execute(text("SET session_replication_role = DEFAULT"))
     return results
