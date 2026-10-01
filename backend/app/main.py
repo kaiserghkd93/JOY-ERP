@@ -73,6 +73,10 @@ if os.path.isdir(_dist):
     @app.get("/", include_in_schema=False)
     @app.get("/{full_path:path}", include_in_schema=False)
     def spa(full_path: str = ""):
+        if full_path.startswith("portal-app"):
+            portal_index = os.path.join(_portal, "index.html")
+            if os.path.isfile(portal_index):
+                return FileResponse(portal_index)
         index = os.path.join(_dist, "index.html")
         if os.path.isfile(index):
             return FileResponse(index)
