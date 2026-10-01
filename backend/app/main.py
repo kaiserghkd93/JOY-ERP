@@ -6,7 +6,7 @@ from fastapi.responses import FileResponse
 from app.database import engine, Base, SessionLocal
 from app.routers import master, purchase, ledger, sales, quality, production, dashboard
 from app.routers import purchase_group, invoice, auto_order, import_ls, bom, reports, cost, mold, mes_sync
-from app.routers import auth, portal
+from app.routers import auth, portal, admin_import
 
 Base.metadata.create_all(bind=engine)
 
@@ -24,6 +24,7 @@ app.add_middleware(
 
 app.include_router(auth.router)
 app.include_router(portal.router)
+app.include_router(admin_import.router)
 app.include_router(master.router)
 app.include_router(purchase.router)
 app.include_router(ledger.router)
