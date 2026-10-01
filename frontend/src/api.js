@@ -1,7 +1,9 @@
 import axios from 'axios';
 
-const host = window.location.hostname === 'localhost' ? 'localhost' : '192.168.0.113'
-const api = axios.create({ baseURL: `http://${host}:8002` });
+const baseURL = import.meta.env.VITE_API_URL ||
+  (window.location.hostname === 'localhost' ? 'http://localhost:8002' : '');
+
+const api = axios.create({ baseURL });
 
 // 백엔드 아직 안 뜬 경우 자동 재시도 (최대 5회, 2초 간격)
 api.interceptors.response.use(null, async (error) => {
