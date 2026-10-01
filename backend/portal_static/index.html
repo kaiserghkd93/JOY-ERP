@@ -344,15 +344,8 @@ async function loadOrders() {
 
 function renderOrders() {
   currentMonth = document.getElementById('month-select').value;
-  const filtered = allOrders.filter(o => {
-    // 발주번호 PO-YYYYMMDD-NNN 에서 월 추출, 없으면 납기일로
-    const match = o.po_no && o.po_no.match(/PO-(\d{6})/);
-    if (match) {
-      const y = match[1].slice(0,4), m = match[1].slice(4,6);
-      return `${y}-${m}` === currentMonth;
-    }
-    return o.due_date && o.due_date.startsWith(currentMonth);
-  });
+  // 납기일(due_date) 기준으로 월 필터
+  const filtered = allOrders.filter(o => o.due_date && o.due_date.startsWith(currentMonth));
 
   const [y, m] = currentMonth.split('-');
   document.getElementById('orders-card-header').textContent = `${y}년 ${parseInt(m)}월 발주 목록`;
