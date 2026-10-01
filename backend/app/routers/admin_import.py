@@ -9,6 +9,19 @@ from app.models.auth import User
 router = APIRouter(prefix="/admin", tags=["관리자"])
 
 
+@router.post("/purge-old-receipts")
+def purge_old_receipts(db: Session = Depends(get_db), _: User = Depends(require_admin)):
+    """2026-10-01 이전 입고 및 관련 재고원장 삭제"""
+    r1 = db.execute(text("""
+        DELETE FROM stock_ledger
+        WHERE ref_type = 'GR'
+        AND ref_no IN (SELECT gr_no FROM receipt WHERE receipt_date < '2026-10-01')
+    """))
+    r2 = db.execute(text("DELETE FROM receipt WHERE receipt_date < '2026-10-01'"))
+    db.commit()
+    return {"deleted_ledger": r1.rowcount, "deleted_receipts": r2.rowcount}
+
+
 def get_bool_columns(table: str) -> set:
     """PostgreSQL 테이블의 boolean 컬럼 목록 반환"""
     try:
