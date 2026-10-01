@@ -59,6 +59,11 @@ def _init_admin():
         db.close()
 
 
+# ── 협력사 포털 정적 파일 서빙 ────────────────────────────────────
+_portal = os.path.join(os.path.dirname(__file__), "..", "portal_static")
+if os.path.isdir(_portal):
+    app.mount("/portal-app", StaticFiles(directory=_portal, html=True), name="portal")
+
 # ── 프론트엔드 정적 파일 서빙 (배포 시) ──────────────────────────
 _dist = os.path.join(os.path.dirname(__file__), "..", "..", "frontend", "dist")
 if os.path.isdir(_dist):
