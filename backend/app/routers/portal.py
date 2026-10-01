@@ -27,11 +27,14 @@ def _supplier_partner(user: User) -> str:
 @router.get("/orders")
 def my_orders(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     partner_id = _supplier_partner(user)
+    from datetime import date as date_cls
+    cutoff = date_cls(2026, 10, 1)
     orders = (
         db.query(PurchaseOrder)
         .filter(
             PurchaseOrder.partner_id == partner_id,
             PurchaseOrder.status.in_([POStatus.open, POStatus.partial]),
+            PurchaseOrder.due_date >= cutoff,
         )
         .order_by(PurchaseOrder.due_date)
         .all()
