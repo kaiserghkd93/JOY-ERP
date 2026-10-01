@@ -62,9 +62,12 @@ def my_orders(user: User = Depends(get_current_user), db: Session = Depends(get_
 
 # ── 납품명세서 발행 ──────────────────────────────────────────────
 class DeliveryLineReq(BaseModel):
-    po_no: str
+    po_no: str | None = None       # 발주 연결 납품
+    item_name: str | None = None   # 발주 없는 직접 추가 품목명
+    part_no: str | None = None
+    item_unit: str | None = "EA"
     qty: int
-    unit_price: float | None = None  # 없으면 PO 단가 사용
+    unit_price: float | None = None
 
 class DeliveryReq(BaseModel):
     delivery_date: date_type
@@ -80,52 +83,112 @@ def deliver(body: DeliveryReq, user: User = Depends(get_current_user), db: Sessi
 
     created = []
     for line in body.lines:
-        po = db.get(PurchaseOrder, line.po_no)
-        if not po:
-            raise HTTPException(404, f"발주번호 {line.po_no}를 찾을 수 없습니다")
-        if po.partner_id != partner_id:
-            raise HTTPException(403, f"접근 권한이 없는 발주번호입니다: {line.po_no}")
-        if po.status not in [POStatus.open, POStatus.partial]:
-            raise HTTPException(400, f"{line.po_no}는 이미 완료되었거나 취소된 발주입니다")
         if line.qty <= 0:
             raise HTTPException(400, "납품 수량은 0보다 커야 합니다")
 
-        unit_price = line.unit_price if line.unit_price else float(po.unit_price or 0)
+        if line.po_no:
+            # 발주 연결 납품
+            po = db.get(PurchaseOrder, line.po_no)
+            if not po:
+                raise HTTPException(404, f"발주번호 {line.po_no}를 찾을 수 없습니다")
+            if po.partner_id != partner_id:
+                raise HTTPException(403, f"접근 권한이 없는 발주번호입니다: {line.po_no}")
+            if po.status not in [POStatus.open, POStatus.partial]:
+                raise HTTPException(400, f"{line.po_no}는 이미 완료되었거나 취소된 발주입니다")
+            actual_part_no = po.part_no
+            unit_price = line.unit_price if line.unit_price else float(po.unit_price or 0)
+        else:
+            # 발주 없는 직접 추가 품목
+            if not line.item_name:
+                raise HTTPException(400, "발주 없는 품목은 품목명을 입력해주세요")
+            actual_part_no = line.part_no or "MANUAL"
+            unit_price = line.unit_price or 0
+            po = None
 
         gr_no = next_doc_no(db, "GR", "receipt", "gr_no")
+        note_text = f"업체포털 납품{' [직접추가]' if not line.po_no else ''} {body.note or ''}".strip()
         receipt = Receipt(
             gr_no=gr_no,
             po_no=line.po_no,
-            part_no=po.part_no,
+            part_no=actual_part_no,
             qty=line.qty,
             receipt_date=body.delivery_date,
             unit_price=unit_price,
             status=ReceiptStatus.confirmed,
             partner_id=partner_id,
-            note=f"업체포털 납품 {body.note or ''}".strip(),
+            note=note_text,
         )
         db.add(receipt)
         db.flush()
 
-        # 재고 입고 처리
-        post_ledger(db, po.part_no, body.delivery_date, LedgerType.receipt,
-                    line.qty, unit_price,
-                    ref_type="GR", ref_no=gr_no,
-                    note=f"업체납품 {partner_id}")
+        # 재고 입고 (part_no가 마스터에 있을 때만)
+        item_exists = db.get(Item, actual_part_no)
+        if item_exists:
+            post_ledger(db, actual_part_no, body.delivery_date, LedgerType.receipt,
+                        line.qty, unit_price,
+                        ref_type="GR", ref_no=gr_no,
+                        note=f"업체납품 {partner_id}")
 
         # PO 상태 업데이트
-        total_delivered = sum(
-            r.qty for r in po.receipts if r.status == ReceiptStatus.confirmed
-        ) + line.qty
-        if total_delivered >= po.qty:
-            po.status = POStatus.closed
-        else:
-            po.status = POStatus.partial
+        if po:
+            total_delivered = sum(
+                r.qty for r in po.receipts if r.status == ReceiptStatus.confirmed
+            ) + line.qty
+            po.status = POStatus.closed if total_delivered >= po.qty else POStatus.partial
 
-        created.append({"gr_no": gr_no, "po_no": line.po_no, "qty": line.qty})
+        created.append({
+            "gr_no": gr_no,
+            "po_no": line.po_no,
+            "item_name": line.item_name if not line.po_no else None,
+            "qty": line.qty,
+        })
 
     db.commit()
     return {"ok": True, "receipts": created}
+
+
+# ── 월별 납품 집계 ───────────────────────────────────────────────
+@router.get("/monthly-summary")
+def monthly_summary(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    from sqlalchemy import func, extract
+    partner_id = _supplier_partner(user)
+    receipts = (
+        db.query(Receipt)
+        .filter(Receipt.partner_id == partner_id, Receipt.status == ReceiptStatus.confirmed)
+        .order_by(Receipt.receipt_date)
+        .all()
+    )
+    # 월별 집계
+    monthly: dict = {}
+    for r in receipts:
+        ym = str(r.receipt_date)[:7]  # YYYY-MM
+        if ym not in monthly:
+            monthly[ym] = {"month": ym, "count": 0, "total_qty": 0, "total_amount": 0, "items": {}}
+        m = monthly[ym]
+        m["count"] += 1
+        m["total_qty"] += r.qty
+        m["total_amount"] += r.qty * float(r.unit_price)
+        item = db.get(Item, r.part_no)
+        iname = item.name if item else (r.note or r.part_no)
+        if iname not in m["items"]:
+            m["items"][iname] = {"qty": 0, "amount": 0}
+        m["items"][iname]["qty"] += r.qty
+        m["items"][iname]["amount"] += r.qty * float(r.unit_price)
+
+    result = []
+    for ym in sorted(monthly.keys(), reverse=True):
+        m = monthly[ym]
+        result.append({
+            "month": ym,
+            "count": m["count"],
+            "total_qty": m["total_qty"],
+            "total_amount": m["total_amount"],
+            "items": [
+                {"item_name": k, "qty": v["qty"], "amount": v["amount"]}
+                for k, v in sorted(m["items"].items())
+            ],
+        })
+    return result
 
 
 # ── 내 납품 이력 ────────────────────────────────────────────────

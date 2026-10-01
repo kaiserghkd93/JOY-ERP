@@ -178,6 +178,7 @@ tr:last-child td { border-bottom: none; }
   <div class="tabs">
     <div class="tab active" onclick="showTab('orders')">📋 발주 현황</div>
     <div class="tab" onclick="showTab('deliver')">📦 납품 입력</div>
+    <div class="tab" onclick="showTab('monthly')">📊 월별 집계</div>
   </div>
 
   <div class="content">
@@ -229,6 +230,18 @@ tr:last-child td { border-bottom: none; }
           </table>
         </div>
 
+        <!-- 발주 없는 품목 직접 추가 -->
+        <div style="margin-bottom:16px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+            <label style="margin:0">발주 없는 품목 추가 (직접 입력)</label>
+            <button class="btn" style="background:#f0fdf4;color:#166534;border:1px solid #86efac;padding:6px 14px;font-size:13px" onclick="addManualRow()">+ 품목 추가</button>
+          </div>
+          <table class="qty-table" id="manual-table" style="display:none">
+            <thead><tr><th>품목명</th><th>규격/단위</th><th>수량</th><th>단가(원)</th><th></th></tr></thead>
+            <tbody id="manual-tbody"></tbody>
+          </table>
+        </div>
+
         <div class="form-group">
           <label>비고</label>
           <input type="text" id="deliver-note" placeholder="비고 (선택)" />
@@ -236,6 +249,11 @@ tr:last-child td { border-bottom: none; }
 
         <button class="btn btn-print" style="width:100%" onclick="submitAndPrint()">📄 거래명세서 출력</button>
       </div>
+    </div>
+
+    <!-- 월별 집계 -->
+    <div id="tab-monthly" class="section">
+      <div id="monthly-body"><div style="padding:40px;text-align:center;color:#888">로딩 중...</div></div>
     </div>
   </div>
 </div>
@@ -493,9 +511,76 @@ function renderPoList() {
 }
 
 function showTab(tab) {
-  document.querySelectorAll('.tab').forEach((t,i) => t.classList.toggle('active', ['orders','deliver'][i]===tab));
+  document.querySelectorAll('.tab').forEach((t,i) => t.classList.toggle('active', ['orders','deliver','monthly'][i]===tab));
   document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
   document.getElementById('tab-' + tab).classList.add('active');
+  if (tab === 'monthly') loadMonthly();
+}
+
+// ── 발주 없는 품목 직접 추가 ──
+let manualRows = [];
+let manualSeq = 0;
+
+function addManualRow() {
+  const id = ++manualSeq;
+  manualRows.push({ id, item_name: '', item_unit: 'EA', qty: 1, unit_price: 0 });
+  document.getElementById('manual-table').style.display = 'table';
+  renderManualTable();
+}
+
+function removeManualRow(id) {
+  manualRows = manualRows.filter(r => r.id !== id);
+  if (!manualRows.length) document.getElementById('manual-table').style.display = 'none';
+  else renderManualTable();
+}
+
+function renderManualTable() {
+  document.getElementById('manual-tbody').innerHTML = manualRows.map(r => `<tr>
+    <td><input class="qty-input" style="width:160px" type="text" value="${r.item_name}" placeholder="품목명" oninput="updateManual(${r.id},'item_name',this.value)" /></td>
+    <td><input class="qty-input" style="width:70px" type="text" value="${r.item_unit}" placeholder="EA" oninput="updateManual(${r.id},'item_unit',this.value)" /></td>
+    <td><input class="qty-input" type="number" value="${r.qty}" min="1" oninput="updateManual(${r.id},'qty',parseInt(this.value)||0)" /></td>
+    <td><input class="qty-input" type="number" value="${r.unit_price}" min="0" oninput="updateManual(${r.id},'unit_price',parseFloat(this.value)||0)" /></td>
+    <td><button class="remove-btn" onclick="removeManualRow(${r.id})">✕</button></td>
+  </tr>`).join('');
+}
+
+function updateManual(id, field, val) {
+  const r = manualRows.find(x => x.id === id);
+  if (r) r[field] = val;
+}
+
+// ── 월별 집계 ──
+async function loadMonthly() {
+  document.getElementById('monthly-body').innerHTML = '<div style="padding:40px;text-align:center;color:#888">로딩 중...</div>';
+  const data = await api('GET', '/portal/monthly-summary') || [];
+  if (!data.length) {
+    document.getElementById('monthly-body').innerHTML = '<div style="padding:40px;text-align:center;color:#aaa">납품 이력이 없습니다</div>';
+    return;
+  }
+  document.getElementById('monthly-body').innerHTML = data.map(m => {
+    const [y, mo] = m.month.split('-');
+    return `<div class="card" style="margin-bottom:16px">
+      <div class="card-header" style="justify-content:space-between">
+        <span>${y}년 ${parseInt(mo)}월</span>
+        <span style="font-size:13px;color:#888">${m.count}건 납품 &nbsp;|&nbsp; 합계: <strong style="color:#1a1a2e">￦${Math.round(m.total_amount).toLocaleString()}</strong></span>
+      </div>
+      <table>
+        <thead><tr><th>품목명</th><th style="text-align:right">납품수량</th><th style="text-align:right">금액(원)</th></tr></thead>
+        <tbody>
+          ${m.items.map(it=>`<tr>
+            <td>${it.item_name}</td>
+            <td style="text-align:right">${it.qty.toLocaleString()}</td>
+            <td style="text-align:right;font-weight:600">${Math.round(it.amount).toLocaleString()}</td>
+          </tr>`).join('')}
+          <tr style="background:#f8f9fa;font-weight:700">
+            <td>합 계</td>
+            <td style="text-align:right">${m.total_qty.toLocaleString()}</td>
+            <td style="text-align:right;color:#1a1a2e">￦${Math.round(m.total_amount).toLocaleString()}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>`;
+  }).join('');
 }
 
 function poKey(poNo) { return poNo.replace(/[^a-z0-9]/gi,'-'); }
@@ -536,10 +621,22 @@ async function submitAndPrint() {
   const date = document.getElementById('deliver-date').value;
   if (!date) { alert('납품일을 선택하세요'); return; }
 
+  // 발주 연결 라인 + 수동 추가 라인 합치기
+  const manualLines = manualRows
+    .filter(r => r.item_name.trim() && r.qty > 0)
+    .map(r => ({ item_name: r.item_name, item_unit: r.item_unit, qty: r.qty, unit_price: r.unit_price }));
+
+  if (!lines.length && !manualLines.length) { alert('납품할 품목을 선택하거나 직접 입력하세요'); return; }
+
+  const allLines = [
+    ...lines.map(l => ({ po_no: l.po_no, item_name: l.item_name, item_unit: l.item_unit, qty: l.qty, unit_price: l.unit_price })),
+    ...manualLines
+  ];
+
   const body = {
     delivery_date: date,
     note: document.getElementById('deliver-note').value,
-    lines: lines.map(l => ({ po_no: l.po_no, qty: l.qty, unit_price: l.unit_price }))
+    lines: allLines
   };
 
   const r = await api('POST', '/portal/deliver', body);
@@ -559,11 +656,15 @@ async function submitAndPrint() {
   document.getElementById('inv-grno').textContent = grNos;
 
   let total = 0;
+  const allInvoiceLines = r.receipts.map((rc, i) => {
+    const orig = allLines[i] || {};
+    return { ...orig, gr_no: rc.gr_no };
+  });
   // 최소 10행 표시 (빈 행 포함)
-  const minRows = Math.max(lines.length, 10);
+  const minRows = Math.max(allLines.length, 10);
   let rows = '';
   for (let i = 0; i < minRows; i++) {
-    const l = lines[i];
+    const l = allLines[i];
     if (l) {
       const amt = l.qty * l.unit_price;
       total += amt;
@@ -586,6 +687,9 @@ async function submitAndPrint() {
   document.getElementById('invoice-modal').style.display = 'block';
 
   selectedPOs = {};
+  manualRows = [];
+  document.getElementById('manual-tbody').innerHTML = '';
+  document.getElementById('manual-table').style.display = 'none';
   loadOrders();
 }
 
