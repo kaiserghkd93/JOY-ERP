@@ -36,6 +36,7 @@ def import_data(data: dict, db: Session = Depends(get_db), _: User = Depends(req
             db.commit()
 
             count = 0
+            skip = 0
             for row in rows:
                 # boolean 변환
                 converted = {}
@@ -47,11 +48,16 @@ def import_data(data: dict, db: Session = Depends(get_db), _: User = Depends(req
 
                 cols = ", ".join(f'"{k}"' for k in converted.keys())
                 vals = ", ".join(f":{k}" for k in converted.keys())
-                db.execute(text(f'INSERT INTO "{table}" ({cols}) VALUES ({vals})'), converted)
-                count += 1
+                try:
+                    db.execute(text(f'INSERT INTO "{table}" ({cols}) VALUES ({vals}) ON CONFLICT DO NOTHING'), converted)
+                    db.flush()
+                    count += 1
+                except Exception:
+                    db.rollback()
+                    skip += 1
 
             db.commit()
-            results[table] = count
+            results[table] = f"{count}건 완료 (스킵 {skip}건)"
         except Exception as e:
             db.rollback()
             results[table] = f"오류: {str(e)[:150]}"
