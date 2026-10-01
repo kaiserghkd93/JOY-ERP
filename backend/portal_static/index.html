@@ -219,6 +219,7 @@ tr:last-child td { border-bottom: none; }
 
         <div class="form-group">
           <label>발주 선택 (복수 선택 가능)</label>
+          <input type="text" id="po-search" placeholder="🔍 품목명 또는 발주번호 검색..." oninput="filterPoList()" style="margin-bottom:8px" />
           <div id="po-list" class="po-list"><div style="padding:20px;text-align:center;color:#888">로딩 중...</div></div>
         </div>
 
@@ -498,13 +499,21 @@ function renderOrders() {
 }
 
 function renderPoList() {
-  if (!allOrders.length) {
-    document.getElementById('po-list').innerHTML = '<div style="padding:20px;text-align:center;color:#aaa">발주 없음</div>';
+  filterPoList();
+}
+
+function filterPoList() {
+  const q = (document.getElementById('po-search')?.value || '').toLowerCase();
+  const filtered = allOrders.filter(o =>
+    !q || o.item_name.toLowerCase().includes(q) || o.po_no.toLowerCase().includes(q)
+  );
+  if (!filtered.length) {
+    document.getElementById('po-list').innerHTML = '<div style="padding:20px;text-align:center;color:#aaa">' + (q ? '검색 결과 없음' : '발주 없음') + '</div>';
     return;
   }
-  document.getElementById('po-list').innerHTML = allOrders.map(o=>`
-    <div class="po-item" id="po-${o.po_no.replace(/[^a-z0-9]/gi,'-')}" onclick="togglePO('${o.po_no}')">
-      <div class="po-item-name">${o.item_name} (${o.po_no})</div>
+  document.getElementById('po-list').innerHTML = filtered.map(o=>`
+    <div class="po-item${selectedPOs[o.po_no] ? ' selected' : ''}" id="po-${o.po_no.replace(/[^a-z0-9]/gi,'-')}" onclick="togglePO('${o.po_no}')">
+      <div class="po-item-name">${o.item_name} <span style="color:#888;font-size:12px;font-weight:400">${o.po_no}</span></div>
       <div class="po-item-info">잔여: ${o.remaining_qty.toLocaleString()} ${o.item_unit} | 납기: ${o.due_date}</div>
     </div>
   `).join('');
