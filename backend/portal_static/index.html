@@ -82,6 +82,15 @@ tr:last-child td { border-bottom: none; }
 .qty-input { width: 100px; padding: 6px 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 13px; text-align: right; }
 .remove-btn { background: #fee2e2; color: #dc2626; border: none; border-radius: 6px; padding: 4px 10px; cursor: pointer; font-size: 12px; }
 
+/* 자동완성 */
+.ac-wrap { position: relative; display: inline-block; }
+.ac-dropdown { position: absolute; top: 100%; left: 0; width: 280px; background: white; border: 1px solid #ddd; border-radius: 8px; box-shadow: 0 4px 16px rgba(0,0,0,0.12); z-index: 200; max-height: 220px; overflow-y: auto; display: none; }
+.ac-item { padding: 9px 14px; cursor: pointer; font-size: 13px; border-bottom: 1px solid #f0f0f0; }
+.ac-item:last-child { border-bottom: none; }
+.ac-item:hover { background: #eff6ff; }
+.ac-item .ac-name { font-weight: 600; color: #111; }
+.ac-item .ac-sub { font-size: 11px; color: #888; margin-top: 2px; }
+
 /* 거래명세서 */
 #invoice-modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); z-index: 1000; overflow-y: auto; }
 .invoice-wrap { background: white; max-width: 860px; margin: 24px auto; padding: 0; border-radius: 4px; box-shadow: 0 8px 40px rgba(0,0,0,0.25); }
@@ -362,6 +371,7 @@ tr:last-child td { border-bottom: none; }
 const API = '';
 let token = localStorage.getItem('portal_token');
 let allOrders = [];
+let myItems = [];
 let selectedPOs = {};
 let currentUser = null;
 let currentMonth = '';   // 'YYYY-MM'
@@ -449,6 +459,7 @@ async function initMain() {
   document.getElementById('login-page').style.display = 'none';
   document.getElementById('main-page').style.display = 'block';
   await loadOrders();
+  myItems = await api('GET', '/portal/my-items') || [];
   // 관리자 요약카드
   if (me.role === 'admin') {
     const summary = document.getElementById('admin-summary');
@@ -544,11 +555,20 @@ function removeManualRow(id) {
 }
 
 function renderManualTable() {
-  document.getElementById('manual-tbody').innerHTML = manualRows.map(r => `<tr>
-    <td><input class="qty-input" style="width:160px" type="text" value="${r.item_name}" placeholder="품목명" oninput="updateManual(${r.id},'item_name',this.value)" /></td>
-    <td><input class="qty-input" style="width:70px" type="text" value="${r.item_unit}" placeholder="EA" oninput="updateManual(${r.id},'item_unit',this.value)" /></td>
+  document.getElementById('manual-tbody').innerHTML = manualRows.map(r => `<tr id="mrow-${r.id}">
+    <td>
+      <div class="ac-wrap">
+        <input class="qty-input" style="width:180px" type="text" value="${r.item_name}" placeholder="품목명 검색..."
+          oninput="filterAc(${r.id},this.value)"
+          onfocus="filterAc(${r.id},this.value)"
+          onblur="setTimeout(()=>hideAc(${r.id}),180)"
+          autocomplete="off" />
+        <div class="ac-dropdown" id="ac-${r.id}"></div>
+      </div>
+    </td>
+    <td><input class="qty-input" style="width:60px" type="text" id="munit-${r.id}" value="${r.item_unit}" placeholder="EA" oninput="updateManual(${r.id},'item_unit',this.value)" /></td>
     <td><input class="qty-input" type="number" value="${r.qty}" min="1" oninput="updateManual(${r.id},'qty',parseInt(this.value)||0)" /></td>
-    <td><input class="qty-input" type="number" value="${r.unit_price}" min="0" oninput="updateManual(${r.id},'unit_price',parseFloat(this.value)||0)" /></td>
+    <td><input class="qty-input" type="number" id="mprice-${r.id}" value="${r.unit_price}" min="0" oninput="updateManual(${r.id},'unit_price',parseFloat(this.value)||0)" /></td>
     <td><button class="remove-btn" onclick="removeManualRow(${r.id})">✕</button></td>
   </tr>`).join('');
 }
@@ -556,6 +576,40 @@ function renderManualTable() {
 function updateManual(id, field, val) {
   const r = manualRows.find(x => x.id === id);
   if (r) r[field] = val;
+}
+
+function filterAc(id, q) {
+  const dd = document.getElementById('ac-' + id);
+  const matches = myItems.filter(it =>
+    !q || it.item_name.toLowerCase().includes(q.toLowerCase()) || it.part_no.toLowerCase().includes(q.toLowerCase())
+  ).slice(0, 20);
+  if (!matches.length) { dd.style.display = 'none'; return; }
+  dd.innerHTML = matches.map(it => `
+    <div class="ac-item" onmousedown="selectAc(${id},'${it.item_name.replace(/'/g,"\\'")}','${it.item_unit}',${it.unit_price})">
+      <div class="ac-name">${it.item_name}</div>
+      <div class="ac-sub">${it.part_no} | ${it.item_unit} | ₩${Math.round(it.unit_price).toLocaleString()}</div>
+    </div>`).join('');
+  dd.style.display = 'block';
+}
+
+function selectAc(id, name, unit, price) {
+  const r = manualRows.find(x => x.id === id);
+  if (r) { r.item_name = name; r.item_unit = unit; r.unit_price = price; }
+  // 입력칸 직접 업데이트
+  const row = document.getElementById('mrow-' + id);
+  if (row) {
+    row.querySelector('input[type=text]').value = name;
+    const unitEl = document.getElementById('munit-' + id);
+    if (unitEl) unitEl.value = unit;
+    const priceEl = document.getElementById('mprice-' + id);
+    if (priceEl) priceEl.value = price;
+  }
+  hideAc(id);
+}
+
+function hideAc(id) {
+  const dd = document.getElementById('ac-' + id);
+  if (dd) dd.style.display = 'none';
 }
 
 // ── 월별 집계 ──

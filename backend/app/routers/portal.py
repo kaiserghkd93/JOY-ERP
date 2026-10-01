@@ -63,6 +63,32 @@ def my_orders(user: User = Depends(get_current_user), db: Session = Depends(get_
     return result
 
 
+# ── 내 업체 품목 목록 (자동완성용) ──────────────────────────────
+@router.get("/my-items")
+def my_items(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    partner_id = _supplier_partner(user)
+    pos = (
+        db.query(PurchaseOrder)
+        .filter(PurchaseOrder.partner_id == partner_id)
+        .all()
+    )
+    seen = {}
+    for po in pos:
+        if po.part_no not in seen:
+            item = db.get(Item, po.part_no)
+            seen[po.part_no] = {
+                "part_no": po.part_no,
+                "item_name": item.name if item else po.part_no,
+                "item_unit": item.unit if item else "EA",
+                "unit_price": float(po.unit_price or 0),
+            }
+        else:
+            # 최신 단가로 갱신
+            if po.unit_price:
+                seen[po.part_no]["unit_price"] = float(po.unit_price)
+    return sorted(seen.values(), key=lambda x: x["item_name"])
+
+
 # ── 납품명세서 발행 ──────────────────────────────────────────────
 class DeliveryLineReq(BaseModel):
     po_no: str | None = None       # 발주 연결 납품
