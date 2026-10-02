@@ -10,8 +10,6 @@ from sqlalchemy import Column, Integer, String, Numeric, Date, Text, text
 from sqlalchemy.orm import Session, Mapped, mapped_column
 
 from app.database import get_db, Base, engine
-from app.routers.auth import require_admin
-from app.models.auth import User
 
 
 # ── 모델 ──────────────────────────────────────────────────────────
@@ -102,7 +100,7 @@ def get_summary(year_month: str, db: Session = Depends(get_db)):
 
 
 @router.post("/save")
-def save_summary(body: SummaryIn, db: Session = Depends(get_db), _: User = Depends(require_admin)):
+def save_summary(body: SummaryIn, db: Session = Depends(get_db)):
     """월 집계표 저장 (기존 덮어쓰기)"""
     db.query(MonthlySalesRow).filter(MonthlySalesRow.year_month == body.year_month).delete()
     for r in body.rows:
@@ -297,7 +295,6 @@ async def upload_excel(
     year_month: str,
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
-    _: User = Depends(require_admin),
 ):
     """엑셀 업로드 → DB 저장
     양식(ERP 템플릿 기준):
