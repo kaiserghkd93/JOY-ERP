@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { login } from '../auth'
+import api from '../api'
 
 export default function Login({ onLogin }) {
   const [id, setId] = useState('')
@@ -7,18 +8,24 @@ export default function Login({ onLogin }) {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
-  const submit = (e) => {
+  const submit = async (e) => {
     e.preventDefault()
     setLoading(true)
     setError('')
-    setTimeout(() => {
-      if (login(id, pw)) {
-        onLogin()
-      } else {
-        setError('아이디 또는 비밀번호가 올바르지 않습니다.')
-      }
+    if (!login(id, pw)) {
+      setError('아이디 또는 비밀번호가 올바르지 않습니다.')
       setLoading(false)
-    }, 300)
+      return
+    }
+    // 백엔드 JWT 발급 (관리자 계정만 — 실패해도 로그인은 진행)
+    try {
+      const r = await api.post('/auth/login', { username: id, password: pw })
+      if (r.data?.access_token) {
+        sessionStorage.setItem('jwt_token', r.data.access_token)
+      }
+    } catch {}
+    setLoading(false)
+    onLogin()
   }
 
   return (

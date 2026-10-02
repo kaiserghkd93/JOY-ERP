@@ -5,6 +5,13 @@ const baseURL = import.meta.env.VITE_API_URL ||
 
 const api = axios.create({ baseURL });
 
+// 저장된 JWT 토큰을 자동으로 헤더에 추가
+api.interceptors.request.use((config) => {
+  const token = sessionStorage.getItem('jwt_token')
+  if (token) config.headers.Authorization = `Bearer ${token}`
+  return config
+})
+
 // 백엔드 아직 안 뜬 경우 자동 재시도 (최대 5회, 2초 간격)
 api.interceptors.response.use(null, async (error) => {
   const config = error.config

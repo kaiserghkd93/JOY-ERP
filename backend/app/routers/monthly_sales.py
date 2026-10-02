@@ -60,7 +60,7 @@ class SummaryIn(BaseModel):
 
 
 @router.get("/list")
-def list_months(db: Session = Depends(get_db), _: User = Depends(require_admin)):
+def list_months(db: Session = Depends(get_db)):
     """저장된 월 목록"""
     rows = db.execute(
         text("SELECT DISTINCT year_month, company_name FROM monthly_sales_row ORDER BY year_month DESC")
@@ -69,7 +69,7 @@ def list_months(db: Session = Depends(get_db), _: User = Depends(require_admin))
 
 
 @router.get("/{year_month}")
-def get_summary(year_month: str, db: Session = Depends(get_db), _: User = Depends(require_admin)):
+def get_summary(year_month: str, db: Session = Depends(get_db)):
     """특정 월 집계표 조회"""
     rows = (
         db.query(MonthlySalesRow)
@@ -125,7 +125,7 @@ def save_summary(body: SummaryIn, db: Session = Depends(get_db), _: User = Depen
 
 
 @router.get("/template")
-def download_template(_: User = Depends(require_admin)):
+def download_template():
     """빈 월 매출 집계표 Excel 양식 다운로드"""
     try:
         import openpyxl
