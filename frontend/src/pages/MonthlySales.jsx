@@ -232,11 +232,9 @@ export default function MonthlySales() {
         <table className="ms-table">
           <colgroup>
             <col style={{ width: '40px' }} />
-            <col style={{ width: '110px' }} />
-            <col style={{ width: '220px' }} />
-            <col style={{ width: '140px' }} />
-            <col style={{ width: '70px' }} />
-            <col style={{ width: '70px' }} />
+            <col style={{ width: '120px' }} />
+            <col style={{ width: '300px' }} />
+            <col style={{ width: '160px' }} />
           </colgroup>
           <thead>
             <tr>
@@ -244,7 +242,6 @@ export default function MonthlySales() {
               <th>마감일</th>
               <th>업체명</th>
               <th>공급가액</th>
-              <th colSpan={2}>거래명세표</th>
             </tr>
           </thead>
           <tbody>
@@ -260,12 +257,6 @@ export default function MonthlySales() {
                 <td>
                   <input type="number" value={r.supply_amount} onChange={e => updateRow(i, 'supply_amount', e.target.value)} className="inp-num" />
                 </td>
-                <td className="tc">
-                  <button className={`inv-btn ${r.has_invoice ? 'inv-yes' : ''}`} onClick={() => updateRow(i, 'has_invoice', true)}>유</button>
-                </td>
-                <td className="tc">
-                  <button className={`inv-btn ${!r.has_invoice ? 'inv-no' : ''}`} onClick={() => updateRow(i, 'has_invoice', false)}>무</button>
-                </td>
               </tr>
             ))}
           </tbody>
@@ -273,7 +264,6 @@ export default function MonthlySales() {
             <tr>
               <td colSpan={3} className="tc foot-label">합계</td>
               <td className="tc foot-val">{totalAmt ? totalAmt.toLocaleString() : '-'}</td>
-              <td colSpan={2}></td>
             </tr>
           </tfoot>
         </table>
