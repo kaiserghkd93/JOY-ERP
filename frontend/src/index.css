@@ -29,6 +29,14 @@
 
 body { margin: 0; background: var(--bg); }
 
+@media print {
+  .sidebar { display: none !important; }
+  .topbar  { display: none !important; }
+  .layout  { display: block !important; height: auto !important; overflow: visible !important; }
+  .main    { margin: 0 !important; padding: 0 !important; height: auto !important; overflow: visible !important; }
+  .page    { padding: 0 !important; overflow: visible !important; height: auto !important; }
+}
+
 /* ================================================================
    LAYOUT
 ================================================================ */
