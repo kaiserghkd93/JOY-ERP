@@ -15,6 +15,7 @@ import ProductionPlan from './pages/ProductionPlan'
 import Cost from './pages/Cost'
 import Mold from './pages/Mold'
 import DeliveryReport from './pages/DeliveryReport'
+import MonthlySales from './pages/MonthlySales'
 import Login from './pages/Login'
 import { getUser, logout, isMaster, STAFF_ALLOWED } from './auth'
 
@@ -33,6 +34,7 @@ const allMenus = [
   { group: '영업', items: [
     { to: '/invoice', label: '거래명세서', icon: '▪' },
     { to: '/sales', label: '수주/출하', icon: '▪' },
+    { to: '/monthly-sales', label: '월 매출 집계표', icon: '▪' },
   ]},
   { group: '품질', items: [
     { to: '/quality', label: '품질·클레임', icon: '▪' },
@@ -69,6 +71,7 @@ const pageTitles = {
   '/bom': 'BOM · 원재료 구매계획',
   '/cost': '원가 관리',
   '/mold': '금형 수주관리',
+  '/monthly-sales': '월 매출 집계표',
 }
 
 function ProtectedRoute({ path, children }) {
@@ -186,6 +189,9 @@ export default function App() {
               <ProtectedRoute path="/mold"><Mold /></ProtectedRoute>
             } />
             <Route path="/delivery-report" element={<DeliveryReport />} />
+            <Route path="/monthly-sales" element={
+              <ProtectedRoute path="/monthly-sales"><MonthlySales /></ProtectedRoute>
+            } />
           </Routes>
         </div>
       </div>
