@@ -1,1 +1,15 @@
 /* App-level overrides — intentionally minimal */
+
+@media print {
+  .sidebar,
+  .topbar {
+    display: none !important;
+  }
+  .main {
+    margin-left: 0 !important;
+    padding: 0 !important;
+  }
+  .page {
+    padding: 0 !important;
+  }
+}
