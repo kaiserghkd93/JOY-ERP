@@ -94,6 +94,21 @@ export default function MonthlySales() {
     }
   }
 
+  async function handleDownloadTemplate() {
+    const token = localStorage.getItem('token')
+    const res = await fetch('/monthly-sales/template', {
+      headers: { Authorization: `Bearer ${token}` }
+    })
+    if (!res.ok) { setMsg('다운로드 실패'); return }
+    const blob = await res.blob()
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = '월매출집계표_양식.xlsx'
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
   async function handleUpload(e) {
     const file = e.target.files[0]
     if (!file) return
@@ -144,12 +159,13 @@ export default function MonthlySales() {
         </div>
 
         <div className="ms-actions">
+          <button onClick={handleDownloadTemplate} className="btn-tpl">📥 양식 다운로드</button>
           <label className="btn-upload">
-            📂 엑셀 업로드
+            📤 작성 후 업로드
             <input ref={fileRef} type="file" accept=".xlsx,.xlsm,.xls" onChange={handleUpload} style={{ display: 'none' }} />
           </label>
           <button onClick={handleSave} disabled={saving} className="btn-save">
-            {saving ? '저장 중...' : '💾 저장'}
+            {saving ? '저장 중...' : '💾 직접 저장'}
           </button>
           <button onClick={handlePrint} className="btn-print">🖨️ 인쇄</button>
         </div>
@@ -292,6 +308,8 @@ export default function MonthlySales() {
         .ms-nav button { padding: 4px 10px; cursor: pointer; }
         .ms-nav select { padding: 4px 8px; font-size: 14px; font-weight: bold; }
         .ms-actions { display: flex; gap: 8px; }
+        .btn-tpl { padding: 6px 14px; cursor: pointer; border: 1px solid #1a6fc4; border-radius: 4px;
+                   background: #e8f0fb; color: #1a6fc4; font-size: 13px; font-weight: bold; }
         .btn-upload, .btn-save, .btn-print {
           padding: 6px 14px; cursor: pointer; border: 1px solid #aaa; border-radius: 4px;
           background: #f5f5f5; font-size: 13px;

@@ -1,9 +1,10 @@
-"""월 매출 집계표 — 관리자가 작성/조회/Excel 업로드"""
+"""월 매출 집계표 — 관리자가 작성/조회/Excel 양식 다운로드/업로드"""
 from datetime import date as date_type
 from typing import Optional
 import io
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy import Column, Integer, String, Numeric, Date, Text, text
 from sqlalchemy.orm import Session, Mapped, mapped_column
@@ -123,6 +124,175 @@ def save_summary(body: SummaryIn, db: Session = Depends(get_db), _: User = Depen
     return {"ok": True}
 
 
+@router.get("/template")
+def download_template(_: User = Depends(require_admin)):
+    """빈 월 매출 집계표 Excel 양식 다운로드"""
+    try:
+        import openpyxl
+        from openpyxl.styles import (Font, Alignment, Border, Side, PatternFill)
+        from openpyxl.utils import get_column_letter
+    except ImportError:
+        raise HTTPException(500, "openpyxl 패키지가 없습니다")
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "월매출집계표"
+
+    # ── 헬퍼 ─────────────────────────────────────────────────────
+    thin = Side(style="thin")
+    thick = Side(style="medium")
+    def border(l=False, r=False, t=False, b=False):
+        return Border(
+            left=thick if l else thin,
+            right=thick if r else thin,
+            top=thick if t else thin,
+            bottom=thick if b else thin,
+        )
+    def cell(row, col, value="", bold=False, size=11, align="left", fill=None, wrap=False):
+        c = ws.cell(row=row, column=col, value=value)
+        c.font = Font(name="맑은 고딕", size=size, bold=bold)
+        h = {"left": "left", "center": "center", "right": "right"}.get(align, "left")
+        c.alignment = Alignment(horizontal=h, vertical="center", wrap_text=wrap)
+        if fill:
+            c.fill = PatternFill("solid", fgColor=fill)
+        return c
+
+    # ── 열 너비 ──────────────────────────────────────────────────
+    col_widths = [6, 13, 26, 18, 8, 13, 16, 8, 8, 14]
+    for i, w in enumerate(col_widths, 1):
+        ws.column_dimensions[get_column_letter(i)].width = w
+
+    # ── 결재란 (행 1~2, 열 6~10) ─────────────────────────────────
+    for label, col in [("담당", 7), ("경리 확인", 8), ("임원", 9), ("대표이사", 10)]:
+        c1 = ws.cell(row=1, column=col, value=label)
+        c1.font = Font(name="맑은 고딕", size=9, bold=True)
+        c1.alignment = Alignment(horizontal="center", vertical="center")
+        c1.fill = PatternFill("solid", fgColor="D9D9D9")
+        c1.border = Border(left=thin, right=thin, top=thick, bottom=thin)
+        ws.cell(row=2, column=col).border = Border(left=thin, right=thin, top=thin, bottom=thick)
+    ws.row_dimensions[1].height = 16
+    ws.row_dimensions[2].height = 28
+
+    # ── 업체명 (행 2) ────────────────────────────────────────────
+    cell(2, 1, "업체명 :", bold=True, size=10)
+    ws.merge_cells("B2:D2")
+    c = ws.cell(row=2, column=2)
+    c.font = Font(name="맑은 고딕", size=11)
+    c.border = Border(bottom=thick)
+
+    # ── 제목 (행 3) ──────────────────────────────────────────────
+    ws.merge_cells("A3:J3")
+    t = ws.cell(row=3, column=1, value="월  매출  집계표")
+    t.font = Font(name="맑은 고딕", size=16, bold=True, underline="single", color="1F4E79")
+    t.alignment = Alignment(horizontal="center", vertical="center")
+    ws.row_dimensions[3].height = 30
+
+    # ── 마감제출일 (행 4) ────────────────────────────────────────
+    cell(4, 1, "마감제출일 :", bold=True, size=10)
+    ws.merge_cells("B4:D4")
+    ws.cell(row=4, column=2).border = Border(bottom=thick)
+    ws.row_dimensions[4].height = 18
+
+    # ── NO별 거래명세표 첨부 안내 (행 5) ─────────────────────────
+    ws.merge_cells("A5:J5")
+    n = ws.cell(row=5, column=1, value="* NO별 거래 명세표 첨부")
+    n.font = Font(name="맑은 고딕", size=9, color="595959")
+    n.alignment = Alignment(horizontal="left", vertical="center")
+    ws.row_dimensions[5].height = 14
+
+    # ── 헤더 행 (행 6) ───────────────────────────────────────────
+    headers = ["NO", "거래일", "품명", "규격", "수량", "단가", "공급가액", "거래명세표", "", "비고"]
+    for col, h in enumerate(headers, 1):
+        c = ws.cell(row=6, column=col, value=h)
+        c.font = Font(name="맑은 고딕", size=10, bold=True)
+        c.alignment = Alignment(horizontal="center", vertical="center")
+        c.fill = PatternFill("solid", fgColor="F2F2F2")
+        c.border = Border(left=thick if col == 1 else thin,
+                          right=thick if col == 10 else thin,
+                          top=thick, bottom=thin)
+    # 거래명세표 유/무 서브헤더
+    ws.merge_cells("H6:I6")
+    ws.row_dimensions[6].height = 18
+
+    # ── 데이터 행 7~21 (15행) ────────────────────────────────────
+    for row_no in range(1, 16):
+        r = row_no + 6
+        ws.row_dimensions[r].height = 16
+        for col in range(1, 11):
+            c = ws.cell(row=r, column=col)
+            c.font = Font(name="맑은 고딕", size=10)
+            c.border = Border(
+                left=thick if col == 1 else thin,
+                right=thick if col == 10 else thin,
+                top=thin,
+                bottom=thick if row_no == 15 else thin,
+            )
+            if col == 1:
+                c.value = row_no
+                c.alignment = Alignment(horizontal="center", vertical="center")
+            elif col in (5, 6, 7):
+                c.alignment = Alignment(horizontal="right", vertical="center")
+                if col == 7:
+                    # 공급가액 = 수량 × 단가 수식
+                    c.value = f"=IF(AND(E{r}<>\"\",F{r}<>\"\"),E{r}*F{r},\"\")"
+                    c.number_format = "#,##0"
+            elif col in (8, 9):
+                c.alignment = Alignment(horizontal="center", vertical="center")
+                if col == 8:
+                    c.value = "유"
+                    c.fill = PatternFill("solid", fgColor="F5C518")
+                    c.font = Font(name="맑은 고딕", size=10, bold=True)
+                else:
+                    c.value = "무"
+            else:
+                c.alignment = Alignment(horizontal="left", vertical="center")
+
+    # ── 합계 행 (행 22) ──────────────────────────────────────────
+    sum_r = 22
+    ws.row_dimensions[sum_r].height = 18
+    ws.merge_cells(f"A{sum_r}:D{sum_r}")
+    sc = ws.cell(row=sum_r, column=1, value="합계")
+    sc.font = Font(name="맑은 고딕", size=10, bold=True)
+    sc.alignment = Alignment(horizontal="center", vertical="center")
+    sc.fill = PatternFill("solid", fgColor="F2F2F2")
+    sc.border = Border(left=thick, right=thin, top=thin, bottom=thick)
+
+    for col in range(2, 5):
+        ws.cell(row=sum_r, column=col).border = Border(top=thin, bottom=thick)
+
+    # 수량 합계
+    qc = ws.cell(row=sum_r, column=5, value="=SUM(E7:E21)")
+    qc.font = Font(name="맑은 고딕", size=10, bold=True)
+    qc.alignment = Alignment(horizontal="right", vertical="center")
+    qc.border = Border(left=thin, right=thin, top=thin, bottom=thick)
+    qc.number_format = "#,##0"
+
+    ws.cell(row=sum_r, column=6).border = Border(top=thin, bottom=thick)
+
+    # 공급가액 합계
+    ac = ws.cell(row=sum_r, column=7, value="=SUM(G7:G21)")
+    ac.font = Font(name="맑은 고딕", size=10, bold=True)
+    ac.alignment = Alignment(horizontal="right", vertical="center")
+    ac.border = Border(left=thin, right=thin, top=thin, bottom=thick)
+    ac.number_format = "#,##0"
+
+    for col in range(8, 11):
+        ws.cell(row=sum_r, column=col).border = Border(
+            left=thin, right=thick if col == 10 else thin, top=thin, bottom=thick
+        )
+
+    # ── 출력 ─────────────────────────────────────────────────────
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    filename = "월매출집계표_양식.xlsx"
+    return StreamingResponse(
+        buf,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{filename}"},
+    )
+
+
 @router.post("/upload-excel/{year_month}")
 async def upload_excel(
     year_month: str,
@@ -131,9 +301,12 @@ async def upload_excel(
     _: User = Depends(require_admin),
 ):
     """엑셀 업로드 → DB 저장
-    양식: NO(A) 거래일(B) 품명(C) 규격(D) 수량(E) 단가(F) 공급가액(G) 거래명세표(H) 비고(I)
-    데이터 시작 행: 7 (헤더 포함 6행)
-    업체명: B2, 마감제출일: B4
+    양식(ERP 템플릿 기준):
+      B2: 업체명
+      B4: 마감제출일
+      행 6: 헤더 (NO/거래일/품명/규격/수량/단가/공급가액/거래명세표유/무/비고)
+      행 7~21: 데이터 (15행)
+      NO(A) 거래일(B) 품명(C) 규격(D) 수량(E) 단가(F) 공급가액(G) 유/무(H/I) 비고(J)
     """
     try:
         import openpyxl
@@ -170,8 +343,9 @@ async def upload_excel(
         e = ws.cell(excel_row, 5).value  # 수량
         f = ws.cell(excel_row, 6).value  # 단가
         g = ws.cell(excel_row, 7).value  # 공급가액
-        h = ws.cell(excel_row, 8).value  # 거래명세표(유/무)
-        i = ws.cell(excel_row, 9).value  # 비고
+        h = ws.cell(excel_row, 8).value  # 거래명세표 유
+        i_val = ws.cell(excel_row, 9).value  # 거래명세표 무
+        i = ws.cell(excel_row, 10).value  # 비고
 
         # 빈 행 스킵
         if not any([b, c, d, e, f, g]):
@@ -193,7 +367,13 @@ async def upload_excel(
                 except Exception:
                     pass
 
-        has_invoice = str(h or "유").strip() in ("유", "Y", "y", "1", "True", "true")
+        # 유 셀이 "유" 면 has_invoice=True, 무 셀이 "무" 면 False
+        if i_val and str(i_val).strip() == "무":
+            has_invoice = False
+        elif h and str(h).strip() == "유":
+            has_invoice = True
+        else:
+            has_invoice = True  # 기본값
 
         db.add(MonthlySalesRow(
             year_month=year_month,
