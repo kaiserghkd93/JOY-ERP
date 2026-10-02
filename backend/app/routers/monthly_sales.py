@@ -285,11 +285,10 @@ def download_template():
     buf = io.BytesIO()
     wb.save(buf)
     buf.seek(0)
-    filename = "월매출집계표_양식.xlsx"
     return StreamingResponse(
         buf,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{filename}"},
+        headers={"Content-Disposition": "attachment; filename=monthly_sales_form.xlsx"},
     )
 
 
