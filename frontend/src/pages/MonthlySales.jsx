@@ -231,24 +231,18 @@ export default function MonthlySales() {
         {/* 데이터 테이블 */}
         <table className="ms-table">
           <colgroup>
-            <col style={{ width: '38px' }} />
-            <col style={{ width: '90px' }} />
-            <col style={{ width: '180px' }} />
-            <col style={{ width: '120px' }} />
-            <col style={{ width: '60px' }} />
-            <col style={{ width: '90px' }} />
+            <col style={{ width: '40px' }} />
             <col style={{ width: '110px' }} />
+            <col style={{ width: '220px' }} />
+            <col style={{ width: '140px' }} />
             <col style={{ width: '70px' }} />
-            <col style={{ width: '80px' }} />
+            <col style={{ width: '70px' }} />
           </colgroup>
           <thead>
             <tr>
               <th>NO</th>
-              <th>거래일</th>
-              <th>품명</th>
-              <th>규격</th>
-              <th>수량</th>
-              <th>단가</th>
+              <th>마감일</th>
+              <th>업체명</th>
               <th>공급가액</th>
               <th colSpan={2}>거래명세표</th>
             </tr>
@@ -261,40 +255,23 @@ export default function MonthlySales() {
                   <input type="date" value={r.trade_date} onChange={e => updateRow(i, 'trade_date', e.target.value)} className="inp-td" />
                 </td>
                 <td>
-                  <input value={r.item_name} onChange={e => updateRow(i, 'item_name', e.target.value)} className="inp-full" placeholder="품명" />
-                </td>
-                <td>
-                  <input value={r.spec} onChange={e => updateRow(i, 'spec', e.target.value)} className="inp-full" placeholder="규격" />
-                </td>
-                <td>
-                  <input type="number" value={r.qty} onChange={e => updateRow(i, 'qty', e.target.value)} className="inp-num" />
-                </td>
-                <td>
-                  <input type="number" value={r.unit_price} onChange={e => updateRow(i, 'unit_price', e.target.value)} className="inp-num" />
+                  <input value={r.item_name} onChange={e => updateRow(i, 'item_name', e.target.value)} className="inp-full" placeholder="업체명" />
                 </td>
                 <td>
                   <input type="number" value={r.supply_amount} onChange={e => updateRow(i, 'supply_amount', e.target.value)} className="inp-num" />
                 </td>
                 <td className="tc">
-                  <button
-                    className={`inv-btn ${r.has_invoice ? 'inv-yes' : ''}`}
-                    onClick={() => updateRow(i, 'has_invoice', true)}
-                  >유</button>
+                  <button className={`inv-btn ${r.has_invoice ? 'inv-yes' : ''}`} onClick={() => updateRow(i, 'has_invoice', true)}>유</button>
                 </td>
                 <td className="tc">
-                  <button
-                    className={`inv-btn ${!r.has_invoice ? 'inv-no' : ''}`}
-                    onClick={() => updateRow(i, 'has_invoice', false)}
-                  >무</button>
+                  <button className={`inv-btn ${!r.has_invoice ? 'inv-no' : ''}`} onClick={() => updateRow(i, 'has_invoice', false)}>무</button>
                 </td>
               </tr>
             ))}
           </tbody>
           <tfoot>
             <tr>
-              <td colSpan={4} className="tc foot-label">합계</td>
-              <td className="tc foot-val">{totalQty ? totalQty.toLocaleString() : '-'}</td>
-              <td></td>
+              <td colSpan={3} className="tc foot-label">합계</td>
               <td className="tc foot-val">{totalAmt ? totalAmt.toLocaleString() : '-'}</td>
               <td colSpan={2}></td>
             </tr>
