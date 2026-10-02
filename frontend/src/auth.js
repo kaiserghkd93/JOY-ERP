@@ -1,6 +1,6 @@
 // 계정 정보 (프론트엔드 간이 인증)
 const ACCOUNTS = {
-  'kaiser': { password: 'admin1234!', role: 'master', name: '관리자' },
+  'kaiser': { password: 'kaiser2024!', role: 'master', name: '관리자' },
   'staff':  { password: 'staff1234',   role: 'staff',  name: '현장직원' },
 }
 
