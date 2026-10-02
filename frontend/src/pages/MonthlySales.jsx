@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { API } from '../api'
+import API from '../api'
 
 const EMPTY_ROW = (no) => ({
   row_no: no, trade_date: '', item_name: '', spec: '',
