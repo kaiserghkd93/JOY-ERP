@@ -95,18 +95,19 @@ export default function MonthlySales() {
   }
 
   async function handleDownloadTemplate() {
-    const token = localStorage.getItem('token')
-    const res = await fetch('/monthly-sales/template', {
-      headers: { Authorization: `Bearer ${token}` }
-    })
-    if (!res.ok) { setMsg('다운로드 실패'); return }
-    const blob = await res.blob()
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = '월매출집계표_양식.xlsx'
-    a.click()
-    URL.revokeObjectURL(url)
+    try {
+      const res = await API.get('/monthly-sales/template', { responseType: 'blob' })
+      const url = URL.createObjectURL(res.data)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = '월매출집계표_양식.xlsx'
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+    } catch (e) {
+      setMsg('다운로드 실패: ' + (e.response?.data?.detail || e.message))
+    }
   }
 
   async function handleUpload(e) {
