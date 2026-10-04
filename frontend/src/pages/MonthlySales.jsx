@@ -200,7 +200,10 @@ export default function MonthlySales() {
             {/* 상단: 업체명(좌) + 결재란(우) */}
             <div className="ms-top-row">
               <div className="ms-company-block">
-                <div className="ms-company">업체명 :&nbsp;<input value={companyName} onChange={e => setCompanyName(e.target.value)} placeholder="업체명" className="inp-company" /></div>
+                <div className="ms-company">업체명 :&nbsp;
+                <input value={companyName} onChange={e => setCompanyName(e.target.value)} placeholder="업체명" className="inp-company no-print" />
+                <span className="print-only" style={{fontWeight:'bold'}}>{companyName}</span>
+              </div>
               </div>
               <table className="ms-approval">
                 <tbody>
@@ -227,7 +230,9 @@ export default function MonthlySales() {
 
             {/* 마감제출일 */}
             <div className="ms-closing">
-              마감제출일 :&nbsp;<input type="date" value={closingDate} onChange={e => setClosingDate(e.target.value)} className="inp-date" />
+              마감제출일 :&nbsp;
+              <input type="date" value={closingDate} onChange={e => setClosingDate(e.target.value)} className="inp-date no-print" />
+              <span className="print-only">{closingDate}</span>
             </div>
             <div className="ms-note-label">* NO별 거래 명세표 첨부</div>
 
@@ -246,16 +251,25 @@ export default function MonthlySales() {
                 {rows.map((r, i) => (
                   <tr key={i}>
                     <td className="tc">{r.row_no}</td>
-                    <td><input type="date" value={r.trade_date} onChange={e => updateRow(i,'trade_date',e.target.value)} className="inp-td" /></td>
-                    <td><input value={r.item_name} onChange={e => updateRow(i,'item_name',e.target.value)} className="inp-full" placeholder="업체명" /></td>
-                    <td><input type="number" value={r.supply_amount} onChange={e => updateRow(i,'supply_amount',e.target.value)} className="inp-num" /></td>
+                    <td className="tc">
+                      <input type="date" value={r.trade_date} onChange={e => updateRow(i,'trade_date',e.target.value)} className="inp-td no-print" />
+                      <span className="print-only">{r.trade_date}</span>
+                    </td>
+                    <td>
+                      <input value={r.item_name} onChange={e => updateRow(i,'item_name',e.target.value)} className="inp-full no-print" placeholder="업체명" />
+                      <span className="print-only">{r.item_name}</span>
+                    </td>
+                    <td className="tr">
+                      <input type="number" value={r.supply_amount} onChange={e => updateRow(i,'supply_amount',e.target.value)} className="inp-num no-print" />
+                      <span className="print-only">{r.supply_amount ? Number(r.supply_amount).toLocaleString() : ''}</span>
+                    </td>
                   </tr>
                 ))}
               </tbody>
               <tfoot>
                 <tr>
                   <td colSpan={3} className="tc foot-label">합계</td>
-                  <td className="tr foot-val">{totalAmt ? totalAmt.toLocaleString() : '-'}</td>
+                  <td className="tr foot-val" style={{paddingRight:'6px'}}>{totalAmt ? totalAmt.toLocaleString() : '-'}</td>
                 </tr>
               </tfoot>
             </table>
@@ -390,16 +404,20 @@ export default function MonthlySales() {
         .bold { font-weight: bold; }
         .no-data { color: #888; padding: 40px; text-align: center; }
 
+        .print-only { display: none; }
+
         /* ── 인쇄 ── */
         @media print {
-          @page { size: A4 portrait; margin: 15mm 12mm; }
+          @page { size: A4 landscape; margin: 12mm 15mm; }
           .no-print { display: none !important; }
+          .print-only { display: inline !important; font-size: 11pt; }
           .ms-page { padding: 0; }
           .ms-form { width: 100%; }
-          .ms-table th, .ms-table td { font-size: 11pt; padding: 3px 4px; }
+          .ms-top-row { margin-bottom: 2px; }
+          .ms-table th, .ms-table td { font-size: 11pt; padding: 4px 5px; }
           .ms-title { font-size: 16pt; }
-          input { border: none !important; outline: none !important; background: transparent !important; padding: 0 !important; }
-          .inp-date { color: #000; }
+          input { display: none !important; }
+          .inp-date-print { display: inline !important; }
         }
       `}</style>
     </div>
