@@ -21,7 +21,8 @@ export default function MonthlySales() {
   const [closingDate, setClosingDate] = useState('')
   const [rows, setRows] = useState(INITIAL_ROWS)
   const [monthList, setMonthList] = useState([])
-  const [allData, setAllData] = useState([])   // 전체 월 데이터 (집계용)
+  const [allData, setAllData] = useState([])
+  const [filterMonth, setFilterMonth] = useState('all')
   const [saving, setSaving] = useState(false)
   const [msg, setMsg] = useState('')
   const fileRef = useRef()
@@ -280,67 +281,105 @@ export default function MonthlySales() {
 
       {/* ══════════════ 집계 조회 탭 ══════════════ */}
       {tab === 'summary' && (
-        <div className="summary-area">
+        <div>
+          {/* 컨트롤 */}
+          <div className="sum-toolbar no-print">
+            <select value={filterMonth} onChange={e => setFilterMonth(e.target.value)} style={{padding:'5px 10px', fontSize:'13px', marginRight:'8px'}}>
+              <option value="all">전체 월</option>
+              {allMonths.map(m => <option key={m} value={m}>{m}</option>)}
+            </select>
+            <button className="btn-print" onClick={() => window.print()}>🖨️ 인쇄</button>
+          </div>
+
           {allData.length === 0 ? (
             <div className="no-data">저장된 데이터가 없습니다.</div>
           ) : (
-            <>
-              {/* 월별 합계 */}
-              <div className="sum-section">
-                <h3>월별 매출 합계</h3>
-                <table className="sum-table">
-                  <thead><tr><th>월</th><th>공급가액 합계</th></tr></thead>
-                  <tbody>
-                    {monthlyTotals.map(m => (
-                      <tr key={m.month}>
-                        <td className="tc">{m.month}</td>
-                        <td className="tr">{fmt(m.total)}</td>
-                      </tr>
-                    ))}
-                    <tr className="foot-row">
-                      <td className="tc bold">총합계</td>
-                      <td className="tr bold">{fmt(monthlyTotals.reduce((s,m)=>s+m.total,0))}</td>
-                    </tr>
-                  </tbody>
-                </table>
+            <div className="sum-print-area">
+              {/* 인쇄 제목 */}
+              <div className="sum-print-title">
+                {filterMonth === 'all' ? '전체' : filterMonth} 매출 집계 현황
               </div>
 
-              {/* 업체별 × 월별 크로스 */}
-              <div className="sum-section">
-                <h3>업체별 월별 집계</h3>
-                <div style={{overflowX:'auto'}}>
-                  <table className="sum-table cross">
-                    <thead>
-                      <tr>
-                        <th>업체명</th>
-                        {allMonths.map(m => <th key={m}>{m}</th>)}
-                        <th>합계</th>
-                      </tr>
-                    </thead>
+              {/* 월별 합계 (전체 볼 때만) */}
+              {filterMonth === 'all' && (
+                <div style={{marginBottom:'20px'}}>
+                  <h3 className="sum-h3">월별 매출 합계</h3>
+                  <table className="sum-table">
+                    <thead><tr><th>월</th><th style={{textAlign:'right'}}>공급가액 합계</th></tr></thead>
                     <tbody>
-                      {allCompanies.map(co => {
-                        const rowTotal = allMonths.reduce((s,m) => s + (crossMap[co]?.[m] || 0), 0)
-                        return (
-                          <tr key={co}>
-                            <td>{co}</td>
-                            {allMonths.map(m => <td key={m} className="tr">{fmt(crossMap[co]?.[m])}</td>)}
-                            <td className="tr bold">{fmt(rowTotal)}</td>
-                          </tr>
-                        )
-                      })}
+                      {monthlyTotals.map(m => (
+                        <tr key={m.month}>
+                          <td className="tc">{m.month}</td>
+                          <td className="tr">{fmt(m.total)}</td>
+                        </tr>
+                      ))}
                       <tr className="foot-row">
-                        <td className="bold">월 합계</td>
-                        {allMonths.map(m => {
-                          const colTotal = allCompanies.reduce((s,co) => s + (crossMap[co]?.[m] || 0), 0)
-                          return <td key={m} className="tr bold">{fmt(colTotal)}</td>
-                        })}
-                        <td className="tr bold">{fmt(allCompanies.reduce((s,co) => s + allMonths.reduce((s2,m)=>s2+(crossMap[co]?.[m]||0),0), 0))}</td>
+                        <td className="tc bold">총합계</td>
+                        <td className="tr bold">{fmt(monthlyTotals.reduce((s,m)=>s+m.total,0))}</td>
                       </tr>
                     </tbody>
                   </table>
                 </div>
+              )}
+
+              {/* 업체별 집계 */}
+              <div>
+                <h3 className="sum-h3">업체별 {filterMonth === 'all' ? '월별' : filterMonth} 집계</h3>
+                <div style={{overflowX:'auto'}}>
+                  {filterMonth === 'all' ? (
+                    // 전체: 업체 × 월 크로스
+                    <table className="sum-table">
+                      <thead>
+                        <tr>
+                          <th>업체명</th>
+                          {allMonths.map(m => <th key={m} style={{textAlign:'right'}}>{m}</th>)}
+                          <th style={{textAlign:'right'}}>합계</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {allCompanies.map(co => {
+                          const rowTotal = allMonths.reduce((s,m) => s+(crossMap[co]?.[m]||0), 0)
+                          return (
+                            <tr key={co}>
+                              <td>{co}</td>
+                              {allMonths.map(m => <td key={m} className="tr">{fmt(crossMap[co]?.[m])}</td>)}
+                              <td className="tr bold">{fmt(rowTotal)}</td>
+                            </tr>
+                          )
+                        })}
+                        <tr className="foot-row">
+                          <td className="bold">월 합계</td>
+                          {allMonths.map(m => {
+                            const t = allCompanies.reduce((s,co)=>s+(crossMap[co]?.[m]||0),0)
+                            return <td key={m} className="tr bold">{fmt(t)}</td>
+                          })}
+                          <td className="tr bold">{fmt(allCompanies.reduce((s,co)=>s+allMonths.reduce((s2,m)=>s2+(crossMap[co]?.[m]||0),0),0))}</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  ) : (
+                    // 특정 월: 업체별 금액만
+                    <table className="sum-table">
+                      <thead>
+                        <tr><th>업체명</th><th style={{textAlign:'right'}}>공급가액</th></tr>
+                      </thead>
+                      <tbody>
+                        {allCompanies.filter(co => crossMap[co]?.[filterMonth]).map(co => (
+                          <tr key={co}>
+                            <td>{co}</td>
+                            <td className="tr">{fmt(crossMap[co]?.[filterMonth])}</td>
+                          </tr>
+                        ))}
+                        <tr className="foot-row">
+                          <td className="bold">합계</td>
+                          <td className="tr bold">{fmt(allCompanies.reduce((s,co)=>s+(crossMap[co]?.[filterMonth]||0),0))}</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  )}
+                </div>
               </div>
-            </>
+            </div>
           )}
         </div>
       )}
@@ -403,6 +442,10 @@ export default function MonthlySales() {
         .sum-table .foot-row td { background: #e8f0fb; font-weight: bold; border-top: 2px solid #1a6fc4; }
         .bold { font-weight: bold; }
         .no-data { color: #888; padding: 40px; text-align: center; }
+        .sum-toolbar { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+        .sum-print-area { max-width: 900px; }
+        .sum-print-title { display: none; }
+        .sum-h3 { font-size: 14px; font-weight: bold; margin: 0 0 8px; color: #1a6fc4; border-bottom: 2px solid #1a6fc4; padding-bottom: 4px; }
 
         .print-only { display: none; }
 
@@ -417,7 +460,11 @@ export default function MonthlySales() {
           .ms-table th, .ms-table td { font-size: 11pt; padding: 4px 5px; }
           .ms-title { font-size: 16pt; }
           input { display: none !important; }
-          .inp-date-print { display: inline !important; }
+          /* 집계 탭 인쇄 */
+          .sum-print-title { display: block !important; font-size: 16pt; font-weight: bold; text-align: center; margin-bottom: 12px; }
+          .sum-print-area { max-width: 100%; }
+          .sum-table th, .sum-table td { font-size: 10pt; padding: 4px 8px; }
+          .sum-h3 { font-size: 12pt; color: #000; border-bottom: 1px solid #000; }
         }
       `}</style>
     </div>
