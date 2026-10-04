@@ -7,6 +7,10 @@ const EMPTY_ROW = (no) => ({
 })
 const INITIAL_ROWS = Array.from({ length: 15 }, (_, i) => EMPTY_ROW(i + 1))
 
+function addRow(rows) {
+  return [...rows, EMPTY_ROW(rows.length + 1)]
+}
+
 export default function MonthlySales() {
   const today = new Date()
   const [tab, setTab] = useState('input')   // 'input' | 'summary'
@@ -237,6 +241,7 @@ export default function MonthlySales() {
                 </tr>
               </tfoot>
             </table>
+            <button className="btn-add-row no-print" onClick={() => setRows(r => addRow(r))}>+ 행 추가</button>
           </div>
         </>
       )}
@@ -360,6 +365,7 @@ export default function MonthlySales() {
         .sum-table .foot-row td { background: #e8f0fb; font-weight: bold; border-top: 2px solid #1a6fc4; }
         .bold { font-weight: bold; }
         .no-data { color: #888; padding: 40px; text-align: center; }
+        .btn-add-row { margin-top: 6px; padding: 5px 16px; background: #f0f4fb; border: 1px dashed #1a6fc4; color: #1a6fc4; cursor: pointer; font-size: 13px; border-radius: 4px; }
         @media print {
           .no-print { display: none !important; }
           .ms-page { padding: 0; }
