@@ -196,34 +196,52 @@ export default function MonthlySales() {
 
           {/* 양식 */}
           <div className="ms-form">
-            <table className="ms-approval">
-              <tbody>
-                <tr>
-                  <td></td>
-                  <td className="ap-label">담당</td><td className="ap-label">경리 확인</td>
-                  <td className="ap-label">임원</td><td className="ap-label">대표이사</td>
-                </tr>
-                <tr>
-                  <td></td>
-                  <td className="ap-box"></td><td className="ap-box"></td>
-                  <td className="ap-box"></td><td className="ap-box"></td>
-                </tr>
-              </tbody>
-            </table>
 
-            <div className="ms-header">
-              <div className="ms-company">업체명 : <input value={companyName} onChange={e => setCompanyName(e.target.value)} placeholder="업체명" className="inp-company" /></div>
-              <div className="ms-title"><span>{yearMonth.replace('-', '년 ')}월</span>&nbsp;&nbsp;<span className="title-main">매출 집계표</span></div>
-              <div className="ms-closing">마감제출일 : <input type="date" value={closingDate} onChange={e => setClosingDate(e.target.value)} className="inp-date" /></div>
-              <div className="ms-note-label">* NO별 거래 명세표 첨부</div>
+            {/* 상단: 업체명(좌) + 결재란(우) */}
+            <div className="ms-top-row">
+              <div className="ms-company-block">
+                <div className="ms-company">업체명 :&nbsp;<input value={companyName} onChange={e => setCompanyName(e.target.value)} placeholder="업체명" className="inp-company" /></div>
+              </div>
+              <table className="ms-approval">
+                <tbody>
+                  <tr>
+                    <td className="ap-label">담당</td>
+                    <td className="ap-label">경리 확인</td>
+                    <td className="ap-label">임원</td>
+                    <td className="ap-label">대표이사</td>
+                  </tr>
+                  <tr>
+                    <td className="ap-box"></td>
+                    <td className="ap-box"></td>
+                    <td className="ap-box"></td>
+                    <td className="ap-box"></td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
 
+            {/* 제목 */}
+            <div className="ms-title">
+              {yearMonth.replace('-', '년 ')}월&nbsp;&nbsp;<span className="title-main">매출 집계표</span>
+            </div>
+
+            {/* 마감제출일 */}
+            <div className="ms-closing">
+              마감제출일 :&nbsp;<input type="date" value={closingDate} onChange={e => setClosingDate(e.target.value)} className="inp-date" />
+            </div>
+            <div className="ms-note-label">* NO별 거래 명세표 첨부</div>
+
+            {/* 데이터 테이블 */}
             <table className="ms-table">
               <colgroup>
-                <col style={{width:'40px'}} /><col style={{width:'120px'}} />
-                <col style={{width:'300px'}} /><col style={{width:'160px'}} />
+                <col style={{width:'6%'}} />
+                <col style={{width:'18%'}} />
+                <col style={{width:'52%'}} />
+                <col style={{width:'24%'}} />
               </colgroup>
-              <thead><tr><th>NO</th><th>마감일</th><th>업체명</th><th>공급가액</th></tr></thead>
+              <thead>
+                <tr><th>NO</th><th>마감일</th><th>업체명</th><th>공급가액</th></tr>
+              </thead>
               <tbody>
                 {rows.map((r, i) => (
                   <tr key={i}>
@@ -237,7 +255,7 @@ export default function MonthlySales() {
               <tfoot>
                 <tr>
                   <td colSpan={3} className="tc foot-label">합계</td>
-                  <td className="tc foot-val">{totalAmt ? totalAmt.toLocaleString() : '-'}</td>
+                  <td className="tr foot-val">{totalAmt ? totalAmt.toLocaleString() : '-'}</td>
                 </tr>
               </tfoot>
             </table>
@@ -314,10 +332,10 @@ export default function MonthlySales() {
       )}
 
       <style>{`
+        /* ── 화면 공통 ── */
         .ms-page { padding: 16px; font-family: '맑은 고딕', sans-serif; font-size: 13px; }
         .ms-tabs { display: flex; gap: 4px; margin-bottom: 12px; border-bottom: 2px solid #1a6fc4; }
-        .tab { padding: 8px 20px; cursor: pointer; border: 1px solid #ccc; border-bottom: none;
-               background: #f5f5f5; font-size: 13px; font-family: inherit; }
+        .tab { padding: 8px 20px; cursor: pointer; border: 1px solid #ccc; border-bottom: none; background: #f5f5f5; font-size: 13px; font-family: inherit; }
         .tab.active { background: #1a6fc4; color: #fff; border-color: #1a6fc4; font-weight: bold; }
         .ms-toolbar { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; flex-wrap: wrap; }
         .ms-nav { display: flex; align-items: center; gap: 4px; }
@@ -333,29 +351,35 @@ export default function MonthlySales() {
         .ms-month-list { margin-bottom: 10px; }
         .pill { padding: 2px 10px; margin-right: 4px; border: 1px solid #bbb; border-radius: 12px; cursor: pointer; background: #f5f5f5; font-size: 12px; }
         .pill.active { background: #1a6fc4; color: #fff; border-color: #1a6fc4; }
-        .ms-form { max-width: 680px; }
-        .ms-approval { width: 100%; border-collapse: collapse; margin-bottom: 4px; }
-        .ms-approval td { border: 1px solid #333; padding: 4px 8px; font-size: 12px; }
-        .ms-approval .ap-label { background: #e8e8e8; font-weight: bold; text-align: center; width: 80px; }
-        .ms-approval .ap-box { height: 36px; width: 80px; }
-        .ms-header { margin: 6px 0; }
-        .ms-company { font-size: 13px; margin-bottom: 4px; }
-        .ms-title { font-size: 18px; font-weight: bold; text-align: center; margin: 4px 0; }
+
+        /* ── 양식 ── */
+        .ms-form { width: 740px; max-width: 100%; }
+        .ms-top-row { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 2px; }
+        .ms-company-block { font-size: 13px; }
+        .ms-company { display: flex; align-items: center; gap: 4px; }
+        .inp-company { border: none; border-bottom: 1px solid #333; width: 180px; font-size: 13px; font-family: inherit; }
+        .ms-approval { border-collapse: collapse; }
+        .ms-approval td { border: 1px solid #333; font-size: 11px; text-align: center; }
+        .ms-approval .ap-label { background: #e8e8e8; font-weight: bold; padding: 2px 10px; min-width: 64px; }
+        .ms-approval .ap-box { height: 38px; min-width: 64px; }
+        .ms-title { font-size: 18px; font-weight: bold; text-align: center; margin: 6px 0 4px; }
         .title-main { text-decoration: underline; color: #1a6fc4; }
-        .ms-closing { font-size: 13px; margin-top: 4px; }
-        .ms-note-label { font-size: 12px; color: #555; margin-top: 4px; }
-        .inp-company { border: none; border-bottom: 1px solid #333; width: 160px; font-size: 13px; }
-        .inp-date { border: none; border-bottom: 1px solid #333; font-size: 13px; }
-        .ms-table { width: 100%; border-collapse: collapse; margin-top: 8px; }
-        .ms-table th, .ms-table td { border: 1px solid #333; padding: 3px 4px; }
-        .ms-table th { background: #f0f0f0; text-align: center; font-size: 12px; }
-        .tc { text-align: center; } .tr { text-align: right; padding-right: 6px; }
-        .inp-td, .inp-full { width: 100%; border: none; font-size: 12px; padding: 0; }
-        .inp-num { width: 100%; border: none; font-size: 12px; text-align: right; padding: 0; }
+        .ms-closing { font-size: 13px; margin-bottom: 2px; }
+        .inp-date { border: none; border-bottom: 1px solid #333; font-size: 13px; font-family: inherit; }
+        .ms-note-label { font-size: 11px; color: #555; margin-bottom: 4px; }
+        .ms-table { width: 100%; border-collapse: collapse; margin-top: 4px; }
+        .ms-table th, .ms-table td { border: 1px solid #333; padding: 4px 5px; }
+        .ms-table th { background: #f0f0f0; text-align: center; font-size: 12px; font-weight: bold; }
+        .ms-table td { font-size: 12px; }
+        .tc { text-align: center; } .tr { text-align: right; padding-right: 6px !important; }
+        .inp-td, .inp-full { width: 100%; border: none; font-size: 12px; padding: 0; font-family: inherit; }
+        .inp-num { width: 100%; border: none; font-size: 12px; text-align: right; padding: 0; font-family: inherit; }
         input:focus { outline: 1px solid #1a6fc4; background: #f0f7ff; }
-        .foot-label { font-weight: bold; background: #f0f0f0; text-align: center; }
-        .foot-val { font-weight: bold; text-align: right; padding-right: 6px; background: #fafafa; }
-        /* 집계 */
+        .foot-label { font-weight: bold; background: #f0f0f0; text-align: center !important; }
+        .foot-val { font-weight: bold; padding-right: 6px !important; }
+        .btn-add-row { margin-top: 6px; padding: 5px 16px; background: #f0f4fb; border: 1px dashed #1a6fc4; color: #1a6fc4; cursor: pointer; font-size: 13px; border-radius: 4px; }
+
+        /* ── 집계 탭 ── */
         .summary-area { display: flex; gap: 32px; flex-wrap: wrap; }
         .sum-section { flex: 1; min-width: 280px; }
         .sum-section h3 { font-size: 14px; font-weight: bold; margin-bottom: 8px; color: #1a6fc4; border-bottom: 2px solid #1a6fc4; padding-bottom: 4px; }
@@ -365,11 +389,17 @@ export default function MonthlySales() {
         .sum-table .foot-row td { background: #e8f0fb; font-weight: bold; border-top: 2px solid #1a6fc4; }
         .bold { font-weight: bold; }
         .no-data { color: #888; padding: 40px; text-align: center; }
-        .btn-add-row { margin-top: 6px; padding: 5px 16px; background: #f0f4fb; border: 1px dashed #1a6fc4; color: #1a6fc4; cursor: pointer; font-size: 13px; border-radius: 4px; }
+
+        /* ── 인쇄 ── */
         @media print {
+          @page { size: A4 portrait; margin: 15mm 12mm; }
           .no-print { display: none !important; }
           .ms-page { padding: 0; }
-          input { border: none !important; background: transparent !important; }
+          .ms-form { width: 100%; }
+          .ms-table th, .ms-table td { font-size: 11pt; padding: 3px 4px; }
+          .ms-title { font-size: 16pt; }
+          input { border: none !important; outline: none !important; background: transparent !important; padding: 0 !important; }
+          .inp-date { color: #000; }
         }
       `}</style>
     </div>
