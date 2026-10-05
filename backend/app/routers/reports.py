@@ -1617,7 +1617,7 @@ def outsource_pl(
     t_marg = (t_prof / t_ship * 100) if t_ship > 0 else 0
 
     # ── Excel 생성 ──
-    # 컬럼: 1외주처 2품번 3품명 4입고수량 5매입금액 6이월수량 7이월금액 8출하수량 9단가(입력) 10매출금액 11손익 12마진율 13고객사
+    # 컬럼: 1외주처 2품번 3품명 4입고수량 5매입금액 6이월수량 7이월금액 8출하수량(입력) 9단가(입력) 10매출금액 11손익 12마진율 13고객사 [14=숨김 파트너키]
     NCOLS = 13
     CL    = get_column_letter(NCOLS)
 
@@ -1690,22 +1690,23 @@ def outsource_pl(
     ws.row_dimensions[ROW].height = 20; ROW += 1
 
     s_start = ROW
+    summary_rows_info = []  # (excel_row, partner_name) for SUMIF backfill
     for i, s in enumerate(summary):
         bg    = C_SNOW if i % 2 == 0 else C_WHITE
         row_n = ROW
+        summary_rows_info.append((row_n, s['name']))
         _data_row(ws, ROW, [
             (1, str(i + 1),   AF, False, C_LGRAY, 'center'),
             (2, s['name'],    AF, True,  C_BLACK,  'left'),
-            (3, s['buy_amt'], MF, False, C_BLACK,  'right'),
-            (4, s['ship_amt'],MF, True,  C_BLUE,   'right'),
-            (5, None,         MF, True,  C_GREEN,  'right'),   # 수식 아래서 설정
+            (3, 0,            MF, False, C_BLACK,  'right'),   # → SUMIF 나중에 덮어씀
+            (4, 0,            MF, True,  C_BLUE,   'right'),   # → SUMIF 나중에 덮어씀
+            (5, None,         MF, True,  C_GREEN,  'right'),
             (6, None,         '0.0%', True, C_GREEN, 'center'),
-            (7, s['items'],   MF, False, C_LGRAY,  'center'),
+            (7, 0,            MF, False, C_LGRAY,  'center'),  # → COUNTIF 나중에 덮어씀
             (8, '', AF, False, C_BLACK, 'left'),
             (9, '', AF, False, C_BLACK, 'left'),
             (10,'', AF, False, C_BLACK, 'left'),
         ], bg)
-        # 수식으로 손익/마진율
         prof_cell = ws.cell(row_n, 5)
         prof_cell.value = f'=D{row_n}-C{row_n}'
         prof_cell.number_format = MF
@@ -1763,22 +1764,19 @@ def outsource_pl(
             (4,  d['buy_qty'],          MF,    False, C_BLACK,  'right'),
             (5,  d['buy_amt'],          MF,    False, C_BLACK,  'right'),
             (6,  d['carryover_qty'] or None, MF, False, 'E67E22', 'right'),
-            (7,  None,                  MF,    False, 'E67E22', 'right'),   # 이월금액 수식
-            (8,  d['ship_qty'],         MF,    False, C_BLACK,  'right'),
+            (7,  d['carryover_amt'] or None, MF, False, 'E67E22', 'right'),  # 이월금액 고정값
+            (8,  d['ship_qty'] or None, MF,    True,  C_INPUT,  'right'),   # 출하수량 입력셀
             (9,  unit_price or None,    MF,    True,  C_INPUT,  'right'),   # 단가 입력셀
             (10, None,                  MF,    True,  C_BLUE,   'right'),   # 매출금액 수식
             (11, None,                  MF,    True,  C_GREEN,  'right'),   # 손익 수식
             (12, None,                  '0.0%',False, C_GREEN,  'center'),  # 마진율 수식
             (13, d['main_cust'],        AF,    False, C_MGRAY,  'left'),
         ], bg)
-
-        # 이월금액 = 이월수량 × 단가  (F열 × I열)
-        g_cell = ws.cell(row_n, 7)
-        g_cell.value = f'=IFERROR(F{row_n}*I{row_n},"")'
-        g_cell.number_format = MF
-        g_cell.font = _font(size=9, color='E67E22')
-        g_cell.alignment = _al('right')
-        g_cell.fill = _f(bg)
+        # 숨김 파트너키 컬럼 N(14) — SUMIF용
+        hc = ws.cell(row_n, 14)
+        hc.value = d['partner_name']
+        hc.font  = _font(size=1, color='FFFFFF')
+        ws.column_dimensions['N'].width = 1
 
         # 매출금액 = 출하수량 × 단가  (H열 × I열)
         j_cell = ws.cell(row_n, 10)
@@ -1808,6 +1806,36 @@ def outsource_pl(
         ROW += 1
 
     d_end = ROW - 1
+
+    # ── 요약 테이블 SUMIF 역주입 (세부 내역 기준으로 수식 연결) ──
+    for s_row, pname in summary_rows_info:
+        safe = pname.replace('"', '""')
+        # 매입금액(C) = 세부내역 E열 합산
+        c_cell = ws.cell(s_row, 3)
+        c_cell.value = f'=SUMIF(N{d_start}:N{d_end},"{safe}",E{d_start}:E{d_end})'
+        c_cell.number_format = MF
+        c_cell.font = _font(size=9, color=C_BLACK); c_cell.alignment = _al('right')
+        # 매출금액(D) = 세부내역 J열 합산
+        d_cell = ws.cell(s_row, 4)
+        d_cell.value = f'=SUMIF(N{d_start}:N{d_end},"{safe}",J{d_start}:J{d_end})'
+        d_cell.number_format = MF
+        d_cell.font = _font(bold=True, size=9, color=C_BLUE); d_cell.alignment = _al('right')
+        # 품목수(G) = 세부내역 행 수
+        g_cell = ws.cell(s_row, 7)
+        g_cell.value = f'=COUNTIF(N{d_start}:N{d_end},"{safe}")'
+        g_cell.number_format = '0'
+        g_cell.font = _font(size=9, color=C_LGRAY); g_cell.alignment = _al('center')
+
+    # ── KPI 카드 수식 업데이트 (요약 테이블 참조) ──
+    kpi_cell_val = ws.cell(6, 1)
+    kpi_cell_val.value = f'=TEXT(SUM(C{s_start}:C{s_end}),"₩#,##0")'
+    kpi_cell_ship = ws.cell(6, 3)
+    kpi_cell_ship.value = f'=TEXT(SUM(D{s_start}:D{s_end}),"₩#,##0")'
+    kpi_cell_prof = ws.cell(6, 5)
+    kpi_cell_prof.value = f'=TEXT(SUM(E{s_start}:E{s_end}),"₩#,##0")'
+    kpi_cell_marg = ws.cell(6, 7)
+    kpi_cell_marg.value = f'=IFERROR(TEXT(SUM(E{s_start}:E{s_end})/SUM(D{s_start}:D{s_end}),"0.0%"),"0.0%")'
+
     _total_bar(ws, ROW, NCOLS, 3, {
         4:  f'=SUM(D{d_start}:D{d_end})',
         5:  f'=SUM(E{d_start}:E{d_end})',
