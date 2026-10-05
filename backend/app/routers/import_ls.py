@@ -307,3 +307,123 @@ def import_ls_shipment(
 
     db.commit()
     return stats
+
+
+@router.post("/hyundai-shipment")
+def import_hyundai_shipment(
+    partner_id: str,
+    auto_issue: bool = True,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+):
+    """
+    현대 납품현황 엑셀 임포트.
+    열 (0-based, 헤더 1행 스킵):
+      A(0)=자재번호(품번), C(2)=품명 및 규격,
+      E(4)=단가, F(5)=입고수량, I(8)=입고일자
+    입고수량 > 0인 행만 처리, 날짜별 거래명세서 생성
+    """
+    partner = db.get(Partner, partner_id)
+    if not partner:
+        raise HTTPException(404, f"거래처 없음: {partner_id}")
+
+    content = file.file.read()
+    wb = openpyxl.load_workbook(io.BytesIO(content), data_only=True)
+    ws = wb.active
+
+    stats = {"items_created": 0, "rows_ok": 0, "rows_skip": 0, "invoices": [], "errors": []}
+
+    all_rows = list(ws.iter_rows(min_row=1, values_only=True))
+    # 첫 행 F열(입고수량)이 숫자가 아니면 헤더
+    first_data_row = 1 if all_rows and not isinstance(all_rows[0][5], (int, float)) else 0
+
+    groups: dict[str, list[dict]] = {}
+
+    for row_idx, row in enumerate(all_rows[first_data_row:], start=first_data_row + 1):
+        if not row[0]:
+            stats["rows_skip"] += 1
+            continue
+        try:
+            part_no    = str(row[0]).strip()
+            part_name  = str(row[2]).strip() if row[2] else ""
+            unit_price = _safe_float(row[4])
+            qty        = _safe_int(row[5])
+            ship_date  = _parse_date(row[8])
+
+            if qty <= 0:
+                stats["rows_skip"] += 1
+                continue
+            if not ship_date:
+                stats["errors"].append({"row": row_idx, "error": f"날짜 파싱 실패: {row[8]}"})
+                continue
+
+            item = db.get(Item, part_no)
+            if not item:
+                item = Item(
+                    part_no=part_no, name=part_name, unit="EA",
+                    item_type=ItemType.outsourced,
+                    std_sell_price=unit_price, std_buy_price=0,
+                )
+                db.add(item)
+                db.flush()
+                stats["items_created"] += 1
+
+            key = str(ship_date)
+            groups.setdefault(key, []).append({
+                "part_no": part_no, "qty": qty,
+                "unit_price": unit_price, "ship_date": ship_date,
+            })
+            stats["rows_ok"] += 1
+
+        except Exception as e:
+            stats["errors"].append({"row": row_idx, "error": str(e)})
+
+    for ship_date_str, lines in sorted(groups.items()):
+        ship_date = lines[0]["ship_date"]
+
+        inv_no = next_doc_no(db, "INV", "invoice", "inv_no")
+        inv = Invoice(
+            inv_no=inv_no, partner_id=partner_id, issue_date=ship_date,
+            status=InvoiceStatus.draft,
+            note=f"현대 납품현황 임포트 ({ship_date_str})",
+        )
+        db.add(inv)
+        db.flush()
+
+        for ln in lines:
+            db.add(InvoiceLine(
+                inv_no=inv_no, part_no=ln["part_no"],
+                qty=ln["qty"], unit_price=ln["unit_price"],
+            ))
+
+        if auto_issue:
+            for ln in lines:
+                so_no = next_doc_no(db, "SO", "sales_order", "so_no")
+                so = SalesOrder(
+                    so_no=so_no, partner_id=partner_id, part_no=ln["part_no"],
+                    qty=ln["qty"], order_date=ship_date, due_date=ship_date,
+                    status=SOStatus.closed, note=f"현대 임포트 {inv_no}",
+                )
+                db.add(so)
+                db.flush()
+
+                sh_no = next_doc_no(db, "SH", "shipment", "sh_no")
+                db.add(Shipment(
+                    sh_no=sh_no, so_no=so_no, part_no=ln["part_no"],
+                    qty=ln["qty"], ship_date=ship_date, unit_price=ln["unit_price"],
+                    status=ShipmentStatus.confirmed, note=f"현대 임포트 {inv_no}",
+                ))
+                db.flush()
+                avg = get_avg_price(db, ln["part_no"])
+                post_ledger(db, ln["part_no"], ship_date, LedgerType.shipment, -ln["qty"], avg,
+                            ref_type="SH", ref_no=sh_no, note=f"현대 임포트 {inv_no}")
+
+            inv.status = InvoiceStatus.issued
+
+        stats["invoices"].append({
+            "inv_no": inv_no, "ship_date": ship_date_str,
+            "lines": len(lines), "issued": auto_issue,
+        })
+
+    db.commit()
+    return stats

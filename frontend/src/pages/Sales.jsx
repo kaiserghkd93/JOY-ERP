@@ -398,6 +398,125 @@ function LsImportModal({ onClose, onDone }) {
   )
 }
 
+function HyundaiShipImportModal({ onClose, onDone }) {
+  const [partners, setPartners] = useState([])
+  const [partnerId, setPartnerId] = useState('')
+  const [autoIssue, setAutoIssue] = useState(true)
+  const [result, setResult] = useState(null)
+  const [loading, setLoading] = useState(false)
+  const fileRef = useRef()
+
+  useEffect(() => {
+    api.get('/master/partners').then(r =>
+      setPartners(r.data.filter(p => p.partner_type === '고객' || p.partner_type === '공용'))
+    )
+  }, [])
+
+  const upload = async (e) => {
+    const file = e.target.files[0]
+    if (!file) return
+    if (!partnerId) { alert('고객사를 먼저 선택하세요'); e.target.value = ''; return }
+    setLoading(true)
+    setResult(null)
+    const fd = new FormData()
+    fd.append('file', file)
+    try {
+      const res = await api.post(
+        `/import/hyundai-shipment?partner_id=${encodeURIComponent(partnerId)}&auto_issue=${autoIssue}`,
+        fd
+      )
+      setResult(res.data)
+      onDone()
+    } catch (err) {
+      alert('업로드 실패: ' + (err.response?.data?.detail || err.message))
+    } finally {
+      setLoading(false)
+      e.target.value = ''
+    }
+  }
+
+  return (
+    <div className="modal-overlay">
+      <div className="modal" style={{ maxWidth: 580 }}>
+        <h3>현대 납품현황 임포트</h3>
+
+        {!result ? (
+          <>
+            <div style={{ background: '#ecfeff', border: '1px solid #a5f3fc', borderRadius: 8, padding: '10px 14px', marginBottom: 16, fontSize: 13 }}>
+              <b>지원 형식</b>: 현대 납품현황 엑셀 (.xlsx)<br/>
+              <span style={{ color: '#64748b', fontSize: 12 }}>
+                A=자재번호 / E=단가 / F=입고수량 / I=입고일자 — 입고수량 0인 행은 제외
+              </span>
+            </div>
+
+            <div className="form-group">
+              <label>고객사 선택</label>
+              <select value={partnerId} onChange={e => setPartnerId(e.target.value)}>
+                <option value="">선택</option>
+                {partners.map(p => <option key={p.partner_id} value={p.partner_id}>{p.name} ({p.partner_id})</option>)}
+              </select>
+            </div>
+
+            <div className="form-group">
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+                <input type="checkbox" checked={autoIssue} onChange={e => setAutoIssue(e.target.checked)} />
+                <span>즉시 발행 + 출하처리 (거래명세서 자동 발행)</span>
+              </label>
+              <div style={{ fontSize: 12, color: '#64748b', marginTop: 4 }}>
+                체크 해제 시 거래명세서 작성중 상태로 저장
+              </div>
+            </div>
+
+            <div style={{ border: '2px dashed #a5f3fc', borderRadius: 8, padding: '28px 20px', textAlign: 'center', marginBottom: 16, cursor: 'pointer' }}
+              onClick={() => fileRef.current?.click()}>
+              <div style={{ fontSize: 14, color: '#334155', marginBottom: 4 }}>클릭하여 파일 선택</div>
+              <div style={{ fontSize: 12, color: '#94a3b8' }}>현대 납품현황 .xlsx 파일</div>
+              <input type="file" accept=".xlsx,.xls" ref={fileRef} style={{ display: 'none' }} onChange={upload} />
+            </div>
+
+            {loading && <div style={{ textAlign: 'center', padding: 20, color: '#0e7490' }}>처리 중...</div>}
+          </>
+        ) : (
+          <div>
+            <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, padding: 14, marginBottom: 14 }}>
+              <div style={{ fontWeight: 700, color: '#16a34a', marginBottom: 8, fontSize: 15 }}>임포트 완료</div>
+              <div style={{ display: 'flex', gap: 20, fontSize: 13 }}>
+                <span>처리 행: <b>{result.rows_ok}건</b></span>
+                <span>신규 품목: <b>{result.items_created}건</b></span>
+                <span>건너뜀: {result.rows_skip}건</span>
+              </div>
+            </div>
+
+            <div style={{ fontWeight: 600, marginBottom: 8, fontSize: 13 }}>생성된 거래명세서 ({result.invoices?.length}건)</div>
+            <div style={{ maxHeight: 220, overflowY: 'auto', border: '1px solid #e2e8f0', borderRadius: 6 }}>
+              {result.invoices?.map(inv => (
+                <div key={inv.inv_no} style={{ padding: '7px 12px', borderBottom: '1px solid #f1f5f9', fontSize: 13, display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ fontFamily: 'monospace', color: '#0e7490' }}>{inv.inv_no}</span>
+                  <span style={{ color: '#64748b' }}>{inv.ship_date}</span>
+                  <span>{inv.lines}개 품목</span>
+                  <span className={`badge ${inv.issued ? 'badge-green' : 'badge-amber'}`}>
+                    {inv.issued ? '발행완료' : '작성중'}
+                  </span>
+                </div>
+              ))}
+            </div>
+
+            {result.errors?.length > 0 && (
+              <div style={{ marginTop: 10, color: '#dc2626', fontSize: 12 }}>
+                오류 {result.errors.length}건: {result.errors.slice(0, 3).map(e => `${e.row}행: ${e.error}`).join(' / ')}
+              </div>
+            )}
+          </div>
+        )}
+
+        <div className="modal-footer">
+          <button className="btn btn-outline" onClick={onClose}>{result ? '닫기' : '취소'}</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function DirectShipModal({ onClose, onSaved }) {
   const [customers, setCustomers] = useState([])
   const [allItems, setAllItems] = useState([])
@@ -648,6 +767,7 @@ export default function Sales() {
   const [shipSO, setShipSO] = useState(null)
   const [showLsImport, setShowLsImport] = useState(false)
   const [showHyundaiImport, setShowHyundaiImport] = useState(false)
+  const [showHyundaiShipImport, setShowHyundaiShipImport] = useState(false)
   const [showDirectShip, setShowDirectShip] = useState(false)
   const [partnerFilter, setPartnerFilter] = useState('')
   const [shipPartnerFilter, setShipPartnerFilter] = useState('')
@@ -777,6 +897,11 @@ export default function Sales() {
           style={{ borderColor: '#7c3aed', color: '#7c3aed', fontWeight: 600 }}
           onClick={() => setShowHyundaiImport(true)}>
           현대 수주 임포트
+        </button>
+        <button className="btn btn-outline"
+          style={{ borderColor: '#0891b2', color: '#0e7490', fontWeight: 600 }}
+          onClick={() => setShowHyundaiShipImport(true)}>
+          현대 출고내역 임포트
         </button>
         <button className="btn btn-outline"
           style={{ borderColor: '#f59e0b', color: '#b45309', fontWeight: 600 }}
@@ -1065,6 +1190,7 @@ export default function Sales() {
       {shipSO && <ShipModal so={shipSO} onClose={() => setShipSO(null)} onSaved={() => { setShipSO(null); load() }} />}
       {showLsImport && <LsImportModal onClose={() => setShowLsImport(false)} onDone={load} />}
       {showHyundaiImport && <HyundaiImportModal onClose={() => setShowHyundaiImport(false)} onDone={load} />}
+      {showHyundaiShipImport && <HyundaiShipImportModal onClose={() => setShowHyundaiShipImport(false)} onDone={load} />}
       {showDirectShip && <DirectShipModal onClose={() => setShowDirectShip(false)} onSaved={() => { setShowDirectShip(false); load() }} />}
     </div>
   )
