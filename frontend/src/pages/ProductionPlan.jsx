@@ -319,7 +319,8 @@ export default function ProductionPlan() {
                 <input
                   value={partOpen ? partSearch : (selectedItem ? `${selectedItem.part_no} ${selectedItem.name}` : formPartNo)}
                   onChange={e => { setPartSearch(e.target.value); setFormPartNo(''); setPartOpen(true) }}
-                  onFocus={() => { setPartSearch(''); setPartOpen(true) }}
+                  onFocus={() => { setPartSearch(selectedItem ? `${selectedItem.part_no} ${selectedItem.name}` : ''); setPartOpen(true) }}
+                  onBlur={() => setTimeout(() => setPartOpen(false), 150)}
                   placeholder="품번 또는 품명 검색"
                   disabled={!!editPlan}
                 />
