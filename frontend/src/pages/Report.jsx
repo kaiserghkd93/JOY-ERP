@@ -14,10 +14,8 @@ function DeliveryReportCard() {
   const downloadDelivery = async () => {
     setDrLoading(true)
     try {
-      const host = window.location.hostname === 'localhost' ? 'localhost' : '192.168.0.113'
-      const res = await fetch(`http://${host}:8002/reports/delivery-report?year=${drYear}&month=${drMonth}`)
-      if (!res.ok) throw new Error(`서버 오류: ${res.status}`)
-      const blob = await res.blob()
+      const res = await api.get(`/reports/delivery-report?year=${drYear}&month=${drMonth}`, { responseType: 'blob' })
+      const blob = res.data
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
@@ -93,11 +91,8 @@ function OutsourcePlCard() {
   const download = async () => {
     setOpLoading(true)
     try {
-      const host = window.location.hostname === 'localhost' ? 'localhost' : '192.168.0.113'
-      const res = await fetch(`http://${host}:8002/reports/outsource-pl?year=${opYear}&month=${opMonth}`)
-      if (!res.ok) throw new Error(`서버 오류: ${res.status}`)
-      const blob = await res.blob()
-      const url  = URL.createObjectURL(blob)
+      const res = await api.get(`/reports/outsource-pl?year=${opYear}&month=${opMonth}`, { responseType: 'blob' })
+      const url  = URL.createObjectURL(res.data)
       const a    = document.createElement('a')
       a.href     = url
       a.download = `외주처_손익보고서_${opYear}년${String(opMonth).padStart(2,'0')}월.xlsx`
@@ -255,11 +250,8 @@ export default function Report() {
   const downloadSparePL = async () => {
     setSpLoading(true)
     try {
-      const res = await fetch(
-        `http://192.168.0.113:8001/reports/spare-part-pl?year=${spYear}&month=${spMonth}`
-      )
-      if (!res.ok) throw new Error(`서버 오류: ${res.status}`)
-      const blob = await res.blob()
+      const res = await api.get(`/reports/spare-part-pl?year=${spYear}&month=${spMonth}`, { responseType: 'blob' })
+      const blob = res.data
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
