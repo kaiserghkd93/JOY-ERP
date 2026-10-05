@@ -1506,9 +1506,12 @@ def outsource_pl(
     for r in buy_rows:
         total_buy_qty_by_part[r.part_no] += int(r.buy_qty or 0)
 
-    item_map = {it.part_no: it.name for it in db.query(Item).filter(Item.part_no.in_(
+    item_objs = db.query(Item).filter(Item.part_no.in_(
         list({r.part_no for r in buy_rows})
-    )).all()}
+    )).all()
+    item_map      = {it.part_no: it.name            for it in item_objs}
+    item_spec_map = {it.part_no: (it.spec or '')    for it in item_objs}
+    item_sell_map = {it.part_no: float(it.std_sell_price or 0) for it in item_objs}
 
     # 품목별 세부행
     detail_rows: list[dict] = []
@@ -1528,9 +1531,13 @@ def outsource_pl(
 
         # 이 입고 비율로 고객사별 매출도 안분
         cust_ship = {cid: amt * ratio for cid, amt in ship_cust_by_part.get(pno, {}).items()}
-        # 주 고객사 (매출 최대)
+        # 주 고객사 (매출 최대 → 없으면 item.spec fallback)
         main_cust_id = max(cust_ship, key=cust_ship.get) if cust_ship else ''
-        main_cust_nm = cust_map.get(main_cust_id, main_cust_id) if main_cust_id else '—'
+        if main_cust_id:
+            main_cust_nm = cust_map.get(main_cust_id, main_cust_id)
+        else:
+            spec = item_spec_map.get(pno, '')
+            main_cust_nm = spec if spec else '—'
 
         co_info = carryover_map.get((pid, pno), {'amt': 0.0, 'qty': 0})
         detail_rows.append({
@@ -1564,7 +1571,11 @@ def outsource_pl(
             ship_qty = round(si['qty'] * ratio)
             cust_ship = {cid: amt * ratio for cid, amt in ship_cust_by_part.get(co_pno, {}).items()}
             main_cust_id = max(cust_ship, key=cust_ship.get) if cust_ship else ''
-            main_cust_nm = cust_map.get(main_cust_id, main_cust_id) if main_cust_id else '—'
+            if main_cust_id:
+                main_cust_nm = cust_map.get(main_cust_id, main_cust_id)
+            else:
+                spec = item_spec_map.get(co_pno, '')
+                main_cust_nm = spec if spec else '—'
             detail_rows.append({
                 'partner_id':    co_pid,
                 'partner_name':  sup_map.get(co_pid, co_pid),
@@ -1742,8 +1753,8 @@ def outsource_pl(
         bg    = 'EEF2FF' if (order_idx.get(d['partner_name'], 0) % 2 == 0) else 'F0FDF4'
         row_n = ROW
 
-        # 단가: 출하금액/출하수량 에서 역산, 없으면 0 (사용자 입력 필요)
-        unit_price = round(d['ship_amt'] / d['ship_qty']) if d['ship_qty'] else 0
+        # 단가: 출하금액/출하수량 역산, 없으면 item.std_sell_price 사용
+        unit_price = round(d['ship_amt'] / d['ship_qty']) if d['ship_qty'] else item_sell_map.get(d['part_no'], 0)
 
         _data_row(ws, ROW, [
             (1,  '' if same else d['partner_name'],  AF, not same, C_BLACK if not same else C_LGRAY, 'left'),
