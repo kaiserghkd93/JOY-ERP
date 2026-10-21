@@ -112,7 +112,7 @@ def auto_from_erp(year_month: str, partner_id: str, db: Session = Depends(get_db
 
     receipts = db.execute(text("""
         SELECT r.receipt_date, COALESCE(i.name, r.part_no) AS item_name,
-               COALESCE(i.spec,'') AS spec, r.qty,
+               r.part_no AS spec, r.qty,
                COALESCE(r.unit_price, i.std_buy_price, 0) AS unit_price,
                COALESCE(p.name, r.partner_id) AS partner_name
         FROM receipt r
