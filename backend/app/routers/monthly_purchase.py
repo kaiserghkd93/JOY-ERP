@@ -204,46 +204,46 @@ def download_excel(year_month: str, partner_id: str, db: Session = Depends(get_d
     def mc(r1, c1, r2, c2):
         ws.merge_cells(start_row=r1, start_column=c1, end_row=r2, end_column=c2)
 
-    # 컬럼 너비 (A~N = 14열)
-    widths = [4, 10, 20, 12, 7, 10, 10, 13, 10, 4, 4, 4, 4, 10]
+    # 컬럼 너비 (A~N = 14열) — 세로 A4에 맞게 축소
+    widths = [3, 8, 18, 9, 6, 8, 8, 10, 8, 3, 3, 3, 3, 8]
     for i, w in enumerate(widths, 1):
         ws.column_dimensions[get_column_letter(i)].width = w
 
     # 행1: 결재란
-    ws.row_dimensions[1].height = 36
+    ws.row_dimensions[1].height = 22
     for lbl, c1, c2 in [('담당', 7, 8), ('경리 확인', 9, 11), ('임원', 12, 13), ('대표이사', 14, 14)]:
         mc(1, c1, 1, c2)
-        cell(1, c1, lbl, bold=True, size=9, align='center', border=True, bg='EEEEEE')
+        cell(1, c1, lbl, bold=True, size=8, align='center', border=True, bg='EEEEEE')
     mc(2, 7, 2, 8); mc(2, 9, 2, 11); mc(2, 12, 2, 13)
     for c in [7, 9, 12, 14]:
-        ws.row_dimensions[2].height = 40
+        ws.row_dimensions[2].height = 28
         ws.cell(2, c).border = Border(
             left=Side(style='thin'), right=Side(style='thin'),
             top=Side(style='thin'), bottom=Side(style='thin'))
 
     # 행2: 업체명
     mc(3, 1, 3, 6)
-    cell(3, 1, f'업체명 : {data["company_name"]}', bold=True, size=11)
-    ws.row_dimensions[3].height = 18
+    cell(3, 1, f'업체명 : {data["company_name"]}', bold=True, size=10)
+    ws.row_dimensions[3].height = 14
 
     # 행3: 제목
     mc(4, 1, 4, 14)
-    cell(4, 1, f'{y}년 {m}월    매 입    집 계 표', bold=True, size=16, align='center')
-    ws.row_dimensions[4].height = 34
+    cell(4, 1, f'{y}년 {m}월    매 입    집 계 표', bold=True, size=14, align='center')
+    ws.row_dimensions[4].height = 26
 
     # 행4: 마감제출일
     mc(5, 1, 5, 6)
     cd = data.get("closing_date") or ""
-    cell(5, 1, f'마감제출일 : {cd}', size=10)
-    ws.row_dimensions[5].height = 16
+    cell(5, 1, f'마감제출일 : {cd}', size=9)
+    ws.row_dimensions[5].height = 13
 
     # 행5: 노트
     mc(6, 1, 6, 14)
-    cell(6, 1, '* NO별 거래 명세표 첨부', size=9, color='555555')
-    ws.row_dimensions[6].height = 14
+    cell(6, 1, '* NO별 거래 명세표 첨부', size=8, color='555555')
+    ws.row_dimensions[6].height = 11
 
     # 헤더행
-    ws.row_dimensions[7].height = 20
+    ws.row_dimensions[7].height = 16
     hdrs = [
         (1,1,'NO',2,1), (1,2,'거래일',2,2), (1,3,'품명',2,3), (1,4,'규격',2,4),
         (1,5,'수량',2,5), (1,6,'단가',2,8),
@@ -251,12 +251,12 @@ def download_excel(year_month: str, partner_id: str, db: Session = Depends(get_d
     ]
     for r1,c1,lbl,r2,c2 in hdrs:
         mc(7+r1-1, c1, 7+r2-1, c2)
-        cell(7+r1-1, c1, lbl, bold=True, size=10, align='center', border=True, bg='F0F0F0')
+        cell(7+r1-1, c1, lbl, bold=True, size=9, align='center', border=True, bg='F0F0F0')
     # 거래명세표 유/무 서브헤더
     mc(8, 12, 8, 12); mc(8, 13, 8, 13)
-    cell(8, 12, '유', bold=True, size=9, align='center', border=True, bg='F0F0F0')
-    cell(8, 13, '무', bold=True, size=9, align='center', border=True, bg='F0F0F0')
-    ws.row_dimensions[8].height = 16
+    cell(8, 12, '유', bold=True, size=8, align='center', border=True, bg='F0F0F0')
+    cell(8, 13, '무', bold=True, size=8, align='center', border=True, bg='F0F0F0')
+    ws.row_dimensions[8].height = 13
 
     # 데이터행 (최소 15행)
     data_rows = list(rows)
@@ -268,7 +268,7 @@ def download_excel(year_month: str, partner_id: str, db: Session = Depends(get_d
     total_supply = 0
     for i, r in enumerate(data_rows):
         rn = 9 + i
-        ws.row_dimensions[rn].height = 16
+        ws.row_dimensions[rn].height = 13
         sa = r.get("supply_amount") or 0
         total_supply += sa
         mc(rn, 6, rn, 8); mc(rn, 9, rn, 11)
@@ -286,7 +286,7 @@ def download_excel(year_month: str, partner_id: str, db: Session = Depends(get_d
         ]
         for c, v, al in vals:
             cel = ws.cell(rn, c, v)
-            cel.font = Font(name='맑은 고딕', size=10)
+            cel.font = Font(name='맑은 고딕', size=9)
             cel.alignment = Alignment(horizontal=al, vertical='center')
             s = Side(style='thin', color='AAAAAA')
             cel.border = Border(left=s, right=s, top=s, bottom=s)
@@ -297,20 +297,20 @@ def download_excel(year_month: str, partner_id: str, db: Session = Depends(get_d
 
     # 합계행
     foot_r = 9 + len(data_rows)
-    ws.row_dimensions[foot_r].height = 18
+    ws.row_dimensions[foot_r].height = 15
     mc(foot_r, 1, foot_r, 8)
-    cell(foot_r, 1, '합  계', bold=True, size=11, align='center', border=True, bg='F0F0F0')
+    cell(foot_r, 1, '합  계', bold=True, size=10, align='center', border=True, bg='F0F0F0')
     mc(foot_r, 9, foot_r, 11)
     fc = ws.cell(foot_r, 9, total_supply)
-    fc.font = Font(name='맑은 고딕', bold=True, size=11)
+    fc.font = Font(name='맑은 고딕', bold=True, size=10)
     fc.alignment = Alignment(horizontal='right', vertical='center')
     fc.number_format = '#,##0'
     s = Side(style='thin'); fc.border = Border(left=s, right=s, top=s, bottom=s)
     fc.fill = PatternFill('solid', fgColor='F0F0F0')
 
     ws.print_area = f'A1:N{foot_r}'
-    ws.page_setup.fitToPage = True; ws.page_setup.fitToWidth = 1; ws.page_setup.fitToHeight = 1
-    ws.page_setup.orientation = 'landscape'
+    ws.page_setup.fitToPage = True; ws.page_setup.fitToWidth = 1; ws.page_setup.fitToHeight = 0
+    ws.page_setup.orientation = 'portrait'
 
     buf = io.BytesIO()
     wb.save(buf); buf.seek(0)
