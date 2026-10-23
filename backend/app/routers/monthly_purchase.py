@@ -205,18 +205,18 @@ def download_excel(year_month: str, partner_id: str, db: Session = Depends(get_d
     def mc(r1, c1, r2, c2):
         ws.merge_cells(start_row=r1, start_column=c1, end_row=r2, end_column=c2)
 
-    # 컬럼 너비 (A~N = 14열) — 세로 A4에 맞게 축소
-    widths = [3, 8, 18, 9, 6, 8, 8, 10, 8, 3, 3, 3, 3, 8]
+    # 컬럼 너비 (A~M = 13열, 비고 제거) — 세로 A4에 맞게 축소
+    widths = [3, 8, 20, 10, 6, 8, 8, 11, 8, 3, 3, 4, 4]
     for i, w in enumerate(widths, 1):
         ws.column_dimensions[get_column_letter(i)].width = w
 
-    # 행1: 결재란
+    # 행1: 결재란 (13열 기준)
     ws.row_dimensions[1].height = 22
-    for lbl, c1, c2 in [('담당', 7, 8), ('경리 확인', 9, 11), ('임원', 12, 13), ('대표이사', 14, 14)]:
+    for lbl, c1, c2 in [('담당', 7, 8), ('경리 확인', 9, 10), ('임원', 11, 12), ('대표이사', 13, 13)]:
         mc(1, c1, 1, c2)
         cell(1, c1, lbl, bold=True, size=8, align='center', border=True, bg='EEEEEE')
-    mc(2, 7, 2, 8); mc(2, 9, 2, 11); mc(2, 12, 2, 13)
-    for c in [7, 9, 12, 14]:
+    mc(2, 7, 2, 8); mc(2, 9, 2, 10); mc(2, 11, 2, 12)
+    for c in [7, 9, 11, 13]:
         ws.row_dimensions[2].height = 28
         ws.cell(2, c).border = Border(
             left=Side(style='thin'), right=Side(style='thin'),
@@ -228,7 +228,7 @@ def download_excel(year_month: str, partner_id: str, db: Session = Depends(get_d
     ws.row_dimensions[3].height = 14
 
     # 행3: 제목
-    mc(4, 1, 4, 14)
+    mc(4, 1, 4, 13)
     cell(4, 1, f'{y}년 {m}월    매 입    집 계 표', bold=True, size=14, align='center')
     ws.row_dimensions[4].height = 26
 
@@ -239,7 +239,7 @@ def download_excel(year_month: str, partner_id: str, db: Session = Depends(get_d
     ws.row_dimensions[5].height = 13
 
     # 행5: 노트
-    mc(6, 1, 6, 14)
+    mc(6, 1, 6, 13)
     cell(6, 1, '* NO별 거래 명세표 첨부', size=8, color='555555')
     ws.row_dimensions[6].height = 11
 
@@ -248,7 +248,7 @@ def download_excel(year_month: str, partner_id: str, db: Session = Depends(get_d
     hdrs = [
         (1,1,'NO',2,1), (1,2,'거래일',2,2), (1,3,'품명',2,3), (1,4,'규격',2,4),
         (1,5,'수량',2,5), (1,6,'단가',2,8),
-        (1,9,'공급가액',2,11), (1,12,'거래명세표',1,13), (1,14,'비고',2,14),
+        (1,9,'공급가액',2,11), (1,12,'거래명세표',1,13),
     ]
     for r1,c1,lbl,r2,c2 in hdrs:
         mc(7+r1-1, c1, 7+r2-1, c2)
@@ -279,7 +279,6 @@ def download_excel(year_month: str, partner_id: str, db: Session = Depends(get_d
             (9, sa if sa else None, 'right'),
             (12, '●' if r.get("has_invoice", True) else '', 'center'),
             (13, '' if r.get("has_invoice", True) else '●', 'center'),
-            (14, r.get("note") or "", 'left'),
         ]
         for c, v, al in vals:
             cel = ws.cell(rn, c, v)
@@ -305,7 +304,7 @@ def download_excel(year_month: str, partner_id: str, db: Session = Depends(get_d
     s = Side(style='thin'); fc.border = Border(left=s, right=s, top=s, bottom=s)
     fc.fill = PatternFill('solid', fgColor='F0F0F0')
 
-    ws.print_area = f'A1:N{foot_r}'
+    ws.print_area = f'A1:M{foot_r}'
     ws.sheet_properties.pageSetUpPr = PageSetupProperties(fitToPage=True)
     ws.page_setup.fitToWidth = 1
     ws.page_setup.fitToHeight = 1

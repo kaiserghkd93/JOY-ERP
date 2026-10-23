@@ -280,11 +280,11 @@ export default function MonthlyPurchase() {
               <div style={{overflowX:'auto'}}>
                 <table className="mp-table">
                   <colgroup>
-                    <col style={{width:'4%'}} /><col style={{width:'9%'}} />
-                    <col style={{width:'22%'}} /><col style={{width:'12%'}} />
-                    <col style={{width:'7%'}} /><col style={{width:'10%'}} />
-                    <col style={{width:'12%'}} /><col style={{width:'4%'}} />
-                    <col style={{width:'4%'}} /><col style={{width:'14%'}} />
+                    <col style={{width:'4%'}} /><col style={{width:'10%'}} />
+                    <col style={{width:'28%'}} /><col style={{width:'14%'}} />
+                    <col style={{width:'8%'}} /><col style={{width:'12%'}} />
+                    <col style={{width:'14%'}} /><col style={{width:'5%'}} />
+                    <col style={{width:'5%'}} />
                   </colgroup>
                   <thead>
                     <tr>
@@ -296,7 +296,6 @@ export default function MonthlyPurchase() {
                       <th rowSpan={2}>단가</th>
                       <th rowSpan={2}>공급가액</th>
                       <th colSpan={2}>거래명세표</th>
-                      <th rowSpan={2}>비고</th>
                     </tr>
                     <tr>
                       <th>유</th><th>무</th>
@@ -308,7 +307,7 @@ export default function MonthlyPurchase() {
                         <td className="tc">{r.row_no}</td>
                         <td className="tc">
                           <input type="date" value={r.trade_date} onChange={e=>updateRow(i,'trade_date',e.target.value)} className="inp-td no-print" />
-                          <span className="print-only">{r.trade_date}</span>
+                          <span className="print-only">{r.trade_date ? r.trade_date.slice(5).replace('-','/') : ''}</span>
                         </td>
                         <td>
                           <input value={r.item_name} onChange={e=>updateRow(i,'item_name',e.target.value)} className="inp-full no-print" />
@@ -335,10 +334,6 @@ export default function MonthlyPurchase() {
                         <td className="tc invoice-cell" onClick={()=>updateRow(i,'has_invoice',false)} style={{cursor:'pointer',background:!r.has_invoice?'#fef3f2':''}}>
                           {!r.has_invoice ? '●' : ''}
                         </td>
-                        <td>
-                          <input value={r.note} onChange={e=>updateRow(i,'note',e.target.value)} className="inp-full no-print" />
-                          <span className="print-only">{r.note}</span>
-                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -346,7 +341,7 @@ export default function MonthlyPurchase() {
                     <tr>
                       <td colSpan={6} className="tc foot-label">합  계</td>
                       <td className="tr foot-val">{totalAmt ? totalAmt.toLocaleString() : '-'}</td>
-                      <td colSpan={3}></td>
+                      <td colSpan={2}></td>
                     </tr>
                   </tfoot>
                 </table>
