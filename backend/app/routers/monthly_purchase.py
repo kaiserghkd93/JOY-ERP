@@ -11,6 +11,7 @@ from sqlalchemy import text
 import io, openpyxl
 from openpyxl.styles import Font, Alignment, Border, Side, PatternFill
 from openpyxl.utils import get_column_letter
+from openpyxl.worksheet.properties import PageSetupProperties
 
 from app.database import get_db, Base, engine
 
@@ -305,8 +306,11 @@ def download_excel(year_month: str, partner_id: str, db: Session = Depends(get_d
     fc.fill = PatternFill('solid', fgColor='F0F0F0')
 
     ws.print_area = f'A1:N{foot_r}'
-    ws.page_setup.fitToPage = True; ws.page_setup.fitToWidth = 1; ws.page_setup.fitToHeight = 1
+    ws.sheet_properties.pageSetUpPr = PageSetupProperties(fitToPage=True)
+    ws.page_setup.fitToWidth = 1
+    ws.page_setup.fitToHeight = 1
     ws.page_setup.orientation = 'portrait'
+    ws.page_setup.paperSize = ws.PAPERSIZE_A4
     ws.page_margins.left = 0.4; ws.page_margins.right = 0.4
     ws.page_margins.top = 0.5; ws.page_margins.bottom = 0.5
 
