@@ -258,12 +258,8 @@ def download_excel(year_month: str, partner_id: str, db: Session = Depends(get_d
     cell(8, 13, '무', bold=True, size=8, align='center', border=True, bg='F0F0F0')
     ws.row_dimensions[8].height = 13
 
-    # 데이터행 (최소 15행)
+    # 데이터행 (빈 패딩 없음)
     data_rows = list(rows)
-    while len(data_rows) < 15:
-        data_rows.append({"row_no": len(data_rows)+1, "trade_date": None, "item_name": "",
-                          "spec": "", "qty": None, "unit_price": None,
-                          "supply_amount": None, "has_invoice": True, "note": ""})
 
     total_supply = 0
     for i, r in enumerate(data_rows):
@@ -309,8 +305,10 @@ def download_excel(year_month: str, partner_id: str, db: Session = Depends(get_d
     fc.fill = PatternFill('solid', fgColor='F0F0F0')
 
     ws.print_area = f'A1:N{foot_r}'
-    ws.page_setup.fitToPage = True; ws.page_setup.fitToWidth = 1; ws.page_setup.fitToHeight = 0
+    ws.page_setup.fitToPage = True; ws.page_setup.fitToWidth = 1; ws.page_setup.fitToHeight = 1
     ws.page_setup.orientation = 'portrait'
+    ws.page_margins.left = 0.4; ws.page_margins.right = 0.4
+    ws.page_margins.top = 0.5; ws.page_margins.bottom = 0.5
 
     buf = io.BytesIO()
     wb.save(buf); buf.seek(0)
