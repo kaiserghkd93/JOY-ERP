@@ -512,14 +512,17 @@ export default function MonthlyPurchase() {
         .bold{font-weight:bold;}
         .print-only{display:none;}
         @media print{
-          @page{size:A4 landscape;margin:12mm 15mm;}
+          @page{size:A4 portrait;margin:8mm 10mm;}
           .no-print{display:none!important;}
-          .print-only{display:inline!important;font-size:11pt;}
+          .print-only{display:inline!important;font-size:9pt;}
           .mp-page{padding:0;}.mp-form{width:100%;}
-          .mp-table th,.mp-table td{font-size:10pt;padding:3px 4px;}
-          .mp-title{font-size:18pt;}
+          .mp-table{width:100%;table-layout:fixed;}
+          .mp-table th,.mp-table td{font-size:8.5pt;padding:2px 3px;line-height:1.2;}
+          .mp-title{font-size:14pt;}
+          .mp-approval .ap-box{height:22px;}
+          .mp-approval td{font-size:8pt;padding:1px 4px;}
           input{display:none!important;}
-          .sum-print-title{display:block!important;font-size:16pt;font-weight:bold;text-align:center;margin-bottom:12px;}
+          .sum-print-title{display:block!important;font-size:14pt;font-weight:bold;text-align:center;margin-bottom:8px;}
         }
       `}</style>
     </div>
