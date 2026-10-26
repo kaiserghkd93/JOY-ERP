@@ -304,7 +304,10 @@ export default function MonthlyPurchase() {
                   <tbody>
                     {rows.map((r,i)=>(
                       <tr key={i}>
-                        <td className="tc">{r.row_no}</td>
+                        <td className="tc">
+                          <input type="number" value={r.row_no} onChange={e=>updateRow(i,'row_no',parseInt(e.target.value)||i+1)} className="inp-num no-print" style={{width:'36px',textAlign:'center'}} />
+                          <span className="print-only">{r.row_no}</span>
+                        </td>
                         <td className="tc">
                           <input type="date" value={r.trade_date} onChange={e=>updateRow(i,'trade_date',e.target.value)} className="inp-td no-print" />
                           <span className="print-only">{r.trade_date ? r.trade_date.slice(5).replace('-','/') : ''}</span>
