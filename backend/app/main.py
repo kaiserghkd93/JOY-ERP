@@ -18,9 +18,17 @@ with engine.connect() as _conn:
         _conn.commit()
     except Exception:
         pass
-    # role 컬럼을 VARCHAR로 변환 (기존 Enum 타입 → 문자열)
+    # role ENUM에 새 값 추가 (IF NOT EXISTS: 이미 있어도 오류 없음)
+    for _role in ['executive','manager','accounting','sales','purchase',
+                  'shipping','quality','production','material','manufacturing','supplier']:
+        try:
+            _conn.execute(_text(f"ALTER TYPE userrole ADD VALUE IF NOT EXISTS '{_role}'"))
+            _conn.commit()
+        except Exception:
+            pass
+    # role 컬럼을 VARCHAR로 변환 (USING 절 필수)
     try:
-        _conn.execute(_text('ALTER TABLE "user" ALTER COLUMN role TYPE VARCHAR(20)'))
+        _conn.execute(_text('ALTER TABLE "user" ALTER COLUMN role TYPE VARCHAR(20) USING role::VARCHAR(20)'))
         _conn.commit()
     except Exception:
         pass

@@ -169,4 +169,11 @@ def debug_schema(db: Session = Depends(get_db)):
         "SELECT column_name, data_type, udt_name FROM information_schema.columns "
         "WHERE table_name='user' ORDER BY ordinal_position"
     )).fetchall()
-    return [{"col": r[0], "type": r[1], "udt": r[2]} for r in rows]
+    enum_rows = db.execute(_t(
+        "SELECT e.enumlabel FROM pg_type t JOIN pg_enum e ON t.oid = e.enumtypid "
+        "WHERE t.typname = 'userrole' ORDER BY e.enumsortorder"
+    )).fetchall()
+    return {
+        "columns": [{"col": r[0], "type": r[1], "udt": r[2]} for r in rows],
+        "userrole_enum": [r[0] for r in enum_rows],
+    }
