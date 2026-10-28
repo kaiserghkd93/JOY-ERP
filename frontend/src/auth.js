@@ -9,6 +9,7 @@ const ROLE_PERMISSIONS = {
   accounting: ['/', '/invoice', '/monthly-sales', '/monthly-purchase', '/sales-target', '/report', '/inventory'],
   sales:      ['/', '/sales', '/invoice', '/monthly-sales', '/sales-target', '/inventory'],
   purchase:   ['/', '/receipt', '/monthly-purchase', '/bom', '/inventory'],  // 외주구매(/purchase)는 admin 전용
+  material:   ['/', '/purchase', '/inventory'],  // 자재구매 — 외주구매 탭은 Purchase.jsx에서 숨김
   shipping:   ['/', '/sales', '/invoice', '/inventory'],
   quality:    ['/', '/quality', '/receipt', '/inventory'],  // 입고검사 확인 포함
   production: ['/', '/production', '/production-plan', '/inventory', '/cost', '/mold'],
@@ -29,6 +30,7 @@ export const ROLE_LABELS = {
   shipping:   '출하관리',
   quality:    '품질팀',
   production: '생산관리',
+  material:   '자재구매',
   supplier:   '외주처 (외부)',
 }
 

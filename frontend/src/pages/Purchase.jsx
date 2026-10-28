@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useRef, Fragment } from 'react'
 import * as XLSX from 'xlsx'
 import api from '../api'
+import { isMaster } from '../auth'
 
 const today = () => { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0') }
 
@@ -757,21 +758,31 @@ export default function Purchase() {
     }
   }
 
+  const isAdmin = isMaster()
+
+  // 자재구매 역할은 자재구매 탭만 보임
+  const tabs = isAdmin
+    ? [['outsource','외주구매'],['material','자재구매']]
+    : [['material','자재구매']]
+
+  // 자재구매 역할로 접속하면 material 탭으로 고정
+  const effectiveTab = (!isAdmin && mainTab === 'outsource') ? 'material' : mainTab
+
   return (
     <div>
       {/* 외주구매 / 자재구매 메인 분류 탭 */}
       <div style={{display:'flex',gap:0,marginBottom:12,borderBottom:'2px solid var(--border)'}}>
-        {[['outsource','외주구매'],['material','자재구매']].map(([v,l])=>(
+        {tabs.map(([v,l])=>(
           <button key={v} onClick={()=>setMainTab(v)} style={{
-            padding:'8px 24px', fontWeight:mainTab===v?700:400, fontSize:14,
-            background:'none', border:'none', borderBottom: mainTab===v?'2px solid #1e3a5f':'2px solid transparent',
-            color: mainTab===v?'#1e3a5f':'#64748b', cursor:'pointer', marginBottom:-2,
+            padding:'8px 24px', fontWeight:effectiveTab===v?700:400, fontSize:14,
+            background:'none', border:'none', borderBottom: effectiveTab===v?'2px solid #1e3a5f':'2px solid transparent',
+            color: effectiveTab===v?'#1e3a5f':'#64748b', cursor:'pointer', marginBottom:-2,
           }}>{l}</button>
         ))}
       </div>
 
-      {mainTab === 'material' && <MaterialPurchase />}
-      {mainTab !== 'material' && <>
+      {effectiveTab === 'material' && <MaterialPurchase />}
+      {effectiveTab !== 'material' && <>
 
       {/* 탭 + 액션 바 */}
       <div className="erp-panel" style={{marginBottom:8}}>
@@ -1387,3 +1398,4 @@ export default function Purchase() {
     </div>
   )
 }
+
