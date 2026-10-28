@@ -18,18 +18,18 @@ with engine.connect() as _conn:
         _conn.commit()
     except Exception:
         pass
-    # role ENUM에 새 값 추가 (IF NOT EXISTS: 이미 있어도 오류 없음)
+    pass  # migration handled below
+
+# DDL must run outside transactions for PostgreSQL enum operations
+with engine.connect().execution_options(isolation_level="AUTOCOMMIT") as _ddl:
     for _role in ['executive','manager','accounting','sales','purchase',
                   'shipping','quality','production','material','manufacturing','supplier']:
         try:
-            _conn.execute(_text(f"ALTER TYPE userrole ADD VALUE IF NOT EXISTS '{_role}'"))
-            _conn.commit()
+            _ddl.execute(_text(f"ALTER TYPE userrole ADD VALUE IF NOT EXISTS '{_role}'"))
         except Exception:
             pass
-    # role 컬럼을 VARCHAR로 변환 (USING 절 필수)
     try:
-        _conn.execute(_text('ALTER TABLE "user" ALTER COLUMN role TYPE VARCHAR(20) USING role::VARCHAR(20)'))
-        _conn.commit()
+        _ddl.execute(_text('ALTER TABLE "user" ALTER COLUMN role TYPE VARCHAR(20) USING role::VARCHAR(20)'))
     except Exception:
         pass
 
