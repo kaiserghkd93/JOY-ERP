@@ -450,6 +450,151 @@ function CostAnalysis() {
 
 const STATUS_BADGE = { '계획': 'badge-blue', '진행중': 'badge-amber', '완료': 'badge-green', '취소': 'badge-gray' }
 
+const fmt = n => Number(n||0).toLocaleString()
+const TYPE_COLOR = { raw:'#94a3b8', sub:'#94a3b8', outsourced:'#d97706', semi:'#7c3aed', finished:'#1d4ed8' }
+
+function FeasibilityPanel() {
+  const [rows, setRows] = useState(null)
+  const [loading, setLoading] = useState(false)
+  const [expanded, setExpanded] = useState({})
+
+  const load = () => {
+    setLoading(true)
+    api.get('/production/orders/feasibility')
+      .then(r => setRows(r.data))
+      .catch(() => setRows([]))
+      .finally(() => setLoading(false))
+  }
+
+  useEffect(() => { load() }, [])
+
+  const toggle = no => setExpanded(e => ({...e, [no]: !e[no]}))
+
+  if (loading) return <div style={{textAlign:'center',padding:40,color:'#94a3b8'}}>분석 중...</div>
+  if (!rows) return null
+
+  const canMake  = rows.filter(r => r.available === true)
+  const cantMake = rows.filter(r => r.available === false)
+  const noBom    = rows.filter(r => r.available === null)
+
+  return (
+    <div style={{padding:'0 0 32px'}}>
+      {/* KPI */}
+      <div style={{display:'flex',gap:10,marginBottom:16,flexWrap:'wrap'}}>
+        {[
+          {label:'즉시 생산 가능', val:`${canMake.length}건`, bg:'#f0fdf4',border:'#bbf7d0',color:'#15803d'},
+          {label:'자재 부족', val:`${cantMake.length}건`, bg:'#fef2f2',border:'#fecaca',color:'#dc2626'},
+          {label:'BOM 미등록', val:`${noBom.length}건`, bg:'#fefce8',border:'#fde68a',color:'#92400e'},
+        ].map(({label,val,bg,border,color}) => (
+          <div key={label} style={{background:bg,border:`1px solid ${border}`,borderRadius:8,padding:'10px 18px',minWidth:140}}>
+            <div style={{fontSize:11,color,fontWeight:600,marginBottom:4}}>{label}</div>
+            <div style={{fontSize:20,fontWeight:800,color}}>{val}</div>
+          </div>
+        ))}
+        <button className="btn btn-sm btn-outline" style={{alignSelf:'center',marginLeft:'auto'}} onClick={load}>새로고침</button>
+      </div>
+
+      {/* 자재 부족 오더 */}
+      {cantMake.length > 0 && (
+        <>
+          <div style={{fontWeight:700,fontSize:13,color:'#dc2626',marginBottom:8}}>⚠ 자재 부족 — 생산 불가 오더</div>
+          {cantMake.map(order => (
+            <div key={order.pord_no} style={{border:'1px solid #fecaca',borderRadius:8,marginBottom:10,overflow:'hidden'}}>
+              <div style={{background:'#fef2f2',padding:'10px 14px',display:'flex',alignItems:'center',gap:12,cursor:'pointer'}}
+                onClick={() => toggle(order.pord_no)}>
+                <span style={{fontFamily:'monospace',fontSize:12,color:'#dc2626',fontWeight:700}}>{order.pord_no}</span>
+                <span style={{fontSize:13,fontWeight:600}}>{order.item_name}</span>
+                <span style={{fontSize:12,color:'#64748b'}}>잔여 {fmt(order.remaining_qty)}EA</span>
+                <span style={{fontSize:12,color:'#64748b'}}>{order.plan_date}</span>
+                <span style={{fontSize:11,background:'#fecaca',color:'#dc2626',borderRadius:4,padding:'1px 6px',fontWeight:700}}>
+                  부족 {order.shortage_items.length}개
+                </span>
+                <span style={{marginLeft:'auto',fontSize:12,color:'#94a3b8'}}>{expanded[order.pord_no] ? '▲' : '▼'}</span>
+              </div>
+              {expanded[order.pord_no] && (
+                <div style={{padding:'0 0 8px'}}>
+                  <table style={{width:'100%',borderCollapse:'collapse',fontSize:12}}>
+                    <thead>
+                      <tr style={{background:'#f8fafc'}}>
+                        <th style={{padding:'6px 14px',textAlign:'left',fontWeight:600,color:'#475569',borderBottom:'1px solid #e2e8f0'}}>품번</th>
+                        <th style={{padding:'6px 8px',textAlign:'left',fontWeight:600,color:'#475569',borderBottom:'1px solid #e2e8f0'}}>품명</th>
+                        <th style={{padding:'6px 8px',textAlign:'right',fontWeight:600,color:'#475569',borderBottom:'1px solid #e2e8f0'}}>소요량</th>
+                        <th style={{padding:'6px 8px',textAlign:'right',fontWeight:600,color:'#475569',borderBottom:'1px solid #e2e8f0'}}>현재고</th>
+                        <th style={{padding:'6px 8px',textAlign:'right',fontWeight:600,color:'#dc2626',borderBottom:'1px solid #e2e8f0'}}>부족량</th>
+                        <th style={{padding:'6px 8px',textAlign:'center',borderBottom:'1px solid #e2e8f0'}}>상태</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {order.components.map(c => (
+                        <tr key={c.part_no} style={{background: c.ok ? '#fff' : '#fff5f5'}}>
+                          <td style={{padding:'5px 14px',fontFamily:'monospace',fontSize:11,color: TYPE_COLOR[c.item_type]||'#475569'}}>{c.part_no}</td>
+                          <td style={{padding:'5px 8px'}}>{c.item_name}</td>
+                          <td style={{padding:'5px 8px',textAlign:'right'}}>{fmt(c.required_qty)} {c.unit}</td>
+                          <td style={{padding:'5px 8px',textAlign:'right',color:c.current_stock>0?'#16a34a':'#94a3b8'}}>{fmt(c.current_stock)}</td>
+                          <td style={{padding:'5px 8px',textAlign:'right',fontWeight:c.ok?400:700,color:c.ok?'#94a3b8':'#dc2626'}}>
+                            {c.ok ? '—' : fmt(c.shortage_qty)}
+                          </td>
+                          <td style={{padding:'5px 8px',textAlign:'center'}}>
+                            {c.ok
+                              ? <span style={{fontSize:11,color:'#15803d',fontWeight:600}}>✓ 충족</span>
+                              : <span style={{fontSize:11,color:'#dc2626',fontWeight:600}}>✗ 부족</span>}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          ))}
+        </>
+      )}
+
+      {/* 생산 가능 오더 */}
+      {canMake.length > 0 && (
+        <>
+          <div style={{fontWeight:700,fontSize:13,color:'#15803d',marginBottom:8,marginTop:16}}>✓ 즉시 생산 가능 오더</div>
+          <div className="table-wrap">
+            <table>
+              <thead><tr><th>오더번호</th><th>품번</th><th>품명</th><th style={{textAlign:'right'}}>잔여수량</th><th>계획일</th><th>상태</th></tr></thead>
+              <tbody>
+                {canMake.map(o => (
+                  <tr key={o.pord_no}>
+                    <td style={{fontFamily:'monospace',fontSize:11}}>{o.pord_no}</td>
+                    <td style={{fontSize:11}}>{o.part_no}</td>
+                    <td>{o.item_name}</td>
+                    <td style={{textAlign:'right'}}>{fmt(o.remaining_qty)}EA</td>
+                    <td>{o.plan_date}</td>
+                    <td><span className="badge badge-green">{o.status}</span></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+
+      {noBom.length > 0 && (
+        <>
+          <div style={{fontWeight:700,fontSize:13,color:'#92400e',marginBottom:8,marginTop:16}}>BOM 미등록 오더</div>
+          <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+            {noBom.map(o => (
+              <div key={o.pord_no} style={{background:'#fefce8',border:'1px solid #fde68a',borderRadius:6,padding:'6px 12px',fontSize:12}}>
+                <span style={{fontFamily:'monospace',color:'#92400e'}}>{o.pord_no}</span>
+                <span style={{color:'#64748b',marginLeft:8}}>{o.item_name}</span>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+
+      {rows.length === 0 && (
+        <div style={{textAlign:'center',color:'#94a3b8',padding:'60px 0'}}>진행중인 생산오더가 없습니다</div>
+      )}
+    </div>
+  )
+}
+
 export default function Production() {
   const [orders, setOrders] = useState([])
   const [molds, setMolds] = useState([])
@@ -470,7 +615,7 @@ export default function Production() {
       <div className="erp-panel" style={{marginBottom:8}}>
         <div className="erp-actions">
           <div className="qdate-bar">
-            {[['orders','생산오더'],['molds','금형 관리'],['upload','실적 업로드'],['cost','원가분석']].map(([v,l])=>(
+            {[['orders','생산오더'],['feasibility','가용성 검사'],['molds','금형 관리'],['upload','실적 업로드'],['cost','원가분석']].map(([v,l])=>(
               <button key={v} className={`qdate-btn${tab===v?' active':''}`} onClick={()=>setTab(v)}>{l}</button>
             ))}
           </div>
@@ -508,6 +653,8 @@ export default function Production() {
         </div>
         </>
       )}
+
+      {tab === 'feasibility' && <FeasibilityPanel />}
 
       {tab === 'molds' && (
         <>

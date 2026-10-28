@@ -208,6 +208,21 @@ def run_mrp(
             if remaining > 0:
                 demand[plan.part_no] = demand.get(plan.part_no, 0) + remaining
 
+        # 오픈 생산오더 (계획·진행중) — 해당 월 납기 기준
+        open_pords = (
+            db.query(ProductionOrder)
+            .filter(
+                ProductionOrder.plan_date >= month_start,
+                ProductionOrder.plan_date <= month_end,
+                ProductionOrder.status.in_(["계획", "진행중"]),
+            )
+            .all()
+        )
+        for pord in open_pords:
+            remaining = max(0, pord.planned_qty - pord.actual_qty)
+            if remaining > 0:
+                demand[pord.part_no] = demand.get(pord.part_no, 0) + remaining
+
         if not demand:
             return {
                 "year": year, "month": month,

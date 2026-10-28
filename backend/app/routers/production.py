@@ -6,8 +6,9 @@ from datetime import date, timedelta
 from calendar import monthrange
 from app.database import get_db
 from app.models.production import ProductionOrder, Mold, POrdStatus, MoldStatus, MonthlyPlan, DailyActual
-from app.models.master import Item
+from app.models.master import Item, BomLine
 from app.services.production_service import create_pord, post_production_result, create_mold
+from app.services.ledger_service import get_stock_bulk
 
 router = APIRouter(prefix="/production", tags=["생산"])
 
@@ -341,3 +342,103 @@ def delete_daily_actual(actual_id: int, db: Session = Depends(get_db)):
     db.delete(act)
     db.commit()
     return {"ok": True}
+
+
+# ── 생산오더 가용성 검사 ──────────────────────────────────────────
+@router.get("/orders/feasibility")
+def feasibility_check(db: Session = Depends(get_db)):
+    """
+    진행중·계획 생산오더별 BOM 전개 → 자재 부족 여부 분석
+    - available: True = 즉시 생산 가능
+    - shortage_items: 부족 자재 목록
+    """
+    open_orders = db.query(ProductionOrder).filter(
+        ProductionOrder.status.in_(["계획", "진행중"])
+    ).order_by(ProductionOrder.plan_date).all()
+
+    if not open_orders:
+        return []
+
+    # BOM / 품목 / 재고 일괄 로드
+    all_bom_rows = db.query(BomLine).all()
+    bom_map: dict[str, list[BomLine]] = {}
+    for b in all_bom_rows:
+        bom_map.setdefault(b.product_part_no, []).append(b)
+
+    all_items = {i.part_no: i for i in db.query(Item).all()}
+
+    # 오더 전체 자재 수요 먼저 집계 (같은 자재 여러 오더에서 공유)
+    all_comp_parts: set[str] = set()
+    for order in open_orders:
+        remaining = max(0, order.planned_qty - order.actual_qty)
+        for bom in bom_map.get(order.part_no, []):
+            all_comp_parts.add(bom.component_part_no)
+
+    stock_map = get_stock_bulk(db, list(all_comp_parts)) if all_comp_parts else {}
+
+    results = []
+    for order in open_orders:
+        remaining_qty = max(0, order.planned_qty - order.actual_qty)
+        item = all_items.get(order.part_no)
+        bom_lines = bom_map.get(order.part_no, [])
+
+        components = []
+        has_shortage = False
+
+        if not bom_lines:
+            # BOM 없음 → 가용성 확인 불가
+            results.append({
+                "pord_no": order.pord_no,
+                "part_no": order.part_no,
+                "item_name": item.name if item else order.part_no,
+                "planned_qty": order.planned_qty,
+                "actual_qty": order.actual_qty,
+                "remaining_qty": remaining_qty,
+                "plan_date": str(order.plan_date),
+                "status": order.status,
+                "available": None,
+                "bom_exists": False,
+                "shortage_items": [],
+                "components": [],
+            })
+            continue
+
+        for bom in bom_lines:
+            comp_part = bom.component_part_no
+            required = remaining_qty * float(bom.qty_per)
+            stock = stock_map.get(comp_part, 0)
+            shortage = max(0.0, required - stock)
+            comp_item = all_items.get(comp_part)
+
+            components.append({
+                "part_no": comp_part,
+                "item_name": comp_item.name if comp_item else comp_part,
+                "item_type": comp_item.item_type if comp_item else "raw",
+                "unit": comp_item.unit if comp_item else "EA",
+                "qty_per": float(bom.qty_per),
+                "required_qty": round(required, 2),
+                "current_stock": stock,
+                "shortage_qty": round(shortage, 2),
+                "ok": shortage <= 0,
+            })
+            if shortage > 0:
+                has_shortage = True
+
+        shortage_items = [c for c in components if not c["ok"]]
+
+        results.append({
+            "pord_no": order.pord_no,
+            "part_no": order.part_no,
+            "item_name": item.name if item else order.part_no,
+            "planned_qty": order.planned_qty,
+            "actual_qty": order.actual_qty,
+            "remaining_qty": remaining_qty,
+            "plan_date": str(order.plan_date),
+            "status": order.status,
+            "available": not has_shortage,
+            "bom_exists": True,
+            "shortage_items": shortage_items,
+            "components": components,
+        })
+
+    return results
