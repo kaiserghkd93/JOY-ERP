@@ -14,9 +14,9 @@ Base.metadata.create_all(bind=engine)
 from sqlalchemy import text as _text
 with engine.connect() as _conn:
     for _sql in [
-        "ALTER TABLE invoice ADD COLUMN closing_type VARCHAR(10)",
-        "ALTER TABLE purchase_order ADD COLUMN po_type VARCHAR(20) DEFAULT 'outsource'",
-        "ALTER TABLE item ADD COLUMN avg_cost NUMERIC(15,4) DEFAULT 0",
+        "ALTER TABLE invoice ADD COLUMN IF NOT EXISTS closing_type VARCHAR(10)",
+        "ALTER TABLE purchase_order ADD COLUMN IF NOT EXISTS po_type VARCHAR(20) DEFAULT 'outsource'",
+        "ALTER TABLE item ADD COLUMN IF NOT EXISTS avg_cost NUMERIC(15,4) DEFAULT 0",
     ]:
         try:
             _conn.execute(_text(_sql))
