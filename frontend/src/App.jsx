@@ -52,7 +52,7 @@ const allMenus = [
   { id: 'production', label: '생산', items: [
     { to: '/production',      label: '생산 관리' },
     { to: '/production-plan', label: '월 생산계획' },
-    { to: '/mrp',             label: 'MRP 발주제안' },
+    { to: '/production-mrp',  label: 'MRP 발주제안' },
   ]},
   { id: 'cost', label: '원가', items: [
     { to: '/cost',        label: '원가 관리' },
@@ -248,6 +248,9 @@ export default function App() {
             } />
             <Route path="/mrp" element={
               <ProtectedRoute path="/mrp"><Mrp /></ProtectedRoute>
+            } />
+            <Route path="/production-mrp" element={
+              <ProtectedRoute path="/production-mrp"><Mrp /></ProtectedRoute>
             } />
             <Route path="/cost-actual" element={
               <ProtectedRoute path="/cost-actual"><CostActual /></ProtectedRoute>
