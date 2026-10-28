@@ -490,7 +490,6 @@ function MaterialPurchase() {
   const now = new Date()
   const [matTab, setMatTab] = useState('orders')
   const [matMonth, setMatMonth] = useState(`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`)
-  const [matOrders, setMatOrders] = useState([])
   const [matPartners, setMatPartners] = useState([])
   const [matPartner, setMatPartner] = useState('')
 
@@ -500,42 +499,56 @@ function MaterialPurchase() {
       .catch(() => {})
   }, [])
 
+  const MAT_TABS = [
+    ['orders',  '자재 발주 목록'],
+    ['receipt', '자재 입고 현황'],
+    ['closing', '자재 매입 집계'],
+  ]
+
   return (
     <div>
+      {/* 서브탭 + 액션 */}
       <div className="erp-panel" style={{marginBottom:8}}>
         <div className="erp-actions">
           <div className="qdate-bar">
-            {[['orders','발주 목록'],['receipt','입고 현황']].map(([v,l])=>(
+            {MAT_TABS.map(([v,l])=>(
               <button key={v} className={`qdate-btn${matTab===v?' active':''}`} onClick={()=>setMatTab(v)}>{l}</button>
             ))}
           </div>
           <div className="spacer"/>
-          <button className="btn btn-sm btn-primary" disabled title="준비 중">＋ 자재 발주</button>
+          {matTab === 'orders' && (
+            <button className="btn btn-sm btn-primary" disabled title="준비 중">＋ 자재 발주</button>
+          )}
         </div>
       </div>
 
-      {matTab === 'orders' && (
-        <>
-          <div className="erp-panel" style={{marginBottom:8}}>
-            <div className="erp-grid-2" style={{gridTemplateColumns:'auto 1fr auto 1fr'}}>
-              <div className="erp-label">조회 월</div>
-              <div className="erp-value">
-                <input type="month" value={matMonth} onChange={e=>setMatMonth(e.target.value)}
-                  style={{border:'none',background:'transparent',fontSize:13,padding:'0 4px'}}/>
-              </div>
-              <div className="erp-label">거래처</div>
-              <div className="erp-value">
-                <select value={matPartner} onChange={e=>setMatPartner(e.target.value)}
-                  style={{border:'none',background:'transparent',fontSize:13,padding:'0 4px'}}>
-                  <option value="">전체</option>
-                  {matPartners.map(p=><option key={p.partner_id} value={p.partner_id}>{p.name}</option>)}
-                </select>
-              </div>
+      {/* 공통 필터 (발주/입고 탭) */}
+      {(matTab === 'orders' || matTab === 'receipt') && (
+        <div className="erp-panel" style={{marginBottom:8}}>
+          <div className="erp-grid-2" style={{gridTemplateColumns:'auto 1fr auto 1fr'}}>
+            <div className="erp-label">조회 월</div>
+            <div className="erp-value">
+              <input type="month" value={matMonth} onChange={e=>setMatMonth(e.target.value)}
+                style={{border:'none',background:'transparent',fontSize:13,padding:'0 4px'}}/>
+            </div>
+            <div className="erp-label">거래처</div>
+            <div className="erp-value">
+              <select value={matPartner} onChange={e=>setMatPartner(e.target.value)}
+                style={{border:'none',background:'transparent',fontSize:13,padding:'0 4px'}}>
+                <option value="">전체</option>
+                {matPartners.map(p=><option key={p.partner_id} value={p.partner_id}>{p.name}</option>)}
+              </select>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* 자재 발주 목록 */}
+      {matTab === 'orders' && (
+        <>
           <div className="result-bar">
             <span className="result-bar-title">자재 발주 목록</span>
-            <span className="result-bar-count">{matOrders.length}건</span>
+            <span className="result-bar-count">0건</span>
           </div>
           <div className="table-wrap">
             <table>
@@ -544,7 +557,7 @@ function MaterialPurchase() {
               </thead>
               <tbody>
                 <tr><td colSpan={10} className="empty" style={{color:'#94a3b8'}}>
-                  자재구매 기능을 활성화하려면 백엔드 설정이 필요합니다
+                  자재 발주 기능 준비 중입니다
                 </td></tr>
               </tbody>
             </table>
@@ -552,20 +565,75 @@ function MaterialPurchase() {
         </>
       )}
 
+      {/* 자재 입고 현황 — 외주 입고와 완전 분리 */}
       {matTab === 'receipt' && (
         <>
           <div className="result-bar">
             <span className="result-bar-title">자재 입고 현황</span>
+            <span style={{fontSize:11,color:'#64748b',marginLeft:8}}>※ 외주 입고와 별도 관리</span>
             <span className="result-bar-count">0건</span>
           </div>
           <div className="table-wrap">
             <table>
               <thead>
-                <tr><th>입고번호</th><th>거래처</th><th>품번</th><th>품명</th><th>입고수량</th><th>단가</th><th>금액</th><th>입고일</th><th>검사결과</th></tr>
+                <tr>
+                  <th>입고번호</th><th>거래처</th><th>품번</th><th>품명</th>
+                  <th>입고수량</th><th>단가</th><th>금액</th><th>입고일</th><th>상태</th>
+                </tr>
               </thead>
               <tbody>
                 <tr><td colSpan={9} className="empty" style={{color:'#94a3b8'}}>
-                  자재구매 기능을 활성화하려면 백엔드 설정이 필요합니다
+                  자재 입고 기능 준비 중입니다
+                </td></tr>
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+
+      {/* 자재 매입 집계 — 외주 매입 집계와 완전 분리 */}
+      {matTab === 'closing' && (
+        <>
+          <div className="erp-panel" style={{marginBottom:8}}>
+            <div className="erp-grid-2" style={{gridTemplateColumns:'auto 1fr'}}>
+              <div className="erp-label">조회 월</div>
+              <div className="erp-value">
+                <input type="month" value={matMonth} onChange={e=>setMatMonth(e.target.value)}
+                  style={{border:'none',background:'transparent',fontSize:13,padding:'0 4px'}}/>
+              </div>
+            </div>
+            <div className="erp-actions">
+              <span style={{fontSize:12,color:'#64748b'}}>※ 외주 매입 집계와 별도 — 자재 구매 입고 기준</span>
+              <div className="spacer"/>
+              <button className="btn btn-primary btn-sm" disabled title="준비 중">조회</button>
+            </div>
+          </div>
+          <div style={{display:'flex',gap:12,marginBottom:16,flexWrap:'wrap'}}>
+            {[
+              {label:'자재 입고금액',color:'#1d4ed8',bg:'#eff6ff',border:'#bfdbfe'},
+              {label:'반품금액',color:'#dc2626',bg:'#fef2f2',border:'#fecaca'},
+              {label:'당월 자재 매입',color:'#fff',bg:'#1e3a5f',border:'#1e40af'},
+            ].map(({label,color,bg,border})=>(
+              <div key={label} style={{background:bg,border:`1px solid ${border}`,borderRadius:8,padding:'10px 18px',minWidth:160}}>
+                <div style={{fontSize:11,color:color==='#fff'?'#93c5fd':color,fontWeight:600,marginBottom:4}}>{label}</div>
+                <div style={{fontSize:16,fontWeight:800,color}}>₩0</div>
+              </div>
+            ))}
+          </div>
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>거래처</th><th>품번</th><th>품명</th>
+                  <th style={{textAlign:'right'}}>입고수량</th>
+                  <th style={{textAlign:'right'}}>단가</th>
+                  <th style={{textAlign:'right'}}>금액</th>
+                  <th>입고일</th><th>비고</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr><td colSpan={8} className="empty" style={{color:'#94a3b8'}}>
+                  자재 매입 집계 기능 준비 중입니다
                 </td></tr>
               </tbody>
             </table>
