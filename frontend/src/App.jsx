@@ -52,6 +52,7 @@ const allMenus = [
   { id: 'production', label: '생산', items: [
     { to: '/production',      label: '생산 관리' },
     { to: '/production-plan', label: '월 생산계획' },
+    { to: '/mrp',             label: 'MRP 발주제안' },
   ]},
   { id: 'cost', label: '원가', items: [
     { to: '/cost',        label: '원가 관리' },
