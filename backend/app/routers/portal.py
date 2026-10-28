@@ -136,6 +136,7 @@ def deliver(body: DeliveryReq, user: User = Depends(get_current_user), db: Sessi
 
         gr_no = next_doc_no(db, "GR", "receipt", "gr_no")
         note_text = f"업체포털 납품{' [직접추가]' if not line.po_no else ''} {body.note or ''}".strip()
+        # 포털 납품 → pending(검사대기) 상태로 생성, 품질팀 컨펌 후 confirmed + 재고 반영
         receipt = Receipt(
             gr_no=gr_no,
             po_no=line.po_no,
@@ -143,27 +144,12 @@ def deliver(body: DeliveryReq, user: User = Depends(get_current_user), db: Sessi
             qty=line.qty,
             receipt_date=body.delivery_date,
             unit_price=unit_price,
-            status=ReceiptStatus.confirmed,
+            status=ReceiptStatus.pending,
             partner_id=partner_id,
             note=note_text,
         )
         db.add(receipt)
         db.flush()
-
-        # 재고 입고 (part_no가 마스터에 있을 때만)
-        item_exists = db.get(Item, actual_part_no)
-        if item_exists:
-            post_ledger(db, actual_part_no, body.delivery_date, LedgerType.receipt,
-                        line.qty, unit_price,
-                        ref_type="GR", ref_no=gr_no,
-                        note=f"업체납품 {partner_id}")
-
-        # PO 상태 업데이트
-        if po:
-            total_delivered = sum(
-                r.qty for r in po.receipts if r.status == ReceiptStatus.confirmed
-            ) + line.qty
-            po.status = POStatus.closed if total_delivered >= po.qty else POStatus.partial
 
         created.append({
             "gr_no": gr_no,

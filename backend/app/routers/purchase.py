@@ -144,13 +144,16 @@ def post_receipt(body: ReceiptCreate, db: Session = Depends(get_db)):
 def list_receipts(
     partner_id: str | None = None,
     part_no: str | None = None,
+    status: str | None = None,
     db: Session = Depends(get_db),
 ):
     q = db.query(Receipt)
     if partner_id:
-        q = q.join(PurchaseOrder).filter(PurchaseOrder.partner_id == partner_id)
+        q = q.filter(Receipt.partner_id == partner_id)
     if part_no:
         q = q.filter(Receipt.part_no == part_no)
+    if status:
+        q = q.filter(Receipt.status == status)
     return q.order_by(Receipt.receipt_date.desc()).all()
 
 
