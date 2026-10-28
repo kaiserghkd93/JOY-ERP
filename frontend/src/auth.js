@@ -4,15 +4,15 @@ const API = import.meta.env.VITE_API_URL || ''
 // null = 전체 접근 (admin)
 const ROLE_PERMISSIONS = {
   admin:      null,  // 나만 (외주구매·계정관리 포함 전체)
-  executive:  ['/', '/report', '/dashboard', '/monthly-sales', '/monthly-purchase', '/sales-target', '/inventory', '/cost'],  // 대표/전무
-  manager:    ['/', '/sales-target'],  // 상무 — 매출목표 조회만
-  accounting: ['/', '/invoice', '/monthly-sales', '/monthly-purchase', '/sales-target', '/report', '/inventory'],
+  executive:  ['/', '/report', '/dashboard', '/monthly-sales', '/monthly-purchase', '/sales-target', '/inventory', '/cost', '/cost-actual', '/mrp'],
+  manager:    ['/', '/sales-target', '/cost-actual'],
+  accounting: ['/', '/invoice', '/monthly-sales', '/monthly-purchase', '/sales-target', '/report', '/inventory', '/cost-actual'],
   sales:      ['/', '/sales', '/invoice', '/monthly-sales', '/sales-target', '/inventory'],
-  purchase:   ['/', '/receipt', '/monthly-purchase', '/bom', '/inventory'],  // 외주구매(/purchase)는 admin 전용
-  material:       ['/', '/purchase', '/inventory'],  // 자재구매 — 외주구매 탭은 Purchase.jsx에서 숨김
-  manufacturing:  ['/', '/production', '/production-plan', '/sales', '/invoice', '/monthly-sales', '/sales-target', '/inventory', '/cost', '/mold'],  // 제조관리 총괄
+  purchase:   ['/', '/receipt', '/monthly-purchase', '/bom', '/inventory'],
+  material:       ['/', '/purchase', '/mrp', '/inventory'],
+  manufacturing:  ['/', '/production', '/production-plan', '/sales', '/invoice', '/monthly-sales', '/sales-target', '/inventory', '/cost', '/cost-actual', '/mold', '/mrp'],
   shipping:   ['/', '/sales', '/invoice', '/inventory'],
-  quality:    ['/', '/quality', '/receipt', '/inventory'],  // 입고검사 확인 포함
+  quality:    ['/', '/quality', '/receipt', '/inventory'],
   production: ['/', '/production', '/production-plan', '/inventory', '/cost', '/mold'],
   supplier:   ['/'],
 }

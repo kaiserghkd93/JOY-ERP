@@ -37,6 +37,7 @@ class Item(Base):
     location: Mapped[str | None] = mapped_column(String(20), default=None)
     weight_g: Mapped[float | None] = mapped_column(Float)          # 제품 중량 (g)
     raw_material: Mapped[str | None] = mapped_column(String(200))  # 사용 원재료명
+    avg_cost: Mapped[float] = mapped_column(Numeric(15, 4), default=0, server_default="0")  # 이동평균단가
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
 

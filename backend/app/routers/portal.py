@@ -35,6 +35,7 @@ def my_orders(user: User = Depends(get_current_user), db: Session = Depends(get_
             PurchaseOrder.partner_id == partner_id,
             PurchaseOrder.status.in_([POStatus.open, POStatus.partial]),
             PurchaseOrder.due_date >= cutoff,
+            PurchaseOrder.po_type == "outsource",
         )
         .order_by(PurchaseOrder.due_date)
         .all()

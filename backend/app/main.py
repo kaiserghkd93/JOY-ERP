@@ -7,18 +7,22 @@ from app.database import engine, Base, SessionLocal
 from app.routers import master, purchase, ledger, sales, quality, production, dashboard
 from app.routers import purchase_group, invoice, auto_order, import_ls, bom, reports, cost, mold, mes_sync
 from app.routers import auth, portal, admin_import, monthly_sales, monthly_purchase, sales_target
+from app.routers import material, mrp, cost_actual
 
 Base.metadata.create_all(bind=engine)
 
 from sqlalchemy import text as _text
 with engine.connect() as _conn:
-    # closing_type 컬럼
-    try:
-        _conn.execute(_text("ALTER TABLE invoice ADD COLUMN closing_type VARCHAR(10)"))
-        _conn.commit()
-    except Exception:
-        pass
-    pass  # migration handled below
+    for _sql in [
+        "ALTER TABLE invoice ADD COLUMN closing_type VARCHAR(10)",
+        "ALTER TABLE purchase_order ADD COLUMN po_type VARCHAR(20) DEFAULT 'outsource'",
+        "ALTER TABLE item ADD COLUMN avg_cost NUMERIC(15,4) DEFAULT 0",
+    ]:
+        try:
+            _conn.execute(_text(_sql))
+            _conn.commit()
+        except Exception:
+            pass
 
 # DDL must run outside transactions for PostgreSQL enum operations
 with engine.connect().execution_options(isolation_level="AUTOCOMMIT") as _ddl:
@@ -67,6 +71,9 @@ app.include_router(cost.router)
 app.include_router(mold.router)
 app.include_router(mes_sync.router)
 app.include_router(sales_target.router)
+app.include_router(material.router)
+app.include_router(mrp.router)
+app.include_router(cost_actual.router)
 
 
 @app.on_event("startup")

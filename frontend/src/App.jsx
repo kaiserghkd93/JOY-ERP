@@ -22,6 +22,8 @@ const MonthlySales   = lazy(() => import('./pages/MonthlySales'))
 const MonthlyPurchase = lazy(() => import('./pages/MonthlyPurchase'))
 const SalesTarget    = lazy(() => import('./pages/SalesTarget'))
 const UserAdmin      = lazy(() => import('./pages/UserAdmin'))
+const Mrp            = lazy(() => import('./pages/Mrp'))
+const CostActual     = lazy(() => import('./pages/CostActual'))
 
 // GNB: 대분류 / LNB: 소분류
 const allMenus = [
@@ -35,6 +37,7 @@ const allMenus = [
   { id: 'purchase', label: '구매', items: [
     { to: '/purchase',         label: '발주 관리' },
     { to: '/receipt',          label: '입고·검사' },
+    { to: '/mrp',              label: 'MRP 발주제안' },
     { to: '/monthly-purchase', label: '월 매입 집계표' },
   ]},
   { id: 'sales', label: '영업', items: [
@@ -51,7 +54,8 @@ const allMenus = [
     { to: '/production-plan', label: '월 생산계획' },
   ]},
   { id: 'cost', label: '원가', items: [
-    { to: '/cost', label: '원가 관리' },
+    { to: '/cost',        label: '원가 관리' },
+    { to: '/cost-actual', label: '실원가 분석' },
   ]},
   { id: 'mold', label: '금형', items: [
     { to: '/mold', label: '금형 수주관리' },
@@ -240,6 +244,12 @@ export default function App() {
             } />
             <Route path="/monthly-purchase" element={
               <ProtectedRoute path="/monthly-purchase"><MonthlyPurchase /></ProtectedRoute>
+            } />
+            <Route path="/mrp" element={
+              <ProtectedRoute path="/mrp"><Mrp /></ProtectedRoute>
+            } />
+            <Route path="/cost-actual" element={
+              <ProtectedRoute path="/cost-actual"><CostActual /></ProtectedRoute>
             } />
             <Route path="/sales-target" element={
               <ProtectedRoute path="/sales-target"><SalesTarget /></ProtectedRoute>

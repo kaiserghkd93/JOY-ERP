@@ -100,8 +100,21 @@ def get_avg_price_bulk(db: Session, part_nos: list[str]) -> dict[str, float]:
     return result
 
 
+def _update_avg_cost(db: Session, part_no: str, in_qty: int, in_price: float) -> None:
+    """입고 시 이동평균단가 갱신 — avg_cost = (기존재고*기존단가 + 입고량*입고단가) / (기존재고+입고량)"""
+    from app.models.master import Item
+    item = db.get(Item, part_no)
+    if not item:
+        return
+    cur_stock = get_stock(db, part_no)
+    cur_avg = float(item.avg_cost or 0)
+    new_total_value = cur_stock * cur_avg + in_qty * in_price
+    new_stock = cur_stock + in_qty
+    item.avg_cost = round(new_total_value / new_stock, 4) if new_stock > 0 else in_price
+
+
 def confirm_receipt(db: Session, gr_no: str) -> StockLedger:
-    """입고 확정 → 재고원장에 입고(+) 기록"""
+    """입고 확정 → 재고원장 입고(+) + 이동평균단가 갱신"""
     from app.models.purchase import Receipt, ReceiptStatus
     receipt = db.get(Receipt, gr_no)
     if not receipt:
@@ -117,6 +130,7 @@ def confirm_receipt(db: Session, gr_no: str) -> StockLedger:
         LedgerType.receipt, +receipt.qty, float(receipt.unit_price),
         ref_type="GR", ref_no=gr_no, note="입고확정",
     )
+    _update_avg_cost(db, receipt.part_no, receipt.qty, float(receipt.unit_price))
     db.flush()
     return entry
 

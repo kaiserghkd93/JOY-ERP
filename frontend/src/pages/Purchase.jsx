@@ -486,18 +486,227 @@ function ReturnModal({ gr_no, max_qty, part_name, onClose, onSaved }) {
 }
 
 /* ── 자재구매 탭 ─────────────────────────────────────────────── */
+/* ── 자재 발주 생성 모달 ── */
+function MatOrderModal({ partners, allItems, onClose, onSaved }) {
+  const [header, setHeader] = useState({ partner_id: '', order_date: today(), note: '' })
+  const [lines, setLines] = useState([{ part_no: '', qty: '', unit_price: '', due_date: '' }])
+  const [saving, setSaving] = useState(false)
+
+  const addLine = () => setLines(l => [...l, { part_no: '', qty: '', unit_price: '', due_date: '' }])
+  const delLine = i => setLines(l => l.filter((_,j)=>j!==i))
+  const setLine = (i, k, v) => setLines(l => l.map((ln,j) => j===i ? {...ln,[k]:v} : ln))
+
+  const save = async () => {
+    if (!header.partner_id) return alert('거래처를 선택하세요')
+    if (lines.some(l => !l.part_no || !l.qty)) return alert('품번과 수량을 입력하세요')
+    setSaving(true)
+    try {
+      await api.post('/material/orders', {
+        partner_id: header.partner_id,
+        order_date: header.order_date,
+        note: header.note,
+        lines: lines.map(l => ({
+          part_no: l.part_no,
+          qty: parseInt(l.qty),
+          unit_price: parseFloat(l.unit_price || 0),
+          due_date: l.due_date || header.order_date,
+        })),
+      })
+      onSaved()
+      onClose()
+    } catch(e) {
+      alert(e.response?.data?.detail || '발주 생성 실패')
+    } finally { setSaving(false) }
+  }
+
+  return (
+    <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.45)',zIndex:9999,display:'flex',alignItems:'center',justifyContent:'center'}} onClick={onClose}>
+      <div style={{background:'#fff',borderRadius:12,width:700,maxHeight:'85vh',overflowY:'auto',padding:24}} onClick={e=>e.stopPropagation()}>
+        <div style={{fontWeight:700,fontSize:16,marginBottom:16,color:'#1e3a5f'}}>자재 발주 등록</div>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:12}}>
+          <div>
+            <div style={{fontSize:11,color:'#64748b',marginBottom:4}}>거래처 *</div>
+            <select value={header.partner_id} onChange={e=>setHeader(h=>({...h,partner_id:e.target.value}))}
+              style={{width:'100%',padding:'6px 8px',border:'1px solid var(--border)',borderRadius:4,fontSize:13}}>
+              <option value="">선택...</option>
+              {partners.map(p=><option key={p.partner_id} value={p.partner_id}>{p.name}</option>)}
+            </select>
+          </div>
+          <div>
+            <div style={{fontSize:11,color:'#64748b',marginBottom:4}}>발주일 *</div>
+            <input type="date" value={header.order_date} onChange={e=>setHeader(h=>({...h,order_date:e.target.value}))}
+              style={{width:'100%',padding:'6px 8px',border:'1px solid var(--border)',borderRadius:4,fontSize:13}}/>
+          </div>
+        </div>
+        <table style={{width:'100%',borderCollapse:'collapse',fontSize:12,marginBottom:12}}>
+          <thead>
+            <tr style={{background:'#f8fafc'}}>
+              <th style={{padding:'6px 8px',textAlign:'left',border:'1px solid #e2e8f0'}}>품번</th>
+              <th style={{padding:'6px 8px',textAlign:'right',border:'1px solid #e2e8f0'}}>수량</th>
+              <th style={{padding:'6px 8px',textAlign:'right',border:'1px solid #e2e8f0'}}>단가</th>
+              <th style={{padding:'6px 8px',border:'1px solid #e2e8f0'}}>납기</th>
+              <th style={{padding:'6px 8px',border:'1px solid #e2e8f0',width:32}}></th>
+            </tr>
+          </thead>
+          <tbody>
+            {lines.map((ln,i)=>(
+              <tr key={i}>
+                <td style={{padding:'4px 6px',border:'1px solid #e2e8f0'}}>
+                  <PartSelect value={ln.part_no} items={allItems} onChange={v=>{
+                    const it = allItems.find(x=>x.part_no===v)
+                    setLine(i,'part_no',v)
+                    if(it?.std_buy_price) setLine(i,'unit_price',it.std_buy_price)
+                  }}/>
+                </td>
+                <td style={{padding:'4px 6px',border:'1px solid #e2e8f0'}}>
+                  <input type="number" value={ln.qty} onChange={e=>setLine(i,'qty',e.target.value)}
+                    style={{width:'100%',textAlign:'right',border:'none',fontSize:12,background:'transparent'}}/>
+                </td>
+                <td style={{padding:'4px 6px',border:'1px solid #e2e8f0'}}>
+                  <input type="number" value={ln.unit_price} onChange={e=>setLine(i,'unit_price',e.target.value)}
+                    style={{width:'100%',textAlign:'right',border:'none',fontSize:12,background:'transparent'}}/>
+                </td>
+                <td style={{padding:'4px 6px',border:'1px solid #e2e8f0'}}>
+                  <input type="date" value={ln.due_date} onChange={e=>setLine(i,'due_date',e.target.value)}
+                    style={{border:'none',fontSize:12,background:'transparent',width:'100%'}}/>
+                </td>
+                <td style={{padding:'4px 6px',border:'1px solid #e2e8f0',textAlign:'center'}}>
+                  <button onClick={()=>delLine(i)} style={{background:'none',border:'none',color:'#ef4444',cursor:'pointer',fontSize:14}}>✕</button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <div style={{display:'flex',gap:8,justifyContent:'space-between',alignItems:'center'}}>
+          <button className="btn btn-sm" style={{background:'#f1f5f9',color:'#475569',border:'1px solid #e2e8f0'}} onClick={addLine}>＋ 품목 추가</button>
+          <div style={{display:'flex',gap:8}}>
+            <button className="btn btn-sm" onClick={onClose}>취소</button>
+            <button className="btn btn-sm btn-primary" onClick={save} disabled={saving}>{saving?'저장 중...':'발주 등록'}</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/* ── 자재 입고 등록 모달 ── */
+function MatReceiveModal({ orders, onClose, onSaved }) {
+  const [form, setForm] = useState({ po_no: '', part_no: '', qty: '', unit_price: '', receipt_date: today(), note: '' })
+  const [saving, setSaving] = useState(false)
+  const selPO = orders.find(o => o.po_no === form.po_no)
+
+  const save = async () => {
+    if (!form.po_no || !form.part_no || !form.qty) return alert('발주번호, 품번, 수량을 입력하세요')
+    setSaving(true)
+    try {
+      await api.post('/material/receive', {
+        po_no: form.po_no,
+        part_no: form.part_no,
+        qty: parseInt(form.qty),
+        unit_price: parseFloat(form.unit_price || 0),
+        receipt_date: form.receipt_date,
+        note: form.note,
+      })
+      onSaved(); onClose()
+    } catch(e) { alert(e.response?.data?.detail || '입고 실패') }
+    finally { setSaving(false) }
+  }
+
+  return (
+    <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.45)',zIndex:9999,display:'flex',alignItems:'center',justifyContent:'center'}} onClick={onClose}>
+      <div style={{background:'#fff',borderRadius:12,width:480,padding:24}} onClick={e=>e.stopPropagation()}>
+        <div style={{fontWeight:700,fontSize:16,marginBottom:16,color:'#1e3a5f'}}>자재 입고 등록</div>
+        <div style={{display:'grid',gap:10,marginBottom:16}}>
+          <div>
+            <div style={{fontSize:11,color:'#64748b',marginBottom:4}}>발주번호 *</div>
+            <select value={form.po_no} onChange={e=>{
+              const po = orders.find(o=>o.po_no===e.target.value)
+              setForm(f=>({...f, po_no:e.target.value, part_no: po?.part_no||'', unit_price: po?.unit_price||''}))
+            }} style={{width:'100%',padding:'6px 8px',border:'1px solid var(--border)',borderRadius:4,fontSize:13}}>
+              <option value="">선택...</option>
+              {orders.filter(o=>o.remaining_qty>0).map(o=>(
+                <option key={o.po_no} value={o.po_no}>{o.po_no} — {o.item_name} (잔여 {o.remaining_qty.toLocaleString()})</option>
+              ))}
+            </select>
+          </div>
+          {selPO && <div style={{fontSize:12,color:'#64748b',background:'#f8fafc',padding:'6px 10px',borderRadius:4}}>
+            거래처: {selPO.partner_name} | 품번: {selPO.part_no} | 단가: ₩{Number(selPO.unit_price).toLocaleString()}
+          </div>}
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+            <div>
+              <div style={{fontSize:11,color:'#64748b',marginBottom:4}}>입고수량 *</div>
+              <input type="number" value={form.qty} onChange={e=>setForm(f=>({...f,qty:e.target.value}))}
+                style={{width:'100%',padding:'6px 8px',border:'1px solid var(--border)',borderRadius:4,fontSize:13}}/>
+            </div>
+            <div>
+              <div style={{fontSize:11,color:'#64748b',marginBottom:4}}>입고단가</div>
+              <input type="number" value={form.unit_price} onChange={e=>setForm(f=>({...f,unit_price:e.target.value}))}
+                style={{width:'100%',padding:'6px 8px',border:'1px solid var(--border)',borderRadius:4,fontSize:13}}/>
+            </div>
+          </div>
+          <div>
+            <div style={{fontSize:11,color:'#64748b',marginBottom:4}}>입고일 *</div>
+            <input type="date" value={form.receipt_date} onChange={e=>setForm(f=>({...f,receipt_date:e.target.value}))}
+              style={{width:'100%',padding:'6px 8px',border:'1px solid var(--border)',borderRadius:4,fontSize:13}}/>
+          </div>
+        </div>
+        <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
+          <button className="btn btn-sm" onClick={onClose}>취소</button>
+          <button className="btn btn-sm btn-primary" onClick={save} disabled={saving}>{saving?'처리 중...':'입고 확정'}</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function MaterialPurchase() {
   const now = new Date()
   const [matTab, setMatTab] = useState('orders')
   const [matMonth, setMatMonth] = useState(`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`)
   const [matPartners, setMatPartners] = useState([])
+  const [allItems, setAllItems] = useState([])
   const [matPartner, setMatPartner] = useState('')
+  const [orders, setOrders] = useState([])
+  const [receipts, setReceipts] = useState([])
+  const [summary, setSummary] = useState(null)
+  const [loading, setLoading] = useState(false)
+  const [showOrderModal, setShowOrderModal] = useState(false)
+  const [showReceiveModal, setShowReceiveModal] = useState(false)
 
   useEffect(() => {
-    api.get('/master/partners')
-      .then(r => setMatPartners(r.data.filter(p => p.partner_type === '매입처' || p.partner_type === '자재거래처')))
-      .catch(() => {})
+    api.get('/master/partners').then(r => setMatPartners(r.data.filter(p => p.partner_type !== '고객'))).catch(()=>{})
+    api.get('/master/items').then(r => setAllItems(r.data.filter(i => i.active !== false))).catch(()=>{})
   }, [])
+
+  const loadOrders = useCallback(() => {
+    setLoading(true)
+    let url = '/material/orders?'
+    if (matPartner) url += `partner_id=${matPartner}&`
+    api.get(url).then(r => setOrders(r.data)).catch(()=>{}).finally(()=>setLoading(false))
+  }, [matPartner])
+
+  const loadReceipts = useCallback(() => {
+    setLoading(true)
+    let url = '/material/receipts?'
+    if (matPartner) url += `partner_id=${matPartner}&`
+    api.get(url).then(r => setReceipts(r.data)).catch(()=>{}).finally(()=>setLoading(false))
+  }, [matPartner])
+
+  const loadSummary = useCallback(() => {
+    const [y, m] = matMonth.split('-')
+    api.get(`/material/summary?year=${y}&month=${m}`)
+      .then(r => setSummary(r.data)).catch(()=>setSummary(null))
+  }, [matMonth])
+
+  useEffect(() => {
+    if (matTab === 'orders') loadOrders()
+    else if (matTab === 'receipt') loadReceipts()
+    else if (matTab === 'closing') loadSummary()
+  }, [matTab, loadOrders, loadReceipts, loadSummary])
+
+  // 월 필터링 (클라이언트)
+  const monthOrders = orders.filter(o => o.order_date?.startsWith(matMonth))
+  const monthReceipts = receipts.filter(r => r.receipt_date?.startsWith(matMonth))
 
   const MAT_TABS = [
     ['orders',  '자재 발주 목록'],
@@ -505,8 +714,19 @@ function MaterialPurchase() {
     ['closing', '자재 매입 집계'],
   ]
 
+  const fmt = n => Number(n||0).toLocaleString()
+
   return (
     <div>
+      {showOrderModal && (
+        <MatOrderModal partners={matPartners} allItems={allItems}
+          onClose={()=>setShowOrderModal(false)} onSaved={loadOrders}/>
+      )}
+      {showReceiveModal && (
+        <MatReceiveModal orders={orders.filter(o=>o.remaining_qty>0)}
+          onClose={()=>setShowReceiveModal(false)} onSaved={loadReceipts}/>
+      )}
+
       {/* 서브탭 + 액션 */}
       <div className="erp-panel" style={{marginBottom:8}}>
         <div className="erp-actions">
@@ -517,12 +737,15 @@ function MaterialPurchase() {
           </div>
           <div className="spacer"/>
           {matTab === 'orders' && (
-            <button className="btn btn-sm btn-primary" disabled title="준비 중">＋ 자재 발주</button>
+            <button className="btn btn-sm btn-primary" onClick={()=>setShowOrderModal(true)}>＋ 자재 발주</button>
+          )}
+          {matTab === 'receipt' && (
+            <button className="btn btn-sm btn-primary" onClick={()=>{loadOrders();setShowReceiveModal(true)}}>＋ 입고 등록</button>
           )}
         </div>
       </div>
 
-      {/* 공통 필터 (발주/입고 탭) */}
+      {/* 공통 필터 */}
       {(matTab === 'orders' || matTab === 'receipt') && (
         <div className="erp-panel" style={{marginBottom:8}}>
           <div className="erp-grid-2" style={{gridTemplateColumns:'auto 1fr auto 1fr'}}>
@@ -548,50 +771,88 @@ function MaterialPurchase() {
         <>
           <div className="result-bar">
             <span className="result-bar-title">자재 발주 목록</span>
-            <span className="result-bar-count">0건</span>
+            <span className="result-bar-count">{monthOrders.length}건</span>
           </div>
           <div className="table-wrap">
             <table>
               <thead>
-                <tr><th>발주번호</th><th>거래처</th><th>품번</th><th>품명</th><th>발주수량</th><th>단가</th><th>금액</th><th>발주일</th><th>납기</th><th>상태</th></tr>
+                <tr><th>발주번호</th><th>거래처</th><th>품번</th><th>품명</th>
+                  <th style={{textAlign:'right'}}>발주수량</th><th style={{textAlign:'right'}}>입고</th>
+                  <th style={{textAlign:'right'}}>단가</th><th style={{textAlign:'right'}}>금액</th>
+                  <th>발주일</th><th>납기</th><th>상태</th></tr>
               </thead>
               <tbody>
-                <tr><td colSpan={10} className="empty" style={{color:'#94a3b8'}}>
-                  자재 발주 기능 준비 중입니다
-                </td></tr>
+                {monthOrders.length === 0 && <tr><td colSpan={11} className="empty">{loading?'조회 중...':'자재 발주 없음'}</td></tr>}
+                {monthOrders.map(o=>(
+                  <tr key={o.po_no}>
+                    <td style={{fontFamily:'monospace',fontSize:11}}>{o.po_no}</td>
+                    <td>{o.partner_name}</td>
+                    <td style={{fontFamily:'monospace',fontSize:11}}>{o.part_no}</td>
+                    <td>{o.item_name}</td>
+                    <td style={{textAlign:'right'}}>{fmt(o.qty)} {o.item_unit}</td>
+                    <td style={{textAlign:'right',color: o.confirmed_qty>0?'#16a34a':'#94a3b8'}}>{fmt(o.confirmed_qty)}</td>
+                    <td style={{textAlign:'right'}}>₩{fmt(o.unit_price)}</td>
+                    <td style={{textAlign:'right'}}>₩{fmt(o.qty * o.unit_price)}</td>
+                    <td style={{fontSize:11}}>{o.order_date}</td>
+                    <td style={{fontSize:11}}>{o.due_date}</td>
+                    <td><span className={`badge ${o.status==='open'?'badge-blue':o.status==='partial'?'badge-amber':'badge-green'}`}>
+                      {o.status==='open'?'발주중':o.status==='partial'?'일부입고':o.status==='closed'?'완료':'취소'}
+                    </span></td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
         </>
       )}
 
-      {/* 자재 입고 현황 — 외주 입고와 완전 분리 */}
+      {/* 자재 입고 현황 */}
       {matTab === 'receipt' && (
         <>
           <div className="result-bar">
             <span className="result-bar-title">자재 입고 현황</span>
             <span style={{fontSize:11,color:'#64748b',marginLeft:8}}>※ 외주 입고와 별도 관리</span>
-            <span className="result-bar-count">0건</span>
+            <span className="result-bar-count">{monthReceipts.length}건</span>
           </div>
           <div className="table-wrap">
             <table>
               <thead>
-                <tr>
-                  <th>입고번호</th><th>거래처</th><th>품번</th><th>품명</th>
-                  <th>입고수량</th><th>단가</th><th>금액</th><th>입고일</th><th>상태</th>
-                </tr>
+                <tr><th>입고번호</th><th>발주번호</th><th>거래처</th><th>품번</th><th>품명</th>
+                  <th style={{textAlign:'right'}}>수량</th><th style={{textAlign:'right'}}>단가</th>
+                  <th style={{textAlign:'right'}}>금액</th><th>입고일</th><th>상태</th></tr>
               </thead>
               <tbody>
-                <tr><td colSpan={9} className="empty" style={{color:'#94a3b8'}}>
-                  자재 입고 기능 준비 중입니다
-                </td></tr>
+                {monthReceipts.length === 0 && <tr><td colSpan={10} className="empty">{loading?'조회 중...':'자재 입고 없음'}</td></tr>}
+                {monthReceipts.map(r=>(
+                  <tr key={r.gr_no}>
+                    <td style={{fontFamily:'monospace',fontSize:11}}>{r.gr_no}</td>
+                    <td style={{fontFamily:'monospace',fontSize:11}}>{r.po_no}</td>
+                    <td>{r.partner_id}</td>
+                    <td style={{fontFamily:'monospace',fontSize:11}}>{r.part_no}</td>
+                    <td>{r.item_name}</td>
+                    <td style={{textAlign:'right'}}>{fmt(r.qty)}</td>
+                    <td style={{textAlign:'right'}}>₩{fmt(r.unit_price)}</td>
+                    <td style={{textAlign:'right'}}>₩{fmt(r.amount)}</td>
+                    <td style={{fontSize:11}}>{r.receipt_date}</td>
+                    <td><span className="badge badge-green">확정</span></td>
+                  </tr>
+                ))}
+                {monthReceipts.length > 0 && (
+                  <tr style={{fontWeight:700,background:'#f8fafc'}}>
+                    <td colSpan={5} style={{textAlign:'right',color:'#475569'}}>합계</td>
+                    <td style={{textAlign:'right'}}>{fmt(monthReceipts.reduce((a,r)=>a+r.qty,0))}</td>
+                    <td></td>
+                    <td style={{textAlign:'right'}}>₩{fmt(monthReceipts.reduce((a,r)=>a+r.amount,0))}</td>
+                    <td colSpan={2}></td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>
         </>
       )}
 
-      {/* 자재 매입 집계 — 외주 매입 집계와 완전 분리 */}
+      {/* 자재 매입 집계 */}
       {matTab === 'closing' && (
         <>
           <div className="erp-panel" style={{marginBottom:8}}>
@@ -605,39 +866,41 @@ function MaterialPurchase() {
             <div className="erp-actions">
               <span style={{fontSize:12,color:'#64748b'}}>※ 외주 매입 집계와 별도 — 자재 구매 입고 기준</span>
               <div className="spacer"/>
-              <button className="btn btn-primary btn-sm" disabled title="준비 중">조회</button>
+              <button className="btn btn-primary btn-sm" onClick={loadSummary}>조회</button>
             </div>
           </div>
-          <div style={{display:'flex',gap:12,marginBottom:16,flexWrap:'wrap'}}>
-            {[
-              {label:'자재 입고금액',color:'#1d4ed8',bg:'#eff6ff',border:'#bfdbfe'},
-              {label:'반품금액',color:'#dc2626',bg:'#fef2f2',border:'#fecaca'},
-              {label:'당월 자재 매입',color:'#fff',bg:'#1e3a5f',border:'#1e40af'},
-            ].map(({label,color,bg,border})=>(
-              <div key={label} style={{background:bg,border:`1px solid ${border}`,borderRadius:8,padding:'10px 18px',minWidth:160}}>
-                <div style={{fontSize:11,color:color==='#fff'?'#93c5fd':color,fontWeight:600,marginBottom:4}}>{label}</div>
-                <div style={{fontSize:16,fontWeight:800,color}}>₩0</div>
+          {summary && (
+            <>
+              <div style={{display:'flex',gap:12,marginBottom:16,flexWrap:'wrap'}}>
+                {[
+                  {label:'자재 입고건수', val:`${summary.total_receipts}건`, color:'#1d4ed8',bg:'#eff6ff',border:'#bfdbfe'},
+                  {label:'자재 입고금액', val:`₩${fmt(summary.total_amount)}`, color:'#fff',bg:'#1e3a5f',border:'#1e40af'},
+                ].map(({label,val,color,bg,border})=>(
+                  <div key={label} style={{background:bg,border:`1px solid ${border}`,borderRadius:8,padding:'10px 18px',minWidth:160}}>
+                    <div style={{fontSize:11,color:color==='#fff'?'#93c5fd':color,fontWeight:600,marginBottom:4}}>{label}</div>
+                    <div style={{fontSize:16,fontWeight:800,color}}>{val}</div>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>거래처</th><th>품번</th><th>품명</th>
-                  <th style={{textAlign:'right'}}>입고수량</th>
-                  <th style={{textAlign:'right'}}>단가</th>
-                  <th style={{textAlign:'right'}}>금액</th>
-                  <th>입고일</th><th>비고</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr><td colSpan={8} className="empty" style={{color:'#94a3b8'}}>
-                  자재 매입 집계 기능 준비 중입니다
-                </td></tr>
-              </tbody>
-            </table>
-          </div>
+              <div className="table-wrap">
+                <table>
+                  <thead>
+                    <tr><th>거래처</th><th style={{textAlign:'right'}}>입고건수</th><th style={{textAlign:'right'}}>매입금액</th></tr>
+                  </thead>
+                  <tbody>
+                    {summary.by_partner.length === 0 && <tr><td colSpan={3} className="empty">집계 데이터 없음</td></tr>}
+                    {summary.by_partner.map(p=>(
+                      <tr key={p.partner_id}>
+                        <td>{p.partner_name}</td>
+                        <td style={{textAlign:'right'}}>{p.count}건</td>
+                        <td style={{textAlign:'right'}}>₩{fmt(p.amount)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
         </>
       )}
     </div>
