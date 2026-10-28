@@ -161,3 +161,12 @@ def delete_user(user_id: int, _: User = Depends(require_admin), db: Session = De
         raise HTTPException(404)
     db.delete(u); db.commit()
     return {"ok": True}
+
+@router.get("/debug/schema")
+def debug_schema(db: Session = Depends(get_db)):
+    from sqlalchemy import text as _t
+    rows = db.execute(_t(
+        "SELECT column_name, data_type, udt_name FROM information_schema.columns "
+        "WHERE table_name='user' ORDER BY ordinal_position"
+    )).fetchall()
+    return [{"col": r[0], "type": r[1], "udt": r[2]} for r in rows]
