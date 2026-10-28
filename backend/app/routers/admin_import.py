@@ -32,6 +32,29 @@ def get_bool_columns(table: str) -> set:
         return set()
 
 
+@router.get("/debug-purchase-oct")
+def debug_purchase_oct(db: Session = Depends(get_db), _: User = Depends(require_admin)):
+    """10월 발주 전체 현황 디버그 (po_type 무관)"""
+    rows = db.execute(text("""
+        SELECT po_no, partner_id, part_no, qty, order_date,
+               status, po_type, note
+        FROM purchase_order
+        WHERE order_date >= '2026-10-01'
+          AND order_date <= '2026-10-31'
+        ORDER BY order_date, po_no
+    """)).fetchall()
+    # po_type 별 집계
+    summary = {}
+    for r in rows:
+        pt = r._mapping.get('po_type') or 'NULL'
+        summary[pt] = summary.get(pt, 0) + 1
+    return {
+        "total": len(rows),
+        "by_po_type": summary,
+        "items": [dict(r._mapping) for r in rows[:50]]
+    }
+
+
 @router.get("/preview-outsource-oct")
 def preview_outsource_oct(db: Session = Depends(get_db), _: User = Depends(require_admin)):
     """2026년 10월 외주 발주 목록 미리보기"""
@@ -51,32 +74,23 @@ def preview_outsource_oct(db: Session = Depends(get_db), _: User = Depends(requi
 
 @router.delete("/purge-outsource-oct")
 def purge_outsource_oct(db: Session = Depends(get_db), _: User = Depends(require_admin)):
-    """2026년 10월 외주 발주 및 관련 입고·원장 전체 삭제 (정식오픈 전 테스트 데이터 정리)"""
-    # 10월 외주 발주번호 수집
+    """2026년 10월 외주 발주 및 관련 입고·원장 전체 삭제 (po_type=outsource OR NULL, 정식오픈 전 정리)"""
+    # 10월 발주번호 수집 (po_type 무관 — NULL도 포함)
     po_nos = [r[0] for r in db.execute(text("""
         SELECT po_no FROM purchase_order
-        WHERE po_type = 'outsource'
-          AND order_date >= '2026-10-01'
+        WHERE order_date >= '2026-10-01'
           AND order_date <= '2026-10-31'
+          AND (po_type = 'outsource' OR po_type IS NULL OR po_type = '')
     """)).fetchall()]
 
     if not po_nos:
-        return {"deleted": 0, "message": "삭제할 10월 외주 발주가 없습니다"}
+        return {"deleted": 0, "message": "삭제할 10월 외주 발주가 없습니다 — /admin/debug-purchase-oct 로 실제 데이터 확인하세요"}
 
     in_clause = ", ".join(f"'{p}'" for p in po_nos)
 
-    # 관련 재고원장 삭제
-    r_ledger = db.execute(text(f"""
-        DELETE FROM stock_ledger WHERE ref_no IN ({in_clause})
-    """))
-    # 관련 입고 삭제
-    r_receipt = db.execute(text(f"""
-        DELETE FROM receipt WHERE po_no IN ({in_clause})
-    """))
-    # 발주 삭제
-    r_po = db.execute(text(f"""
-        DELETE FROM purchase_order WHERE po_no IN ({in_clause})
-    """))
+    r_ledger = db.execute(text(f"DELETE FROM stock_ledger WHERE ref_no IN ({in_clause})"))
+    r_receipt = db.execute(text(f"DELETE FROM receipt WHERE po_no IN ({in_clause})"))
+    r_po = db.execute(text(f"DELETE FROM purchase_order WHERE po_no IN ({in_clause})"))
     db.commit()
 
     return {
