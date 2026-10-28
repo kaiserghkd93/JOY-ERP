@@ -57,9 +57,19 @@ export function logout() {
   sessionStorage.removeItem('jwt_token')
 }
 
+const VALID_ROLES = new Set(Object.keys(ROLE_PERMISSIONS))
+
 export function getUser() {
   const s = sessionStorage.getItem('kaiser_user')
-  return s ? JSON.parse(s) : null
+  if (!s) return null
+  const u = JSON.parse(s)
+  // 구버전 role(master/staff 등)이 남아있으면 세션 초기화
+  if (!VALID_ROLES.has(u.role)) {
+    sessionStorage.removeItem('kaiser_user')
+    sessionStorage.removeItem('jwt_token')
+    return null
+  }
+  return u
 }
 
 export function getRole() {
@@ -75,7 +85,8 @@ export function hasPermission(path) {
   const role = getRole()
   if (!role) return false
   const allowed = ROLE_PERMISSIONS[role]
-  if (allowed === null) return true  // admin = 전체
+  if (allowed === undefined) return false  // 알 수 없는 역할(구 버전 캐시 등)
+  if (allowed === null) return true        // admin = 전체
   // 정확히 일치하거나 하위 경로면 허용
   return allowed.some(p => p === path || (p !== '/' && path.startsWith(p + '/')))
 }
