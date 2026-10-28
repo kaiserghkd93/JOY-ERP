@@ -79,7 +79,13 @@ class UserCreateReq(BaseModel):
     password: str
     name: str
     partner_id: str | None = None
-    role: UserRole = UserRole.supplier
+    role: str = UserRole.supplier
+
+class UserPatchReq(BaseModel):
+    name: str | None = None
+    role: str | None = None
+    is_active: bool | None = None
+    password: str | None = None
 
 class UserOut(BaseModel):
     id: int
@@ -131,23 +137,22 @@ def create_user(body: UserCreateReq, _: User = Depends(require_admin), db: Sessi
     return UserOut(id=u.id, username=u.username, name=u.name,
                    role=u.role, partner_id=u.partner_id, is_active=u.is_active)
 
-@router.patch("/users/{user_id}/password")
-def change_password(user_id: int, body: LoginReq, _: User = Depends(require_admin), db: Session = Depends(get_db)):
+@router.patch("/users/{user_id}")
+def patch_user(user_id: int, body: UserPatchReq, _: User = Depends(require_admin), db: Session = Depends(get_db)):
     u = db.get(User, user_id)
     if not u:
         raise HTTPException(404)
-    u.password_hash = _hash(body.password)
+    if body.name is not None:
+        u.name = body.name
+    if body.role is not None:
+        u.role = body.role
+    if body.is_active is not None:
+        u.is_active = body.is_active
+    if body.password is not None:
+        u.password_hash = _hash(body.password)
     db.commit()
-    return {"ok": True}
-
-@router.patch("/users/{user_id}/toggle")
-def toggle_user(user_id: int, _: User = Depends(require_admin), db: Session = Depends(get_db)):
-    u = db.get(User, user_id)
-    if not u:
-        raise HTTPException(404)
-    u.is_active = not u.is_active
-    db.commit()
-    return {"is_active": u.is_active}
+    return UserOut(id=u.id, username=u.username, name=u.name,
+                   role=u.role, partner_id=u.partner_id, is_active=u.is_active)
 
 @router.delete("/users/{user_id}")
 def delete_user(user_id: int, _: User = Depends(require_admin), db: Session = Depends(get_db)):

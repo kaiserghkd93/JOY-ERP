@@ -1,21 +1,60 @@
-// 계정 정보 (프론트엔드 간이 인증)
-const ACCOUNTS = {
-  'kaiser': { password: 'kaiser2024!', role: 'master', name: '관리자' },
-  'staff':  { password: 'staff1234',   role: 'staff',  name: '현장직원' },
+const API = import.meta.env.VITE_API_URL || ''
+
+// ── 역할별 접근 가능 경로 ─────────────────────────────────────────
+// null = 전체 접근 (admin)
+const ROLE_PERMISSIONS = {
+  admin:      null,  // 나만 (외주구매·계정관리 포함 전체)
+  executive:  ['/', '/report', '/dashboard', '/monthly-sales', '/monthly-purchase', '/sales-target', '/inventory', '/cost'],  // 대표/전무
+  manager:    ['/', '/sales-target'],  // 상무 — 매출목표 조회만
+  accounting: ['/', '/invoice', '/monthly-sales', '/monthly-purchase', '/sales-target', '/report', '/inventory'],
+  sales:      ['/', '/sales', '/invoice', '/monthly-sales', '/sales-target', '/inventory'],
+  purchase:   ['/', '/receipt', '/monthly-purchase', '/bom', '/inventory'],  // 외주구매(/purchase)는 admin 전용
+  shipping:   ['/', '/sales', '/invoice', '/inventory'],
+  quality:    ['/', '/quality', '/receipt', '/inventory'],  // 입고검사 확인 포함
+  production: ['/', '/production', '/production-plan', '/inventory', '/cost', '/mold'],
+  supplier:   ['/'],
 }
 
-// 직원 계정 허용 메뉴
-export const STAFF_ALLOWED = ['/', '/inventory', '/invoice', '/receipt', '/sales']
+// 재무 데이터 열람 가능 역할 (대시보드 마감요약·손익)
+export const FINANCE_ROLES = ['admin', 'accounting', 'executive']
 
-export function login(id, pw) {
-  const acc = ACCOUNTS[id]
-  if (!acc || acc.password !== pw) return false
-  sessionStorage.setItem('kaiser_user', JSON.stringify({ id, role: acc.role, name: acc.name }))
-  return true
+// 역할 한글 레이블
+export const ROLE_LABELS = {
+  admin:      '관리자 (전체)',
+  executive:  '대표/전무',
+  manager:    '상무',
+  accounting: '경리',
+  sales:      '영업관리',
+  purchase:   '외주구매',
+  shipping:   '출하관리',
+  quality:    '품질팀',
+  production: '생산관리',
+  supplier:   '외주처 (외부)',
+}
+
+// ── 인증 ─────────────────────────────────────────────────────────
+export async function login(id, pw) {
+  try {
+    const res = await fetch(`${API}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: id, password: pw }),
+    })
+    if (!res.ok) return false
+    const data = await res.json()
+    sessionStorage.setItem('jwt_token', data.access_token)
+    sessionStorage.setItem('kaiser_user', JSON.stringify({
+      id, role: data.role, name: data.name, partner_id: data.partner_id,
+    }))
+    return true
+  } catch {
+    return false
+  }
 }
 
 export function logout() {
   sessionStorage.removeItem('kaiser_user')
+  sessionStorage.removeItem('jwt_token')
 }
 
 export function getUser() {
@@ -23,6 +62,32 @@ export function getUser() {
   return s ? JSON.parse(s) : null
 }
 
+export function getRole() {
+  return getUser()?.role ?? null
+}
+
 export function isMaster() {
-  return getUser()?.role === 'master'
+  return getRole() === 'admin'
+}
+
+// 경로에 대한 접근 권한 확인
+export function hasPermission(path) {
+  const role = getRole()
+  if (!role) return false
+  const allowed = ROLE_PERMISSIONS[role]
+  if (allowed === null) return true  // admin = 전체
+  // 정확히 일치하거나 하위 경로면 허용
+  return allowed.some(p => p === path || (p !== '/' && path.startsWith(p + '/')))
+}
+
+// 재무 데이터 열람 가능 여부
+export function canViewFinancials() {
+  return FINANCE_ROLES.includes(getRole())
+}
+
+// 현재 역할의 허용 경로 목록 (메뉴 필터링용)
+export function getAllowedPaths() {
+  const role = getRole()
+  if (!role) return []
+  return ROLE_PERMISSIONS[role]  // null = all
 }

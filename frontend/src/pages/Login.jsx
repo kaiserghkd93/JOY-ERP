@@ -12,19 +12,12 @@ export default function Login({ onLogin }) {
     e.preventDefault()
     setLoading(true)
     setError('')
-    if (!login(id, pw)) {
+    const ok = await login(id, pw)
+    setLoading(false)
+    if (!ok) {
       setError('아이디 또는 비밀번호가 올바르지 않습니다.')
-      setLoading(false)
       return
     }
-    // 백엔드 JWT 발급 (관리자 계정만 — 실패해도 로그인은 진행)
-    try {
-      const r = await api.post('/auth/login', { username: id, password: pw })
-      if (r.data?.access_token) {
-        sessionStorage.setItem('jwt_token', r.data.access_token)
-      }
-    } catch {}
-    setLoading(false)
     onLogin()
   }
 

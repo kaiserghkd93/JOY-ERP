@@ -1,7 +1,7 @@
 import { useState, useEffect, lazy, Suspense } from 'react'
 import { Routes, Route, NavLink, useLocation, useNavigate, Navigate } from 'react-router-dom'
 import Login from './pages/Login'
-import { getUser, logout, isMaster, STAFF_ALLOWED } from './auth'
+import { getUser, logout, hasPermission, getRole, ROLE_LABELS } from './auth'
 
 const Dashboard      = lazy(() => import('./pages/Dashboard'))
 const Inventory      = lazy(() => import('./pages/Inventory'))
@@ -21,6 +21,7 @@ const DeliveryReport = lazy(() => import('./pages/DeliveryReport'))
 const MonthlySales   = lazy(() => import('./pages/MonthlySales'))
 const MonthlyPurchase = lazy(() => import('./pages/MonthlyPurchase'))
 const SalesTarget    = lazy(() => import('./pages/SalesTarget'))
+const UserAdmin      = lazy(() => import('./pages/UserAdmin'))
 
 // GNB: 대분류 / LNB: 소분류
 const allMenus = [
@@ -56,19 +57,14 @@ const allMenus = [
     { to: '/mold', label: '금형 수주관리' },
   ]},
   { id: 'master', label: '기준정보', items: [
-    { to: '/master', label: '품목·거래처' },
-    { to: '/bom',    label: 'BOM·구매계획' },
+    { to: '/master',     label: '품목·거래처' },
+    { to: '/bom',        label: 'BOM·구매계획' },
+    { to: '/user-admin', label: '계정 관리' },
   ]},
 ]
 
-const masterOnlyPaths = [
-  '/purchase', '/report', '/quality', '/production',
-  '/master', '/bom', '/production-plan', '/cost', '/mold',
-  '/monthly-purchase', '/monthly-sales', '/sales-target',
-]
-
 function ProtectedRoute({ path, children }) {
-  if (!isMaster() && !STAFF_ALLOWED.includes(path)) {
+  if (!hasPermission(path)) {
     return <Navigate to="/" replace />
   }
   return children
@@ -127,8 +123,6 @@ export default function App() {
     return <Login onLogin={() => setUser(getUser())} />
   }
 
-  const master = isMaster()
-
   // 현재 경로로 활성 GNB 그룹 판별
   const activeGroup = allMenus.find(g =>
     g.items.some(item =>
@@ -138,13 +132,11 @@ export default function App() {
     )
   ) ?? allMenus[0]
 
-  // STAFF는 허용된 항목만 보이게
-  const visibleMenus = master
-    ? allMenus
-    : allMenus.map(g => ({
-        ...g,
-        items: g.items.filter(m => STAFF_ALLOWED.includes(m.to)),
-      })).filter(g => g.items.length > 0)
+  // 역할에 따라 접근 가능한 메뉴만 표시
+  const visibleMenus = allMenus.map(g => ({
+    ...g,
+    items: g.items.filter(m => hasPermission(m.to)),
+  })).filter(g => g.items.length > 0)
 
   const handleLogout = () => { logout(); setUser(null) }
 
@@ -173,7 +165,9 @@ export default function App() {
         <div className="gnb-right">
           <NowClock />
           <span className="gnb-user">{user.name}</span>
-          {!master && <span className="badge badge-amber" style={{ fontSize: 10 }}>STAFF</span>}
+          {getRole() !== 'admin' && (
+            <span className="badge badge-amber" style={{ fontSize: 10 }}>{ROLE_LABELS[getRole()] ?? getRole()}</span>
+          )}
           <button className="gnb-logout" onClick={handleLogout}>로그아웃</button>
         </div>
       </div>
@@ -183,7 +177,7 @@ export default function App() {
         <div className="lnb">
           <span className="lnb-module">{activeGroup.label}</span>
           {activeGroup.items
-            .filter(item => master || STAFF_ALLOWED.includes(item.to))
+            .filter(item => hasPermission(item.to))
             .map(item => (
               <NavLink
                 key={item.to}
@@ -249,6 +243,9 @@ export default function App() {
             } />
             <Route path="/sales-target" element={
               <ProtectedRoute path="/sales-target"><SalesTarget /></ProtectedRoute>
+            } />
+            <Route path="/user-admin" element={
+              <ProtectedRoute path="/user-admin"><UserAdmin /></ProtectedRoute>
             } />
           </Routes>
         </Suspense>

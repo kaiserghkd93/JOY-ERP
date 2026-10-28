@@ -484,7 +484,99 @@ function ReturnModal({ gr_no, max_qty, part_name, onClose, onSaved }) {
   )
 }
 
+/* ── 자재구매 탭 ─────────────────────────────────────────────── */
+function MaterialPurchase() {
+  const now = new Date()
+  const [matTab, setMatTab] = useState('orders')
+  const [matMonth, setMatMonth] = useState(`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`)
+  const [matOrders, setMatOrders] = useState([])
+  const [matPartners, setMatPartners] = useState([])
+  const [matPartner, setMatPartner] = useState('')
+
+  useEffect(() => {
+    api.get('/master/partners')
+      .then(r => setMatPartners(r.data.filter(p => p.partner_type === '매입처' || p.partner_type === '자재거래처')))
+      .catch(() => {})
+  }, [])
+
+  return (
+    <div>
+      <div className="erp-panel" style={{marginBottom:8}}>
+        <div className="erp-actions">
+          <div className="qdate-bar">
+            {[['orders','발주 목록'],['receipt','입고 현황']].map(([v,l])=>(
+              <button key={v} className={`qdate-btn${matTab===v?' active':''}`} onClick={()=>setMatTab(v)}>{l}</button>
+            ))}
+          </div>
+          <div className="spacer"/>
+          <button className="btn btn-sm btn-primary" disabled title="준비 중">＋ 자재 발주</button>
+        </div>
+      </div>
+
+      {matTab === 'orders' && (
+        <>
+          <div className="erp-panel" style={{marginBottom:8}}>
+            <div className="erp-grid-2" style={{gridTemplateColumns:'auto 1fr auto 1fr'}}>
+              <div className="erp-label">조회 월</div>
+              <div className="erp-value">
+                <input type="month" value={matMonth} onChange={e=>setMatMonth(e.target.value)}
+                  style={{border:'none',background:'transparent',fontSize:13,padding:'0 4px'}}/>
+              </div>
+              <div className="erp-label">거래처</div>
+              <div className="erp-value">
+                <select value={matPartner} onChange={e=>setMatPartner(e.target.value)}
+                  style={{border:'none',background:'transparent',fontSize:13,padding:'0 4px'}}>
+                  <option value="">전체</option>
+                  {matPartners.map(p=><option key={p.partner_id} value={p.partner_id}>{p.name}</option>)}
+                </select>
+              </div>
+            </div>
+          </div>
+          <div className="result-bar">
+            <span className="result-bar-title">자재 발주 목록</span>
+            <span className="result-bar-count">{matOrders.length}건</span>
+          </div>
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr><th>발주번호</th><th>거래처</th><th>품번</th><th>품명</th><th>발주수량</th><th>단가</th><th>금액</th><th>발주일</th><th>납기</th><th>상태</th></tr>
+              </thead>
+              <tbody>
+                <tr><td colSpan={10} className="empty" style={{color:'#94a3b8'}}>
+                  자재구매 기능을 활성화하려면 백엔드 설정이 필요합니다
+                </td></tr>
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+
+      {matTab === 'receipt' && (
+        <>
+          <div className="result-bar">
+            <span className="result-bar-title">자재 입고 현황</span>
+            <span className="result-bar-count">0건</span>
+          </div>
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr><th>입고번호</th><th>거래처</th><th>품번</th><th>품명</th><th>입고수량</th><th>단가</th><th>금액</th><th>입고일</th><th>검사결과</th></tr>
+              </thead>
+              <tbody>
+                <tr><td colSpan={9} className="empty" style={{color:'#94a3b8'}}>
+                  자재구매 기능을 활성화하려면 백엔드 설정이 필요합니다
+                </td></tr>
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
 export default function Purchase() {
+  const [mainTab, setMainTab] = useState('outsource')
   const [groups, setGroups] = useState([])
   const [orders, setOrders] = useState([])
   const [remaining, setRemaining] = useState([])
@@ -667,6 +759,20 @@ export default function Purchase() {
 
   return (
     <div>
+      {/* 외주구매 / 자재구매 메인 분류 탭 */}
+      <div style={{display:'flex',gap:0,marginBottom:12,borderBottom:'2px solid var(--border)'}}>
+        {[['outsource','외주구매'],['material','자재구매']].map(([v,l])=>(
+          <button key={v} onClick={()=>setMainTab(v)} style={{
+            padding:'8px 24px', fontWeight:mainTab===v?700:400, fontSize:14,
+            background:'none', border:'none', borderBottom: mainTab===v?'2px solid #1e3a5f':'2px solid transparent',
+            color: mainTab===v?'#1e3a5f':'#64748b', cursor:'pointer', marginBottom:-2,
+          }}>{l}</button>
+        ))}
+      </div>
+
+      {mainTab === 'material' && <MaterialPurchase />}
+      {mainTab !== 'material' && <>
+
       {/* 탭 + 액션 바 */}
       <div className="erp-panel" style={{marginBottom:8}}>
         <div className="erp-actions">
@@ -1277,6 +1383,7 @@ export default function Purchase() {
           }}
         />
       )}
+      </>}
     </div>
   )
 }

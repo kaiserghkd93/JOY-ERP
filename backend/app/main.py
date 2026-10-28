@@ -10,14 +10,20 @@ from app.routers import auth, portal, admin_import, monthly_sales, monthly_purch
 
 Base.metadata.create_all(bind=engine)
 
-# closing_type 컬럼 없으면 추가 (기존 DB 호환)
 from sqlalchemy import text as _text
 with engine.connect() as _conn:
+    # closing_type 컬럼
     try:
         _conn.execute(_text("ALTER TABLE invoice ADD COLUMN closing_type VARCHAR(10)"))
         _conn.commit()
     except Exception:
-        pass  # 이미 존재하면 무시
+        pass
+    # role 컬럼을 VARCHAR로 변환 (기존 Enum 타입 → 문자열)
+    try:
+        _conn.execute(_text('ALTER TABLE "user" ALTER COLUMN role TYPE VARCHAR(20)'))
+        _conn.commit()
+    except Exception:
+        pass
 
 app = FastAPI(title="조이산업 ERP", version="0.2.0")
 
