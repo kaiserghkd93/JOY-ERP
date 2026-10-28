@@ -162,18 +162,3 @@ def delete_user(user_id: int, _: User = Depends(require_admin), db: Session = De
     db.delete(u); db.commit()
     return {"ok": True}
 
-@router.get("/debug/schema")
-def debug_schema(db: Session = Depends(get_db)):
-    from sqlalchemy import text as _t
-    rows = db.execute(_t(
-        "SELECT column_name, data_type, udt_name FROM information_schema.columns "
-        "WHERE table_name='user' ORDER BY ordinal_position"
-    )).fetchall()
-    enum_rows = db.execute(_t(
-        "SELECT e.enumlabel FROM pg_type t JOIN pg_enum e ON t.oid = e.enumtypid "
-        "WHERE t.typname = 'userrole' ORDER BY e.enumsortorder"
-    )).fetchall()
-    return {
-        "columns": [{"col": r[0], "type": r[1], "udt": r[2]} for r in rows],
-        "userrole_enum": [r[0] for r in enum_rows],
-    }
