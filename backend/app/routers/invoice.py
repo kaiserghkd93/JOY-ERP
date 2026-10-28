@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import HTMLResponse
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload, joinedload
 from datetime import date as date_type
 
 from app.database import get_db
@@ -8,18 +8,31 @@ from app.models.sales import Invoice, InvoiceLine, InvoiceStatus, SalesOrder, SO
 from app.models.master import Partner, Item
 from app.schemas.invoice import InvoiceCreate, InvoiceOut, InvoiceLineOut
 from app.services.doc_no import next_doc_no
-from app.services.ledger_service import post_ledger, get_avg_price
+from app.services.ledger_service import post_ledger, get_avg_price, get_avg_price_bulk
 from app.models.ledger import LedgerType
 
 router = APIRouter(prefix="/invoices", tags=["거래명세서"])
 
 
+def _load_inv(db: Session, inv_no: str) -> Invoice | None:
+    """eager load로 invoice 단건 조회 (N+1 방지)"""
+    return (
+        db.query(Invoice)
+        .options(
+            joinedload(Invoice.partner),
+            selectinload(Invoice.lines).joinedload(InvoiceLine.item),
+        )
+        .filter(Invoice.inv_no == inv_no)
+        .first()
+    )
+
+
 def _enrich(inv: Invoice, db: Session) -> dict:
-    partner = db.get(Partner, inv.partner_id)
+    partner = getattr(inv, 'partner', None) or db.get(Partner, inv.partner_id)
     lines = []
     total = 0.0
     for ln in inv.lines:
-        item = db.get(Item, ln.part_no)
+        item = getattr(ln, 'item', None) or db.get(Item, ln.part_no)
         lines.append(InvoiceLineOut(
             id=ln.id,
             part_no=ln.part_no,
@@ -27,7 +40,7 @@ def _enrich(inv: Invoice, db: Session) -> dict:
             unit_price=float(ln.unit_price),
             item_name=item.name if item else ln.part_no,
         ))
-        total += ln.qty * float(ln.unit_price)
+        total += int(ln.qty * float(ln.unit_price))  # 라인별 절사 후 합산
 
     return InvoiceOut(
         inv_no=inv.inv_no,
@@ -36,20 +49,29 @@ def _enrich(inv: Invoice, db: Session) -> dict:
         issue_date=inv.issue_date,
         status=inv.status,
         note=inv.note,
+        closing_type=inv.closing_type,
         lines=lines,
-        total_amount=round(total, 0),
+        total_amount=total,
     )
 
 
 @router.get("", response_model=list[InvoiceOut])
 def list_invoices(db: Session = Depends(get_db)):
-    invs = db.query(Invoice).order_by(Invoice.issue_date.desc(), Invoice.inv_no.desc()).all()
+    invs = (
+        db.query(Invoice)
+        .options(
+            joinedload(Invoice.partner),
+            selectinload(Invoice.lines).joinedload(InvoiceLine.item),
+        )
+        .order_by(Invoice.issue_date.desc(), Invoice.inv_no.desc())
+        .all()
+    )
     return [_enrich(inv, db) for inv in invs]
 
 
 @router.get("/{inv_no}", response_model=InvoiceOut)
 def get_invoice(inv_no: str, db: Session = Depends(get_db)):
-    inv = db.get(Invoice, inv_no)
+    inv = _load_inv(db, inv_no)
     if not inv:
         raise HTTPException(404)
     return _enrich(inv, db)
@@ -71,8 +93,7 @@ def create_invoice(body: InvoiceCreate, db: Session = Depends(get_db)):
     for ln in body.lines:
         db.add(InvoiceLine(inv_no=inv_no, part_no=ln.part_no, qty=ln.qty, unit_price=ln.unit_price))
     db.commit()
-    db.refresh(inv)
-    return _enrich(inv, db)
+    return _enrich(_load_inv(db, inv_no), db)
 
 
 @router.patch("/{inv_no}", response_model=InvoiceOut)
@@ -86,15 +107,13 @@ def update_invoice(inv_no: str, body: InvoiceCreate, db: Session = Depends(get_d
     inv.partner_id = body.partner_id
     inv.issue_date = body.issue_date
     inv.note = body.note
-    # replace lines
     for ln in list(inv.lines):
         db.delete(ln)
     db.flush()
     for ln in body.lines:
         db.add(InvoiceLine(inv_no=inv_no, part_no=ln.part_no, qty=ln.qty, unit_price=ln.unit_price))
     db.commit()
-    db.refresh(inv)
-    return _enrich(inv, db)
+    return _enrich(_load_inv(db, inv_no), db)
 
 
 @router.post("/{inv_no}/issue", response_model=InvoiceOut)
@@ -110,9 +129,13 @@ def issue_invoice(inv_no: str, db: Session = Depends(get_db)):
     if not inv.lines:
         raise HTTPException(400, "품목이 없습니다")
 
+    # 이동평균단가 bulk 조회 (라인 수만큼 개별 쿼리 → 1회)
+    part_nos = list({ln.part_no for ln in inv.lines})
+    avg_map = get_avg_price_bulk(db, part_nos)
+
     for ln in inv.lines:
         so_no = next_doc_no(db, "SO", "sales_order", "so_no")
-        so = SalesOrder(
+        db.add(SalesOrder(
             so_no=so_no,
             partner_id=inv.partner_id,
             part_no=ln.part_no,
@@ -121,12 +144,10 @@ def issue_invoice(inv_no: str, db: Session = Depends(get_db)):
             due_date=inv.issue_date,
             status=SOStatus.closed,
             note=f"거래명세서 {inv_no} 자동생성",
-        )
-        db.add(so)
+        ))
         db.flush()
-
         sh_no = next_doc_no(db, "SH", "shipment", "sh_no")
-        sh = Shipment(
+        db.add(Shipment(
             sh_no=sh_no,
             so_no=so_no,
             part_no=ln.part_no,
@@ -135,17 +156,15 @@ def issue_invoice(inv_no: str, db: Session = Depends(get_db)):
             unit_price=float(ln.unit_price),
             status=ShipmentStatus.confirmed,
             note=f"거래명세서 {inv_no}",
-        )
-        db.add(sh)
+        ))
         db.flush()
-        avg = get_avg_price(db, ln.part_no)
-        post_ledger(db, ln.part_no, inv.issue_date, LedgerType.shipment, -ln.qty, avg,
+        post_ledger(db, ln.part_no, inv.issue_date, LedgerType.shipment, -ln.qty,
+                    avg_map.get(ln.part_no, 0.0),
                     ref_type="SH", ref_no=sh_no, note=f"거래명세서 {inv_no}")
 
     inv.status = InvoiceStatus.issued
     db.commit()
-    db.refresh(inv)
-    return _enrich(inv, db)
+    return _enrich(_load_inv(db, inv_no), db)
 
 
 @router.post("/{inv_no}/cancel", response_model=InvoiceOut)
@@ -175,8 +194,47 @@ def cancel_invoice(inv_no: str, db: Session = Depends(get_db)):
 
     inv.status = InvoiceStatus.cancelled
     db.commit()
-    db.refresh(inv)
-    return _enrich(inv, db)
+    return _enrich(_load_inv(db, inv_no), db)
+
+
+@router.patch("/{inv_no}/closing", response_model=InvoiceOut)
+def set_closing_type(inv_no: str, closing_type: str | None = None, db: Session = Depends(get_db)):
+    """마감구분 설정: null=미설정, '금월'=금월마감, '이월'=이월"""
+    inv = db.get(Invoice, inv_no)
+    if not inv:
+        raise HTTPException(404)
+    inv.closing_type = closing_type
+    db.commit()
+    return _enrich(_load_inv(db, inv_no), db)
+
+
+@router.get("/summary/by-partner-month")
+def summary_by_partner_month(db: Session = Depends(get_db)):
+    """업체별 월별 매출 집계 (이월 반영)"""
+    invs = db.query(Invoice).filter(Invoice.status == InvoiceStatus.issued).all()
+    result: dict[str, dict[str, float]] = {}  # {partner_name: {YYYY-MM: amount}}
+
+    for inv in invs:
+        partner = db.get(Partner, inv.partner_id)
+        p_name = partner.name if partner else inv.partner_id
+
+        # 이월 처리: 25일 이후 && closing_type == "이월" → 다음 달로
+        d = inv.issue_date
+        if d.day >= 25 and inv.closing_type == "이월":
+            y, m = d.year, d.month + 1
+            if m > 12:
+                y, m = y + 1, 1
+            ym = f"{y}-{m:02d}"
+        else:
+            ym = d.strftime("%Y-%m")
+
+        total = sum(int(ln.qty * float(ln.unit_price)) for ln in inv.lines)
+
+        if p_name not in result:
+            result[p_name] = {}
+        result[p_name][ym] = result[p_name].get(ym, 0) + total
+
+    return result
 
 
 @router.get("/{inv_no}/print", response_class=HTMLResponse)
@@ -202,6 +260,11 @@ def print_invoice(inv_no: str, db: Session = Depends(get_db)):
     p_address = getattr(partner, 'address', '') or ''
     p_tel     = getattr(partner, 'contact', '') or ''
 
+    def _fmt_unit(p: float) -> str:
+        """단가: 소수점 필요할 때만 표시 (241.5 → 241.5, 242.0 → 242)"""
+        s = f"{p:,.2f}".rstrip('0').rstrip('.')
+        return s
+
     rows_html = ""
     total_supply = 0.0
     total_vat    = 0.0
@@ -209,8 +272,9 @@ def print_invoice(inv_no: str, db: Session = Depends(get_db)):
         item = db.get(Item, ln.part_no)
         name = item.name if item else ln.part_no
         unit = item.unit if item else "EA"
-        sup  = round(ln.qty * float(ln.unit_price), 0)
-        vat  = round(sup * 0.1, 0)
+        up   = float(ln.unit_price)
+        sup  = int(ln.qty * up)        # 합계: 원 단위 절사
+        vat  = round(sup * 0.1, 0)    # 부가세: 원 단위 반올림
         total_supply += sup
         total_vat    += vat
         rows_html += f"""
@@ -220,8 +284,8 @@ def print_invoice(inv_no: str, db: Session = Depends(get_db)):
           <td>{name}</td>
           <td class="c">{unit}</td>
           <td class="r">{ln.qty:,}</td>
-          <td class="r">&#8361;{float(ln.unit_price):,.0f}</td>
-          <td class="r">&#8361;{sup:,.0f}</td>
+          <td class="r">&#8361;{_fmt_unit(up)}</td>
+          <td class="r">&#8361;{sup:,}</td>
           <td class="r">&#8361;{vat:,.0f}</td>
         </tr>"""
     for _ in range(max(0, 5 - len(inv.lines))):

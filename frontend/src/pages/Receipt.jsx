@@ -1019,28 +1019,29 @@ export default function Receipt() {
 
   return (
     <div>
-      <div className="toolbar">
-        <button className={`btn ${tab === 'receipts' ? 'btn-primary' : 'btn-outline'}`} onClick={() => setTab('receipts')}>입고 목록</button>
-        <button className={`btn ${tab === 'inspect' ? 'btn-primary' : 'btn-outline'}`} onClick={() => setTab('inspect')}>검사 내역</button>
-        <div className="spacer" />
-        {tab === 'receipts' && (
-          <>
-            <button className="btn btn-outline"
-              style={{ borderColor: '#16a34a', color: '#16a34a', fontWeight: 600 }}
-              onClick={() => setShowOutsourceModal(true)}>
-              외주 입고
-            </button>
-            <button className="btn btn-outline"
-              style={{ borderColor: '#0f766e', color: '#0f766e', fontWeight: 600 }}
-              onClick={() => setShowDirectModal(true)}>
-              직접 입고 (자체생산)
-            </button>
-            <button className="btn btn-primary" onClick={() => setShowModal(true)}>+ 입고 등록</button>
-          </>
-        )}
+      {/* 탭 + 액션 바 */}
+      <div className="erp-panel" style={{marginBottom:8}}>
+        <div className="erp-actions">
+          <div className="qdate-bar">
+            {[['receipts','입고 목록'],['inspect','검사 내역']].map(([v,l])=>(
+              <button key={v} className={`qdate-btn${tab===v?' active':''}`} onClick={()=>setTab(v)}>{l}</button>
+            ))}
+          </div>
+          <div className="spacer"/>
+          {tab==='receipts' && <>
+            <button className="btn btn-sm btn-outline" style={{borderColor:'#16a34a',color:'#16a34a'}} onClick={()=>setShowOutsourceModal(true)}>외주 입고</button>
+            <button className="btn btn-sm btn-outline" style={{borderColor:'#0f766e',color:'#0f766e'}} onClick={()=>setShowDirectModal(true)}>직접 입고</button>
+            <button className="btn btn-sm btn-primary" onClick={()=>setShowModal(true)}>＋ 입고 등록</button>
+          </>}
+        </div>
       </div>
 
       {tab === 'receipts' && (
+        <>
+        <div className="result-bar">
+          <span className="result-bar-title">입고 목록</span>
+          <span className="result-bar-count">{receipts.length}건</span>
+        </div>
         <div className="table-wrap">
           <table>
             <thead>
@@ -1096,9 +1097,15 @@ export default function Receipt() {
             </tbody>
           </table>
         </div>
+        </>
       )}
 
       {tab === 'inspect' && (
+        <>
+        <div className="result-bar">
+          <span className="result-bar-title">검사 내역</span>
+          <span className="result-bar-count">{inspections.length}건</span>
+        </div>
         <div className="table-wrap">
           <table>
             <thead>
@@ -1120,6 +1127,7 @@ export default function Receipt() {
             </tbody>
           </table>
         </div>
+        </>
       )}
 
       {showModal && <ReceiptModal onClose={() => setShowModal(false)} onSaved={() => { setShowModal(false); load() }} />}

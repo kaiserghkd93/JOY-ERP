@@ -1,14 +1,14 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from sqlalchemy import func, extract, cast, Date
-from datetime import date
+from datetime import date, timedelta
 from app.database import get_db
 from app.models.purchase import PurchaseOrder, PurchaseOrderGroup, Receipt, ReceiptStatus, POStatus
-from app.models.sales import SalesOrder, Shipment, SOStatus, ShipmentStatus
+from app.models.sales import SalesOrder, Shipment, SOStatus, ShipmentStatus, SalesTarget
 from app.models.ledger import StockLedger
 from app.models.master import Item, Partner
 from app.models.quality import Inspection
-from app.services.ledger_service import get_stock, get_avg_price
+from app.services.ledger_service import get_stock, get_avg_price, get_stock_bulk, get_avg_price_bulk
 
 router = APIRouter(prefix="/dashboard", tags=["대시보드"])
 
@@ -65,7 +65,10 @@ def kpi(year: int | None = None, month: int | None = None, db: Session = Depends
     shipped_val = abs(float(shipped_val))
 
     items = db.query(Item).filter(Item.active == True).all()
-    stock_value = sum(get_stock(db, i.part_no) * get_avg_price(db, i.part_no) for i in items)
+    part_nos = [i.part_no for i in items]
+    stocks = get_stock_bulk(db, part_nos)
+    avgs = get_avg_price_bulk(db, part_nos)
+    stock_value = sum(stocks.get(p, 0) * avgs.get(p, 0.0) for p in part_nos)
     inventory_turnover = round(shipped_val / stock_value, 2) if stock_value > 0 else 0.0
 
     # ── 마진: DB SUM으로 매출 집계 ──
@@ -87,7 +90,9 @@ def kpi(year: int | None = None, month: int | None = None, db: Session = Depends
         extract("year", Shipment.ship_date) == y,
         extract("month", Shipment.ship_date) == m,
     ).group_by(Shipment.part_no).all()
-    total_cost = sum(int(r.total_qty) * get_avg_price(db, r.part_no) for r in ship_parts)
+    ship_part_nos = [r.part_no for r in ship_parts]
+    ship_avgs = get_avg_price_bulk(db, ship_part_nos)
+    total_cost = sum(int(r.total_qty) * ship_avgs.get(r.part_no, 0.0) for r in ship_parts)
 
     gross_profit = round(total_revenue - total_cost, 0)
     margin_rate = round((total_revenue - total_cost) / total_revenue * 100, 1) if total_revenue > 0 else 0.0
@@ -652,10 +657,13 @@ def supplier_customer_flow(year: int, month: int, db: Session = Depends(get_db))
 def stock_summary(db: Session = Depends(get_db)):
     """품목별 현재고·재고금액·이동평균단가"""
     items = db.query(Item).filter(Item.active == True).all()
+    part_nos = [i.part_no for i in items]
+    stocks = get_stock_bulk(db, part_nos)
+    avgs = get_avg_price_bulk(db, part_nos)
     rows = []
     for item in items:
-        stock = get_stock(db, item.part_no)
-        avg   = get_avg_price(db, item.part_no)
+        stock = stocks.get(item.part_no, 0)
+        avg   = avgs.get(item.part_no, 0.0)
         margin_per = round((float(item.std_sell_price) - avg) / float(item.std_sell_price) * 100, 1) if item.std_sell_price else 0
         rows.append({
             "part_no": item.part_no,
@@ -671,3 +679,139 @@ def stock_summary(db: Session = Depends(get_db)):
             "margin_pct": margin_per,
         })
     return sorted(rows, key=lambda x: x["stock_value"], reverse=True)
+
+
+@router.get("/alerts")
+def alerts(db: Session = Depends(get_db)):
+    """상단 알람바: 납기 초과·임박 발주, 신규 수주 요청"""
+    today = date.today()
+    soon = today + timedelta(days=7)
+    result = []
+
+    # 납기 초과 (open/partial PO where due_date < today)
+    overdue_pos = db.query(PurchaseOrder).filter(
+        PurchaseOrder.due_date < today,
+        PurchaseOrder.status.in_([POStatus.open, POStatus.partial]),
+    ).order_by(PurchaseOrder.due_date).limit(10).all()
+
+    partner_ids = list({po.partner_id for po in overdue_pos})
+    partner_map = {p.partner_id: p.name for p in db.query(Partner).filter(Partner.partner_id.in_(partner_ids)).all()} if partner_ids else {}
+
+    for po in overdue_pos:
+        days_overdue = (today - po.due_date).days
+        result.append({
+            "type": "overdue",
+            "doc_no": po.po_no,
+            "part_no": po.part_no,
+            "partner": partner_map.get(po.partner_id, po.partner_id),
+            "due_date": po.due_date.isoformat(),
+            "days": days_overdue,
+            "message": f"[발주 납기초과 {days_overdue}일] {po.part_no} ({partner_map.get(po.partner_id, '')})",
+        })
+
+    # 납기 임박 (due_date between today and today+7)
+    due_soon_pos = db.query(PurchaseOrder).filter(
+        PurchaseOrder.due_date >= today,
+        PurchaseOrder.due_date <= soon,
+        PurchaseOrder.status.in_([POStatus.open, POStatus.partial]),
+    ).order_by(PurchaseOrder.due_date).limit(10).all()
+
+    partner_ids2 = list({po.partner_id for po in due_soon_pos} - set(partner_ids))
+    if partner_ids2:
+        partner_map.update({p.partner_id: p.name for p in db.query(Partner).filter(Partner.partner_id.in_(partner_ids2)).all()})
+
+    for po in due_soon_pos:
+        days_left = (po.due_date - today).days
+        flag = "warn" if days_left <= 3 else "info"
+        result.append({
+            "type": flag,
+            "doc_no": po.po_no,
+            "part_no": po.part_no,
+            "partner": partner_map.get(po.partner_id, po.partner_id),
+            "due_date": po.due_date.isoformat(),
+            "days": days_left,
+            "message": f"[납기 D-{days_left}] {po.part_no} ({partner_map.get(po.partner_id, '')})",
+        })
+
+    # 신규 수주 (최근 3일 이내 등록된 SalesOrder)
+    new_so_cutoff = today - timedelta(days=3)
+    new_sos = db.query(SalesOrder).filter(
+        cast(SalesOrder.created_at, Date) >= new_so_cutoff,
+        SalesOrder.status.in_([SOStatus.open, SOStatus.partial]),
+    ).order_by(SalesOrder.created_at.desc()).limit(10).all()
+
+    so_partner_ids = list({so.partner_id for so in new_sos})
+    so_partner_map = {p.partner_id: p.name for p in db.query(Partner).filter(Partner.partner_id.in_(so_partner_ids)).all()} if so_partner_ids else {}
+
+    for so in new_sos:
+        result.append({
+            "type": "new_request",
+            "doc_no": so.so_no,
+            "part_no": so.part_no,
+            "partner": so_partner_map.get(so.partner_id, so.partner_id),
+            "due_date": so.due_date.isoformat(),
+            "days": (so.due_date - today).days,
+            "message": f"[신규수주] {so_partner_map.get(so.partner_id, so.partner_id)} · {so.part_no} 수량 {so.qty:,}",
+        })
+
+    return result
+
+
+@router.get("/sales-vs-target")
+def sales_vs_target(year: int | None = None, month: int | None = None, db: Session = Depends(get_db)):
+    """거래처별 목표 vs 실적 매출 비교"""
+    y = year or date.today().year
+    m = month or date.today().month
+
+    # 실제 출하 매출 (Shipment 기준)
+    rows = db.query(
+        SalesOrder.partner_id,
+        func.sum(Shipment.qty * Shipment.unit_price).label("actual"),
+    ).join(Shipment, Shipment.so_no == SalesOrder.so_no).filter(
+        Shipment.status == ShipmentStatus.confirmed,
+        extract("year",  Shipment.ship_date) == y,
+        extract("month", Shipment.ship_date) == m,
+    ).group_by(SalesOrder.partner_id).all()
+
+    actual_map = {r.partner_id: float(r.actual or 0) for r in rows}
+
+    # 목표
+    targets = {
+        t.partner_id: float(t.target_amount)
+        for t in db.query(SalesTarget).filter(
+            SalesTarget.year == y, SalesTarget.month == m
+        ).all()
+    }
+
+    # 거래처 목록 (목표 or 실적이 있는 모든 파트너)
+    all_ids = set(actual_map.keys()) | set(targets.keys())
+    partner_map = {
+        p.partner_id: p.name
+        for p in db.query(Partner).filter(Partner.partner_id.in_(all_ids)).all()
+    }
+
+    details = []
+    for pid in sorted(all_ids):
+        actual = actual_map.get(pid, 0.0)
+        target = targets.get(pid, 0.0)
+        rate = round(actual / target * 100, 1) if target > 0 else None
+        details.append({
+            "partner_id": pid,
+            "partner_name": partner_map.get(pid, pid),
+            "target": target,
+            "actual": actual,
+            "rate": rate,
+        })
+
+    total_target = sum(d["target"] for d in details)
+    total_actual = sum(d["actual"] for d in details)
+    total_rate = round(total_actual / total_target * 100, 1) if total_target > 0 else None
+
+    return {
+        "year": y,
+        "month": m,
+        "total_target": total_target,
+        "total_actual": total_actual,
+        "total_rate": total_rate,
+        "details": sorted(details, key=lambda x: x["actual"], reverse=True),
+    }

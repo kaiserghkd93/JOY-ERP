@@ -867,87 +867,59 @@ export default function Sales() {
 
   return (
     <div>
-      <div className="toolbar">
-        <button className={`btn ${tab === 'orders' ? 'btn-primary' : 'btn-outline'}`} onClick={() => setTab('orders')}>수주 목록</button>
-        <button className={`btn ${tab === 'remaining' ? 'btn-primary' : 'btn-outline'}`} onClick={() => setTab('remaining')}>미납 잔량</button>
-        <button className={`btn ${tab === 'ship' ? 'btn-primary' : 'btn-outline'}`} onClick={() => setTab('ship')}>출하 내역</button>
-        <MonthPicker />
-        <div className="spacer" />
-        {tab === 'ship' && (() => {
-          const btnStyle = (active) => ({
-            padding: '4px 10px', fontSize: 12, borderRadius: 4, cursor: 'pointer', border: '1px solid #cbd5e1',
-            background: active ? '#1e40af' : '#f8fafc', color: active ? '#fff' : '#475569', fontWeight: active ? 600 : 400,
-          })
-          return (
-            <>
-              {['today','week','month','all'].map(f => (
-                <button key={f} style={btnStyle(shipDateFilter === f)} onClick={() => setShipDateFilter(f)}>
-                  {f === 'today' ? '오늘' : f === 'week' ? '이번주' : f === 'month' ? '이번달' : '전체'}
-                </button>
+      {/* 탭 + 액션 바 */}
+      <div className="erp-panel" style={{marginBottom:8}}>
+        <div className="erp-grid-2" style={{gridTemplateColumns:'auto 1fr'}}>
+          <div className="erp-label">조회 월</div>
+          <div className="erp-value"><MonthPicker /></div>
+        </div>
+        <div className="erp-actions">
+          <div className="qdate-bar">
+            {[['orders','수주 목록'],['remaining','미납 잔량'],['ship','출하 내역']].map(([v,l])=>(
+              <button key={v} className={`qdate-btn${tab===v?' active':''}`} onClick={()=>setTab(v)}>{l}</button>
+            ))}
+          </div>
+          {tab==='ship' && (
+            <div className="qdate-bar" style={{marginLeft:8}}>
+              {[['today','오늘'],['week','이번주'],['month','이번달'],['all','전체']].map(([f,l])=>(
+                <button key={f} className={`qdate-btn${shipDateFilter===f?' active':''}`} onClick={()=>setShipDateFilter(f)}>{l}</button>
               ))}
-            </>
-          )
-        })()}
-        <button className="btn btn-outline"
-          style={{ borderColor: '#0f766e', color: '#0f766e', fontWeight: 600 }}
-          onClick={() => setShowDirectShip(true)}>
-          직접 출하 등록
-        </button>
-        <button className="btn btn-outline"
-          style={{ borderColor: '#7c3aed', color: '#7c3aed', fontWeight: 600 }}
-          onClick={() => setShowHyundaiImport(true)}>
-          현대 수주 임포트
-        </button>
-        <button className="btn btn-outline"
-          style={{ borderColor: '#0891b2', color: '#0e7490', fontWeight: 600 }}
-          onClick={() => setShowHyundaiShipImport(true)}>
-          현대 출고내역 임포트
-        </button>
-        <button className="btn btn-outline"
-          style={{ borderColor: '#f59e0b', color: '#b45309', fontWeight: 600 }}
-          onClick={() => setShowLsImport(true)}>
-          LS 출고내역 임포트
-        </button>
-        <button className="btn btn-primary" onClick={() => setShowSO(true)}>+ 수주 등록</button>
+            </div>
+          )}
+          <div className="spacer"/>
+          <button className="btn btn-sm btn-outline" style={{borderColor:'#0f766e',color:'#0f766e'}} onClick={()=>setShowDirectShip(true)}>직접 출하</button>
+          <button className="btn btn-sm btn-outline" style={{borderColor:'#7c3aed',color:'#7c3aed'}} onClick={()=>setShowHyundaiImport(true)}>현대 수주</button>
+          <button className="btn btn-sm btn-outline" style={{borderColor:'#0891b2',color:'#0e7490'}} onClick={()=>setShowHyundaiShipImport(true)}>현대 출고</button>
+          <button className="btn btn-sm btn-outline" style={{borderColor:'#f59e0b',color:'#b45309'}} onClick={()=>setShowLsImport(true)}>LS 출고</button>
+          <button className="btn btn-sm btn-primary" onClick={()=>setShowSO(true)}>＋ 수주 등록</button>
+        </div>
       </div>
 
       {tab === 'orders' && (() => {
         const partners = [...new Set(filteredOrders.map(o => o.partner_id))].filter(Boolean).sort()
         const counts = {}
         filteredOrders.forEach(o => { counts[o.partner_id] = (counts[o.partner_id] || 0) + 1 })
-        const totalActive = filteredOrders.filter(o => o.status !== '취소').length
         return (
-          <div style={{ display: 'flex', gap: 6, padding: '8px 16px', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', flexWrap: 'wrap', alignItems: 'center' }}>
-            <span style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600, marginRight: 4 }}>고객사</span>
-            <button
-              onClick={() => setPartnerFilter('')}
-              style={{
-                padding: '4px 14px', fontSize: 12, borderRadius: 20, cursor: 'pointer', border: '1.5px solid',
-                borderColor: !partnerFilter ? '#1e40af' : '#cbd5e1',
-                background: !partnerFilter ? '#1e40af' : '#fff',
-                color: !partnerFilter ? '#fff' : '#475569',
-                fontWeight: !partnerFilter ? 700 : 400,
-              }}>
-              전체 <span style={{ opacity: 0.75 }}>({filteredOrders.length})</span>
-            </button>
-            {partners.map(p => (
-              <button key={p}
-                onClick={() => setPartnerFilter(p === partnerFilter ? '' : p)}
-                style={{
-                  padding: '4px 14px', fontSize: 12, borderRadius: 20, cursor: 'pointer', border: '1.5px solid',
-                  borderColor: partnerFilter === p ? '#1e40af' : '#cbd5e1',
-                  background: partnerFilter === p ? '#1e40af' : '#fff',
-                  color: partnerFilter === p ? '#fff' : '#475569',
-                  fontWeight: partnerFilter === p ? 700 : 400,
-                }}>
-                {p} <span style={{ opacity: 0.75 }}>({counts[p] || 0})</span>
-              </button>
-            ))}
+          <div className="erp-panel" style={{marginBottom:8}}>
+            <div className="erp-actions" style={{flexWrap:'wrap'}}>
+              <span style={{fontSize:11,color:'#94a3b8',fontWeight:600}}>고객사</span>
+              <button className={`qdate-btn${!partnerFilter?' active':''}`} onClick={()=>setPartnerFilter('')}>전체 ({filteredOrders.length})</button>
+              {partners.map(p=>(
+                <button key={p} className={`qdate-btn${partnerFilter===p?' active':''}`} onClick={()=>setPartnerFilter(p===partnerFilter?'':p)}>
+                  {p} ({counts[p]||0})
+                </button>
+              ))}
+            </div>
           </div>
         )
       })()}
 
       {tab === 'orders' && (
+        <>
+        <div className="result-bar">
+          <span className="result-bar-title">수주 목록</span>
+          <span className="result-bar-count">{filteredOrders.filter(o=>!partnerFilter||o.partner_id===partnerFilter).length}건</span>
+        </div>
         <div className="table-wrap">
           <table style={{ tableLayout: 'fixed', width: '100%' }}>
             <colgroup>
@@ -998,6 +970,7 @@ export default function Sales() {
             </tbody>
           </table>
         </div>
+        </>
       )}
 
       {tab === 'remaining' && (() => {
@@ -1007,20 +980,20 @@ export default function Sales() {
         const filtered = filteredRemaining.filter(o => !partnerFilter || o.partner_id === partnerFilter)
         return (
           <div>
-            <div style={{ display: 'flex', gap: 6, padding: '8px 16px', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', flexWrap: 'wrap', alignItems: 'center' }}>
-              <span style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600, marginRight: 4 }}>고객사</span>
-              <button onClick={() => setPartnerFilter('')} style={{
-                fontSize: 12, padding: '3px 12px', borderRadius: 20, border: '1px solid',
-                cursor: 'pointer', borderColor: !partnerFilter ? '#1e40af' : '#cbd5e1',
-                background: !partnerFilter ? '#1e40af' : '#fff', color: !partnerFilter ? '#fff' : '#475569', fontWeight: !partnerFilter ? 700 : 400,
-              }}>전체 ({remaining.length})</button>
-              {remPartners.map(p => (
-                <button key={p} onClick={() => setPartnerFilter(p)} style={{
-                  fontSize: 12, padding: '3px 12px', borderRadius: 20, border: '1px solid',
-                  cursor: 'pointer', borderColor: partnerFilter === p ? '#1e40af' : '#cbd5e1',
-                  background: partnerFilter === p ? '#1e40af' : '#fff', color: partnerFilter === p ? '#fff' : '#475569', fontWeight: partnerFilter === p ? 700 : 400,
-                }}>{p} ({remCounts[p] || 0})</button>
-              ))}
+            <div className="erp-panel" style={{marginBottom:8}}>
+              <div className="erp-actions" style={{flexWrap:'wrap'}}>
+                <span style={{fontSize:11,color:'#94a3b8',fontWeight:600}}>고객사</span>
+                <button className={`qdate-btn${!partnerFilter?' active':''}`} onClick={()=>setPartnerFilter('')}>전체 ({remaining.length})</button>
+                {remPartners.map(p=>(
+                  <button key={p} className={`qdate-btn${partnerFilter===p?' active':''}`} onClick={()=>setPartnerFilter(p)}>
+                    {p} ({remCounts[p]||0})
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="result-bar">
+              <span className="result-bar-title">미납 잔량</span>
+              <span className="result-bar-count">{filtered.length}건</span>
             </div>
             <div className="table-wrap">
               <table>
@@ -1051,32 +1024,16 @@ export default function Sales() {
         const shipCounts = {}
         filteredShipments.forEach(s => { shipCounts[s.partner_id] = (shipCounts[s.partner_id] || 0) + 1 })
         return (
-          <div style={{ display: 'flex', gap: 6, padding: '8px 16px', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', flexWrap: 'wrap', alignItems: 'center' }}>
-            <span style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600, marginRight: 4 }}>고객사</span>
-            <button
-              onClick={() => setShipPartnerFilter('')}
-              style={{
-                padding: '4px 14px', fontSize: 12, borderRadius: 20, cursor: 'pointer', border: '1.5px solid',
-                borderColor: !shipPartnerFilter ? '#1e40af' : '#cbd5e1',
-                background: !shipPartnerFilter ? '#1e40af' : '#fff',
-                color: !shipPartnerFilter ? '#fff' : '#475569',
-                fontWeight: !shipPartnerFilter ? 700 : 400,
-              }}>
-              전체 <span style={{ opacity: 0.75 }}>({filteredShipments.length})</span>
-            </button>
-            {shipPartners.map(p => (
-              <button key={p}
-                onClick={() => setShipPartnerFilter(p === shipPartnerFilter ? '' : p)}
-                style={{
-                  padding: '4px 14px', fontSize: 12, borderRadius: 20, cursor: 'pointer', border: '1.5px solid',
-                  borderColor: shipPartnerFilter === p ? '#1e40af' : '#cbd5e1',
-                  background: shipPartnerFilter === p ? '#1e40af' : '#fff',
-                  color: shipPartnerFilter === p ? '#fff' : '#475569',
-                  fontWeight: shipPartnerFilter === p ? 700 : 400,
-                }}>
-                {p} <span style={{ opacity: 0.75 }}>({shipCounts[p] || 0})</span>
-              </button>
-            ))}
+          <div className="erp-panel" style={{marginBottom:8}}>
+            <div className="erp-actions" style={{flexWrap:'wrap'}}>
+              <span style={{fontSize:11,color:'#94a3b8',fontWeight:600}}>고객사</span>
+              <button className={`qdate-btn${!shipPartnerFilter?' active':''}`} onClick={()=>setShipPartnerFilter('')}>전체 ({filteredShipments.length})</button>
+              {shipPartners.map(p=>(
+                <button key={p} className={`qdate-btn${shipPartnerFilter===p?' active':''}`} onClick={()=>setShipPartnerFilter(p===shipPartnerFilter?'':p)}>
+                  {p} ({shipCounts[p]||0})
+                </button>
+              ))}
+            </div>
           </div>
         )
       })()}
@@ -1116,6 +1073,11 @@ export default function Sales() {
         }
 
         return (
+          <>
+          <div className="result-bar">
+            <span className="result-bar-title">출하 내역</span>
+            <span className="result-bar-count">{filtered.length}건</span>
+          </div>
           <div className="table-wrap">
             <table>
               <thead>
@@ -1183,6 +1145,7 @@ export default function Sales() {
               </tbody>
             </table>
           </div>
+          </>
         )
       })()}
 

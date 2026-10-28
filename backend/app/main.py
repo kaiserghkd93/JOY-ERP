@@ -6,9 +6,18 @@ from fastapi.responses import FileResponse
 from app.database import engine, Base, SessionLocal
 from app.routers import master, purchase, ledger, sales, quality, production, dashboard
 from app.routers import purchase_group, invoice, auto_order, import_ls, bom, reports, cost, mold, mes_sync
-from app.routers import auth, portal, admin_import, monthly_sales, monthly_purchase
+from app.routers import auth, portal, admin_import, monthly_sales, monthly_purchase, sales_target
 
 Base.metadata.create_all(bind=engine)
+
+# closing_type 컬럼 없으면 추가 (기존 DB 호환)
+from sqlalchemy import text as _text
+with engine.connect() as _conn:
+    try:
+        _conn.execute(_text("ALTER TABLE invoice ADD COLUMN closing_type VARCHAR(10)"))
+        _conn.commit()
+    except Exception:
+        pass  # 이미 존재하면 무시
 
 app = FastAPI(title="조이산업 ERP", version="0.2.0")
 
@@ -43,6 +52,7 @@ app.include_router(reports.router)
 app.include_router(cost.router)
 app.include_router(mold.router)
 app.include_router(mes_sync.router)
+app.include_router(sales_target.router)
 
 
 @app.on_event("startup")

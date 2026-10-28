@@ -1,5 +1,8 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import api from '../api'
+import Pagination from '../components/Pagination'
+
+const PAGE_SIZE = 50
 
 function ItemModal({ item, onClose, onSaved }) {
   const editing = !!item
@@ -182,6 +185,8 @@ export default function Master() {
   const [typeFilter, setTypeFilter] = useState('')
   const [customerFilter, setCustomerFilter] = useState('')
   const [customerParts, setCustomerParts] = useState({}) // {partner_id: [part_no]}
+  const [itemPage, setItemPage] = useState(1)
+  const [partnerPage, setPartnerPage] = useState(1)
   const fileRef = useRef()
   const bulkRef = useRef()
   const lsRef = useRef()
@@ -298,6 +303,12 @@ export default function Master() {
     p.name.toLowerCase().includes(q.toLowerCase())
   )
 
+  const pagedItems    = filteredItems.slice((itemPage - 1) * PAGE_SIZE, itemPage * PAGE_SIZE)
+  const pagedPartners = filteredPartners.slice((partnerPage - 1) * PAGE_SIZE, partnerPage * PAGE_SIZE)
+
+  const resetItemPage    = () => setItemPage(1)
+  const resetPartnerPage = () => setPartnerPage(1)
+
   return (
     <div>
       {/* 통합 업로드 배너 */}
@@ -349,74 +360,85 @@ export default function Master() {
         </div>
       )}
 
-      <div className="toolbar">
-        <button className={`btn ${tab === 'items' ? 'btn-primary' : 'btn-outline'}`} onClick={() => setTab('items')}>품목 마스터</button>
-        <button className={`btn ${tab === 'partners' ? 'btn-primary' : 'btn-outline'}`} onClick={() => setTab('partners')}>거래처 마스터</button>
-        <input type="search" placeholder="검색" value={q} onChange={e => setQ(e.target.value)} style={{ maxWidth: 180 }} />
-        {tab === 'items' && (<>
-          {/* 유형 필터 버튼 */}
-          {['', '제품', '외주품', '원자재', '부자재'].map(t => (
-            <button key={t}
-              onClick={() => setTypeFilter(t)}
-              style={{
-                padding: '4px 12px', fontSize: 12, borderRadius: 20, cursor: 'pointer',
-                border: typeFilter === t ? '1.5px solid #1d4ed8' : '1.5px solid #e2e8f0',
-                background: typeFilter === t ? '#1d4ed8' : 'transparent',
-                color: typeFilter === t ? '#fff' : '#64748b',
-                fontWeight: typeFilter === t ? 700 : 400,
-              }}>
-              {t || '전체'}
-              {t && <span style={{ marginLeft: 4, opacity: 0.7, fontWeight: 400 }}>
-                {items.filter(i => (TYPE_GROUPS[t] || [t]).includes(i.item_type)).length}
-              </span>}
-            </button>
-          ))}
-          <select value={customerFilter} onChange={e => setCustomerFilter(e.target.value)} style={{ fontSize: 13 }}>
-            <option value="">전체 고객사</option>
-            {partners.filter(p => customerParts[p.partner_id]).map(p => (
-              <option key={p.partner_id} value={p.partner_id}>
-                {p.name} ({(customerParts[p.partner_id] || []).length})
-              </option>
-            ))}
-          </select>
-          <select value={supplierFilter} onChange={e => setSupplierFilter(e.target.value)} style={{ fontSize: 13 }}>
-            <option value="">전체 외주처</option>
-            {suppliers.map(s => <option key={s.partner_id} value={s.partner_id}>{s.name}</option>)}
-            <option value="__none__">미지정</option>
-          </select>
-          <select value={locFilter} onChange={e => setLocFilter(e.target.value)} style={{ fontSize: 13 }}>
-            <option value="">전체 창고</option>
-            <option value="A동">A동</option>
-            <option value="B동">B동</option>
-            <option value="C동">C동</option>
-            <option value="1F-1">1F-1</option>
-            <option value="1F-2">1F-2</option>
-            <option value="__none__">미지정</option>
-          </select>
-        </>)}
-        <div className="spacer" />
-        {tab === 'items' && (<>
-          <button className="btn btn-outline" style={{ fontSize: 12 }}
-            disabled={lsUploading} onClick={() => lsRef.current?.click()}>
-            {lsUploading ? '업로드 중...' : 'LS 품목리스트 업로드'}
-          </button>
-          <input type="file" accept=".xlsx,.xls" ref={lsRef} style={{ display: 'none' }} onChange={uploadLsItems} />
-          <button className="btn btn-primary" onClick={() => setItemModal({})}>+ 품목 등록</button>
-        </>)}
-        {tab === 'partners' && (
-          <button className="btn btn-primary" onClick={() => setPartnerModal({})}>+ 거래처 등록</button>
+      <div className="erp-panel" style={{marginBottom:8}}>
+        {tab==='items' && (
+          <div className="erp-grid-2" style={{gridTemplateColumns:'auto 1fr auto 1fr auto 1fr auto 1fr'}}>
+            <div className="erp-label">검색</div>
+            <div className="erp-value">
+              <input type="search" placeholder="품번/품명" value={q} onChange={e=>{setQ(e.target.value);resetItemPage();resetPartnerPage()}}
+                style={{border:'none',background:'transparent',fontSize:13,width:'100%'}}/>
+            </div>
+            <div className="erp-label">품목구분</div>
+            <div className="erp-value">
+              <div className="qdate-bar">
+                {['','제품','외주품','원자재','부자재'].map(t=>(
+                  <button key={t} className={`qdate-btn${typeFilter===t?' active':''}`} onClick={()=>setTypeFilter(t)}>
+                    {t||'전체'}{t&&` (${items.filter(i=>(TYPE_GROUPS[t]||[t]).includes(i.item_type)).length})`}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="erp-label">고객사</div>
+            <div className="erp-value">
+              <select value={customerFilter} onChange={e=>setCustomerFilter(e.target.value)} style={{border:'none',background:'transparent',fontSize:13}}>
+                <option value="">전체</option>
+                {partners.filter(p=>customerParts[p.partner_id]).map(p=>(
+                  <option key={p.partner_id} value={p.partner_id}>{p.name} ({(customerParts[p.partner_id]||[]).length})</option>
+                ))}
+              </select>
+            </div>
+            <div className="erp-label">외주처</div>
+            <div className="erp-value">
+              <select value={supplierFilter} onChange={e=>setSupplierFilter(e.target.value)} style={{border:'none',background:'transparent',fontSize:13}}>
+                <option value="">전체</option>
+                {suppliers.map(s=><option key={s.partner_id} value={s.partner_id}>{s.name}</option>)}
+                <option value="__none__">미지정</option>
+              </select>
+            </div>
+          </div>
         )}
+        {tab==='partners' && (
+          <div className="erp-grid-2" style={{gridTemplateColumns:'auto 1fr'}}>
+            <div className="erp-label">검색</div>
+            <div className="erp-value">
+              <input type="search" placeholder="거래처명/코드" value={q} onChange={e=>{setQ(e.target.value);resetItemPage();resetPartnerPage()}}
+                style={{border:'none',background:'transparent',fontSize:13,width:'100%'}}/>
+            </div>
+          </div>
+        )}
+        <div className="erp-actions">
+          <div className="qdate-bar">
+            {[['items','품목 마스터'],['partners','거래처 마스터']].map(([v,l])=>(
+              <button key={v} className={`qdate-btn${tab===v?' active':''}`} onClick={()=>setTab(v)}>{l}</button>
+            ))}
+          </div>
+          <div className="spacer"/>
+          {tab==='items' && <>
+            <button className="btn btn-sm btn-outline" disabled={lsUploading} onClick={()=>lsRef.current?.click()}>
+              {lsUploading?'업로드 중...':'LS 품목 업로드'}
+            </button>
+            <input type="file" accept=".xlsx,.xls" ref={lsRef} style={{display:'none'}} onChange={uploadLsItems}/>
+            <button className="btn btn-sm btn-primary" onClick={()=>setItemModal({})}>＋ 품목 등록</button>
+          </>}
+          {tab==='partners' && (
+            <button className="btn btn-sm btn-primary" onClick={()=>setPartnerModal({})}>＋ 거래처 등록</button>
+          )}
+        </div>
       </div>
 
-      {tab === 'items' && (
+      {tab === 'items' && (<>
+        <div className="result-bar">
+          <span className="result-bar-title">품목 마스터</span>
+          <span className="result-bar-count">{pagedItems.length} / {items.length}건</span>
+        </div>
         <div className="table-wrap">
           <table>
             <thead>
               <tr><th>품번</th><th>품명</th><th>규격</th><th>Unit</th><th>품목구분</th><th>외주처</th><th>창고</th><th>표준입고가</th><th>표준판매가</th><th>안전재고</th><th>수정</th></tr>
             </thead>
             <tbody>
-              {filteredItems.length === 0 && <tr><td colSpan={11} className="empty">품목 없음</td></tr>}
-              {filteredItems.map(i => (
+              {pagedItems.length === 0 && <tr><td colSpan={11} className="empty">품목 없음</td></tr>}
+              {pagedItems.map(i => (
                 <tr key={i.part_no}>
                   <td><code style={{ background: '#f1f5f9', padding: '2px 6px', borderRadius: 4, fontSize: 11 }}>{i.part_no}</code></td>
                   <td>{i.name}</td>
@@ -445,15 +467,20 @@ export default function Master() {
             </tbody>
           </table>
         </div>
-      )}
+        <Pagination page={itemPage} total={filteredItems.length} pageSize={PAGE_SIZE} onChange={setItemPage} />
+      </>)}
 
-      {tab === 'partners' && (
+      {tab === 'partners' && (<>
+        <div className="result-bar">
+          <span className="result-bar-title">거래처 마스터</span>
+          <span className="result-bar-count">{pagedPartners.length} / {partners.length}건</span>
+        </div>
         <div className="table-wrap">
           <table>
             <thead><tr><th>코드</th><th>거래처명</th><th>Type</th><th>사업자번호</th><th>주소</th><th>연락처</th><th>이메일</th><th>수정</th></tr></thead>
             <tbody>
-              {filteredPartners.length === 0 && <tr><td colSpan={8} className="empty">거래처 없음</td></tr>}
-              {filteredPartners.map(p => (
+              {pagedPartners.length === 0 && <tr><td colSpan={8} className="empty">거래처 없음</td></tr>}
+              {pagedPartners.map(p => (
                 <tr key={p.partner_id}>
                   <td><code style={{ fontSize: 11 }}>{p.partner_id}</code></td>
                   <td>{p.name}</td>
@@ -470,7 +497,8 @@ export default function Master() {
             </tbody>
           </table>
         </div>
-      )}
+        <Pagination page={partnerPage} total={filteredPartners.length} pageSize={PAGE_SIZE} onChange={setPartnerPage} />
+      </>)}
 
       {itemModal !== null && (
         <ItemModal

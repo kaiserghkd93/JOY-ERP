@@ -111,7 +111,7 @@ def print_group(group_no: str, db: Session = Depends(get_db)):
     for i, po in enumerate(g.lines, 1):
         item = db.get(Item, po.part_no)
         unit_price = float(po.unit_price or (item.std_buy_price if item else 0) or 0)
-        amount = po.qty * unit_price
+        amount = int(po.qty * unit_price)  # 라인 금액 절사
         total_amount += amount
         all_rows.append({
             "no": i,
@@ -125,7 +125,7 @@ def print_group(group_no: str, db: Session = Depends(get_db)):
             "note": po.note or "",
         })
 
-    vat = total_amount * 0.1
+    vat = round(total_amount * 0.1, 0)
     total_with_vat = total_amount + vat
 
     # ── 페이지 분할 ──
@@ -229,8 +229,8 @@ def print_group(group_no: str, db: Session = Depends(get_db)):
           <td>{r["name"]}</td>
           <td class="td-center">{r["unit"]}</td>
           <td class="td-qty">{r["qty"]:,}</td>
-          <td class="td-price">{r["unit_price"]:,.0f}</td>
-          <td class="td-amt">{r["amount"]:,.0f}</td>
+          <td class="td-price">{f'{r["unit_price"]:,.2f}'.rstrip('0').rstrip('.')}</td>
+          <td class="td-amt">{int(r["amount"]):,}</td>
           <td class="td-center" style="white-space:nowrap">{r["due_date"]}</td>
           <td style="font-size:8.5pt;color:#666">{r["note"]}</td>
         </tr>"""
@@ -464,11 +464,11 @@ def download_pdf(group_no: str, db: Session = Depends(get_db)):
             item.name if item else '',
             item.unit if item else 'EA',
             f'{po.qty:,}',
-            f'₩{up:,.0f}',
-            f'₩{amt:,.0f}',
+            f'₩{f"{up:,.2f}".rstrip("0").rstrip(".")}',
+            f'₩{int(amt):,}',
             po.note or '',
         ])
-    rows.append(['', '', '', '', '', '합계금액', f'₩{total:,.0f}', ''])
+    rows.append(['', '', '', '', '', '합계금액', f'₩{int(total):,}', ''])
 
     item_table = Table(rows, colWidths=col_widths, repeatRows=1)
     item_table.setStyle(TableStyle([

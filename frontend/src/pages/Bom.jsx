@@ -196,9 +196,14 @@ export default function Bom() {
 
   return (
     <div>
-      <div className="toolbar" style={{ marginBottom: 16 }}>
-        <button className={`btn ${tab === 'bom' ? 'btn-primary' : 'btn-outline'}`} onClick={() => setTab('bom')}>BOM 관리</button>
-        <button className={`btn ${tab === 'mrp' ? 'btn-primary' : 'btn-outline'}`} onClick={() => setTab('mrp')}>원재료 구매계획</button>
+      <div className="erp-panel" style={{marginBottom:8}}>
+        <div className="erp-actions">
+          <div className="qdate-bar">
+            {[['bom','BOM 관리'],['mrp','원재료 구매계획']].map(([v,l])=>(
+              <button key={v} className={`qdate-btn${tab===v?' active':''}`} onClick={()=>setTab(v)}>{l}</button>
+            ))}
+          </div>
+        </div>
       </div>
 
       {/* ── BOM 관리 탭 ── */}

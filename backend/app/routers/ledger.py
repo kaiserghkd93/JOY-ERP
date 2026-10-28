@@ -6,7 +6,7 @@ from app.models.master import Item
 from app.schemas.ledger import LedgerOut, StockSnapshot, AdjustRequest
 from app.services.ledger_service import (
     confirm_receipt, cancel_receipt, adjust_stock,
-    get_stock, get_avg_price,
+    get_stock, get_avg_price, get_stock_bulk, get_avg_price_bulk,
 )
 
 router = APIRouter(prefix="/stock", tags=["재고"])
@@ -59,18 +59,19 @@ def set_stock(part_no: str, target_qty: int, note: str = "수동재고입력", d
 def snapshot(db: Session = Depends(get_db)):
     """전 품목 현재고 스냅샷"""
     items = db.query(Item).filter(Item.active == True).all()
-    result = []
-    for item in items:
-        stock = get_stock(db, item.part_no)
-        avg = get_avg_price(db, item.part_no)
-        result.append(StockSnapshot(
+    part_nos = [i.part_no for i in items]
+    stocks = get_stock_bulk(db, part_nos)
+    avgs = get_avg_price_bulk(db, part_nos)
+    return [
+        StockSnapshot(
             part_no=item.part_no,
             name=item.name,
-            current_stock=stock,
-            avg_price=avg,
-            stock_value=round(stock * avg, 2),
-        ))
-    return result
+            current_stock=stocks.get(item.part_no, 0),
+            avg_price=avgs.get(item.part_no, 0.0),
+            stock_value=round(stocks.get(item.part_no, 0) * avgs.get(item.part_no, 0.0), 2),
+        )
+        for item in items
+    ]
 
 
 @router.get("/snapshot/{part_no}", response_model=StockSnapshot)

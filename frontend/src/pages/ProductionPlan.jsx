@@ -153,25 +153,32 @@ export default function ProductionPlan() {
   return (
     <div>
       {/* 헤더 - 연월 선택 */}
-      <div className="toolbar" style={{ marginBottom: 16, alignItems: 'center' }}>
-        <select value={year} onChange={e => setYear(+e.target.value)} style={{ fontSize: 14 }}>
-          {[2025, 2026, 2027].map(y => <option key={y} value={y}>{y}년</option>)}
-        </select>
-        <select value={month} onChange={e => setMonth(+e.target.value)} style={{ fontSize: 14 }}>
-          {MONTHS.map(m => <option key={m} value={m}>{m}월</option>)}
-        </select>
-        <button className="btn btn-primary" onClick={openAdd}>+ 계획 추가</button>
-
-        {/* 요약 KPI */}
-        <div style={{ marginLeft: 'auto', display: 'flex', gap: 16 }}>
+      <div className="erp-panel" style={{marginBottom:8}}>
+        <div className="erp-grid-2" style={{gridTemplateColumns:'auto 1fr auto 1fr'}}>
+          <div className="erp-label">연도</div>
+          <div className="erp-value">
+            <select value={year} onChange={e=>setYear(+e.target.value)} style={{border:'none',background:'transparent',fontSize:13}}>
+              {[2025,2026,2027].map(y=><option key={y} value={y}>{y}년</option>)}
+            </select>
+          </div>
+          <div className="erp-label">월</div>
+          <div className="erp-value">
+            <select value={month} onChange={e=>setMonth(+e.target.value)} style={{border:'none',background:'transparent',fontSize:13}}>
+              {MONTHS.map(m=><option key={m} value={m}>{m}월</option>)}
+            </select>
+          </div>
+        </div>
+        <div className="erp-actions">
+          <button className="btn btn-sm btn-primary" onClick={openAdd}>＋ 계획 추가</button>
+          <div className="spacer"/>
           {[
-            { label: '월 계획', value: totalPlanned.toLocaleString() + '개', color: '#1d4ed8' },
-            { label: '월 실적', value: totalActual.toLocaleString() + '개', color: '#16a34a' },
-            { label: '달성률', value: totalRate + '%', color: totalRate >= 100 ? '#16a34a' : totalRate >= 70 ? '#d97706' : '#dc2626' },
-          ].map(k => (
-            <div key={k.label} style={{ textAlign: 'center', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: '6px 16px' }}>
-              <div style={{ fontSize: 10, color: '#94a3b8', letterSpacing: 1 }}>{k.label}</div>
-              <div style={{ fontSize: 16, fontWeight: 700, color: k.color }}>{k.value}</div>
+            {label:'월 계획',value:totalPlanned.toLocaleString()+'개',color:'#1d4ed8'},
+            {label:'월 실적',value:totalActual.toLocaleString()+'개',color:'#16a34a'},
+            {label:'달성률',value:totalRate+'%',color:totalRate>=100?'#16a34a':totalRate>=70?'#d97706':'#dc2626'},
+          ].map(k=>(
+            <div key={k.label} style={{textAlign:'center',background:'#f8fafc',border:'1px solid #e2e8f0',borderRadius:4,padding:'4px 14px'}}>
+              <div style={{fontSize:10,color:'#94a3b8'}}>{k.label}</div>
+              <div style={{fontSize:14,fontWeight:700,color:k.color}}>{k.value}</div>
             </div>
           ))}
         </div>

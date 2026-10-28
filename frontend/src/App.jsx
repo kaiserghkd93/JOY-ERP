@@ -1,83 +1,71 @@
-import { useState } from 'react'
-import { Routes, Route, NavLink, useLocation, Navigate } from 'react-router-dom'
-import Dashboard from './pages/Dashboard'
-import Inventory from './pages/Inventory'
-import Purchase from './pages/Purchase'
-import Receipt from './pages/Receipt'
-import Sales from './pages/Sales'
-import Quality from './pages/Quality'
-import Production from './pages/Production'
-import Master from './pages/Master'
-import Invoice from './pages/Invoice'
-import Report from './pages/Report'
-import Bom from './pages/Bom'
-import ProductionPlan from './pages/ProductionPlan'
-import Cost from './pages/Cost'
-import Mold from './pages/Mold'
-import DeliveryReport from './pages/DeliveryReport'
-import MonthlySales from './pages/MonthlySales'
-import MonthlyPurchase from './pages/MonthlyPurchase'
+import { useState, useEffect, lazy, Suspense } from 'react'
+import { Routes, Route, NavLink, useLocation, useNavigate, Navigate } from 'react-router-dom'
 import Login from './pages/Login'
 import { getUser, logout, isMaster, STAFF_ALLOWED } from './auth'
 
+const Dashboard      = lazy(() => import('./pages/Dashboard'))
+const Inventory      = lazy(() => import('./pages/Inventory'))
+const Purchase       = lazy(() => import('./pages/Purchase'))
+const Receipt        = lazy(() => import('./pages/Receipt'))
+const Sales          = lazy(() => import('./pages/Sales'))
+const Quality        = lazy(() => import('./pages/Quality'))
+const Production     = lazy(() => import('./pages/Production'))
+const Master         = lazy(() => import('./pages/Master'))
+const Invoice        = lazy(() => import('./pages/Invoice'))
+const Report         = lazy(() => import('./pages/Report'))
+const Bom            = lazy(() => import('./pages/Bom'))
+const ProductionPlan = lazy(() => import('./pages/ProductionPlan'))
+const Cost           = lazy(() => import('./pages/Cost'))
+const Mold           = lazy(() => import('./pages/Mold'))
+const DeliveryReport = lazy(() => import('./pages/DeliveryReport'))
+const MonthlySales   = lazy(() => import('./pages/MonthlySales'))
+const MonthlyPurchase = lazy(() => import('./pages/MonthlyPurchase'))
+const SalesTarget    = lazy(() => import('./pages/SalesTarget'))
+
+// GNB: 대분류 / LNB: 소분류
 const allMenus = [
-  { group: '현황', items: [
-    { to: '/', label: '대시보드', icon: '▪' },
-    { to: '/report', label: '보고서', icon: '▪' },
+  { id: 'dashboard', label: '현황', items: [
+    { to: '/',       label: '대시보드' },
+    { to: '/report', label: '보고서·자동발주' },
   ]},
-  { group: '재고', items: [
-    { to: '/inventory', label: '재고 현황', icon: '▪' },
+  { id: 'inventory', label: '재고', items: [
+    { to: '/inventory', label: '재고 현황' },
   ]},
-  { group: '구매', items: [
-    { to: '/purchase', label: '발주 관리', icon: '▪' },
-    { to: '/receipt', label: '입고·검사', icon: '▪' },
+  { id: 'purchase', label: '구매', items: [
+    { to: '/purchase',         label: '발주 관리' },
+    { to: '/receipt',          label: '입고·검사' },
+    { to: '/monthly-purchase', label: '월 매입 집계표' },
   ]},
-  { group: '영업', items: [
-    { to: '/invoice', label: '거래명세서', icon: '▪' },
-    { to: '/sales', label: '수주/출하', icon: '▪' },
-    { to: '/monthly-sales', label: '월 매출 집계표', icon: '▪' },
+  { id: 'sales', label: '영업', items: [
+    { to: '/invoice',       label: '거래명세서' },
+    { to: '/sales',         label: '수주/출하' },
+    { to: '/monthly-sales', label: '월 매출 집계표' },
+    { to: '/sales-target',  label: '매출 목표 관리' },
   ]},
-  { group: '구매 집계', items: [
-    { to: '/monthly-purchase', label: '월 매입 집계표', icon: '▪' },
+  { id: 'quality', label: '품질', items: [
+    { to: '/quality', label: '품질·클레임' },
   ]},
-  { group: '품질', items: [
-    { to: '/quality', label: '품질·클레임', icon: '▪' },
+  { id: 'production', label: '생산', items: [
+    { to: '/production',      label: '생산 관리' },
+    { to: '/production-plan', label: '월 생산계획' },
   ]},
-  { group: '생산', items: [
-    { to: '/production', label: '생산 관리', icon: '▪' },
-    { to: '/production-plan', label: '월 생산계획', icon: '▪' },
+  { id: 'cost', label: '원가', items: [
+    { to: '/cost', label: '원가 관리' },
   ]},
-  { group: '원가', items: [
-    { to: '/cost', label: '원가 관리', icon: '▪' },
+  { id: 'mold', label: '금형', items: [
+    { to: '/mold', label: '금형 수주관리' },
   ]},
-  { group: '금형', items: [
-    { to: '/mold', label: '금형 수주관리', icon: '▪' },
-  ]},
-  { group: '기준정보', items: [
-    { to: '/master', label: '품목·거래처', icon: '▪' },
-    { to: '/bom', label: 'BOM·구매계획', icon: '▪' },
+  { id: 'master', label: '기준정보', items: [
+    { to: '/master', label: '품목·거래처' },
+    { to: '/bom',    label: 'BOM·구매계획' },
   ]},
 ]
 
-const pageTitles = {
-  '/': '대시보드',
-  '/inventory': '재고 현황',
-  '/purchase': '발주 관리',
-  '/receipt': '입고·수입검사',
-  '/report': '보고서 & 자동발주',
-  '/delivery-report': '납기준수율 종합 보고서',
-  '/invoice': '거래명세서',
-  '/sales': '수주/출하 관리',
-  '/quality': '품질·클레임 관리',
-  '/production': '생산 관리',
-  '/production-plan': '월 생산계획 · 실적',
-  '/master': '기준정보 관리',
-  '/bom': 'BOM · 원재료 구매계획',
-  '/cost': '원가 관리',
-  '/mold': '금형 수주관리',
-  '/monthly-sales': '월 매출 집계표',
-  '/monthly-purchase': '월 매입 집계표',
-}
+const masterOnlyPaths = [
+  '/purchase', '/report', '/quality', '/production',
+  '/master', '/bom', '/production-plan', '/cost', '/mold',
+  '/monthly-purchase', '/monthly-sales', '/sales-target',
+]
 
 function ProtectedRoute({ path, children }) {
   if (!isMaster() && !STAFF_ALLOWED.includes(path)) {
@@ -86,80 +74,139 @@ function ProtectedRoute({ path, children }) {
   return children
 }
 
+function NowClock() {
+  const [now, setNow] = useState(new Date())
+  useEffect(() => {
+    const t = setInterval(() => setNow(new Date()), 60000)
+    return () => clearInterval(t)
+  }, [])
+  const fmt = now.toLocaleDateString('ko-KR', {
+    year: 'numeric', month: '2-digit', day: '2-digit', weekday: 'short',
+  })
+  return <span className="gnb-clock">{fmt}</span>
+}
+
+const API = import.meta.env.VITE_API_URL || ''
+
+function AlertBar() {
+  const [alerts, setAlerts] = useState([])
+  useEffect(() => {
+    fetch(`${API}/dashboard/alerts`)
+      .then(r => r.ok ? r.json() : [])
+      .then(data => setAlerts(data))
+      .catch(() => {})
+  }, [])
+
+  if (!alerts.length) return null
+
+  const flagClass = (type) => {
+    if (type === 'overdue')     return 'alert-flag alert-flag-danger'
+    if (type === 'warn')        return 'alert-flag alert-flag-warn'
+    if (type === 'new_request') return 'alert-flag alert-flag-info'
+    return 'alert-flag alert-flag-info'
+  }
+
+  return (
+    <div className="alert-bar">
+      <span className="alert-bar-label">⚑ ALERT</span>
+      {alerts.map((a, i) => (
+        <span key={i} className={flagClass(a.type)} title={a.doc_no}>
+          {a.message}
+        </span>
+      ))}
+    </div>
+  )
+}
+
 export default function App() {
   const [user, setUser] = useState(getUser)
   const loc = useLocation()
-  const title = pageTitles[loc.pathname] || 'KAISER ERP'
+  const navigate = useNavigate()
 
   if (!user) {
     return <Login onLogin={() => setUser(getUser())} />
   }
 
   const master = isMaster()
-  const menus = master
+
+  // 현재 경로로 활성 GNB 그룹 판별
+  const activeGroup = allMenus.find(g =>
+    g.items.some(item =>
+      item.to === '/'
+        ? loc.pathname === '/'
+        : loc.pathname === item.to || loc.pathname.startsWith(item.to + '/')
+    )
+  ) ?? allMenus[0]
+
+  // STAFF는 허용된 항목만 보이게
+  const visibleMenus = master
     ? allMenus
     : allMenus.map(g => ({
         ...g,
-        items: g.items.filter(m => STAFF_ALLOWED.includes(m.to))
+        items: g.items.filter(m => STAFF_ALLOWED.includes(m.to)),
       })).filter(g => g.items.length > 0)
 
-  const handleLogout = () => {
-    logout()
-    setUser(null)
-  }
+  const handleLogout = () => { logout(); setUser(null) }
 
   return (
     <div className="layout">
-      <nav className="sidebar">
-        <div className="sidebar-logo">
-          <div className="logo-mark">K</div>
-          <div>
-            <div className="logo-text">KAISER</div>
-            <span className="logo-sub">ERP SYSTEM</span>
-          </div>
+
+      {/* ── GNB ─────────────────────────────────────────── */}
+      <div className="gnb">
+        <div className="gnb-logo">
+          <span className="gnb-logo-mark">K</span>
+          <span className="gnb-logo-name">KAISER ERP</span>
         </div>
 
-        {menus.map(g => (
-          <div className="sidebar-group" key={g.group}>
-            <div className="sidebar-label">{g.group}</div>
-            {g.items.map(m => (
-              <NavLink key={m.to} to={m.to} end className={({ isActive }) => isActive ? 'active' : ''}>
-                {m.label}
+        <div className="gnb-tabs">
+          {visibleMenus.map(g => (
+            <button
+              key={g.id}
+              className={`gnb-tab${activeGroup?.id === g.id ? ' active' : ''}`}
+              onClick={() => navigate(g.items[0].to)}
+            >
+              {g.label}
+            </button>
+          ))}
+        </div>
+
+        <div className="gnb-right">
+          <NowClock />
+          <span className="gnb-user">{user.name}</span>
+          {!master && <span className="badge badge-amber" style={{ fontSize: 10 }}>STAFF</span>}
+          <button className="gnb-logout" onClick={handleLogout}>로그아웃</button>
+        </div>
+      </div>
+
+      {/* ── LNB ─────────────────────────────────────────── */}
+      {activeGroup && (
+        <div className="lnb">
+          <span className="lnb-module">{activeGroup.label}</span>
+          {activeGroup.items
+            .filter(item => master || STAFF_ALLOWED.includes(item.to))
+            .map(item => (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                end={item.to === '/'}
+                className={({ isActive }) => `lnb-tab${isActive ? ' active' : ''}`}
+              >
+                {item.label}
               </NavLink>
             ))}
-          </div>
-        ))}
-
-        {/* 하단 사용자 정보 */}
-        <div style={{ marginTop: 'auto', padding: '16px', borderTop: '1px solid rgba(255,255,255,0.07)' }}>
-          <div style={{ fontSize: 11, color: '#4a5568', letterSpacing: 1, marginBottom: 6 }}>
-            {master ? '● MASTER' : '● STAFF'}
-          </div>
-          <div style={{ fontSize: 13, color: '#94a3b8', fontWeight: 600, marginBottom: 10 }}>
-            {user.name}
-          </div>
-          <button onClick={handleLogout} style={{
-            width: '100%', padding: '6px', background: 'transparent',
-            border: '1px solid #2d3748', color: '#64748b',
-            cursor: 'pointer', fontSize: 11, letterSpacing: 1,
-            fontFamily: 'inherit', textTransform: 'uppercase',
-          }}
-          onMouseEnter={e => { e.target.style.borderColor = '#c8102e'; e.target.style.color = '#c8102e' }}
-          onMouseLeave={e => { e.target.style.borderColor = '#2d3748'; e.target.style.color = '#64748b' }}
-          >로그아웃</button>
         </div>
-      </nav>
+      )}
 
-      <div className="main">
-        <div className="topbar">
-          {title}
-          {!master && (
-            <span style={{ marginLeft: 'auto', fontSize: 10, color: '#9ca3af', letterSpacing: 1, fontWeight: 400 }}>
-              STAFF ACCESS
-            </span>
-          )}
-        </div>
-        <div className="page">
+      {/* ── Alert bar ───────────────────────────────────── */}
+      <AlertBar />
+
+      {/* ── Page content ────────────────────────────────── */}
+      <div className="page">
+        <Suspense fallback={
+          <div style={{ padding: 48, textAlign: 'center', color: 'var(--text-xs)', fontSize: 13 }}>
+            로딩 중...
+          </div>
+        }>
           <Routes>
             <Route path="/" element={<Dashboard />} />
             <Route path="/inventory" element={<Inventory />} />
@@ -200,8 +247,11 @@ export default function App() {
             <Route path="/monthly-purchase" element={
               <ProtectedRoute path="/monthly-purchase"><MonthlyPurchase /></ProtectedRoute>
             } />
+            <Route path="/sales-target" element={
+              <ProtectedRoute path="/sales-target"><SalesTarget /></ProtectedRoute>
+            } />
           </Routes>
-        </div>
+        </Suspense>
       </div>
     </div>
   )

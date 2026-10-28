@@ -74,9 +74,9 @@ def _po_email_html(partner_name: str, po_no: str, part_no: str, part_name: str,
   <tr style="background:#f9f9f9"><td style="padding:7px 12px;border:1px solid #ddd">품번</td><td style="padding:7px 12px;border:1px solid #ddd">{part_no}</td></tr>
   <tr><td style="padding:7px 12px;border:1px solid #ddd">품명</td><td style="padding:7px 12px;border:1px solid #ddd">{part_name}</td></tr>
   <tr style="background:#f9f9f9"><td style="padding:7px 12px;border:1px solid #ddd">발주수량</td><td style="padding:7px 12px;border:1px solid #ddd"><b>{qty:,} EA</b></td></tr>
-  <tr><td style="padding:7px 12px;border:1px solid #ddd">단가</td><td style="padding:7px 12px;border:1px solid #ddd">₩{unit_price:,.0f}</td></tr>
+  <tr><td style="padding:7px 12px;border:1px solid #ddd">단가</td><td style="padding:7px 12px;border:1px solid #ddd">₩{f"{unit_price:,.2f}".rstrip("0").rstrip(".")}</td></tr>
   <tr style="background:#f9f9f9"><td style="padding:7px 12px;border:1px solid #ddd">납기일</td><td style="padding:7px 12px;border:1px solid #ddd"><b>{due_date}</b></td></tr>
-  <tr><td style="padding:7px 12px;border:1px solid #ddd">발주금액</td><td style="padding:7px 12px;border:1px solid #ddd;color:#1d4ed8;font-weight:bold">₩{qty*unit_price:,.0f}</td></tr>
+  <tr><td style="padding:7px 12px;border:1px solid #ddd">발주금액</td><td style="padding:7px 12px;border:1px solid #ddd;color:#1d4ed8;font-weight:bold">₩{int(qty*unit_price):,}</td></tr>
 </table>
 <p style="margin-top:20px;color:#555;font-size:10pt">본 발주서는 넥스젬 ERP에서 자동 발행되었습니다.</p>
 </body></html>"""

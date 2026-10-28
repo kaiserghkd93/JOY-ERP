@@ -667,29 +667,35 @@ export default function Purchase() {
 
   return (
     <div>
-      <div className="toolbar">
-        <button className={`btn ${tab === 'groups' ? 'btn-primary' : 'btn-outline'}`} onClick={() => setTab('groups')}>발주서 목록</button>
-        <button className={`btn ${tab === 'orders' ? 'btn-primary' : 'btn-outline'}`} onClick={() => setTab('orders')}>발주 라인</button>
-        <button className={`btn ${tab === 'remaining' ? 'btn-primary' : 'btn-outline'}`} onClick={() => setTab('remaining')}>미입고 잔량</button>
-        <button className={`btn ${tab === 'closing' ? 'btn-primary' : 'btn-outline'}`} onClick={() => setTab('closing')}>월 마감</button>
-        <div className="spacer" />
-        {tab === 'closing' && (
-          <button className="btn btn-outline btn-sm" onClick={exportClosingExcel}
-            style={{ color: '#166534', borderColor: '#16a34a' }}>
-            📥 Excel 보고서
-          </button>
-        )}
-        {tab !== 'closing' && <>
-          <button className="btn btn-outline btn-sm" onClick={downloadTemplate}>양식 다운로드</button>
-          <button className="btn btn-outline btn-sm" onClick={() => xlsxRef.current?.click()}>엑셀 일괄 발주</button>
-          <input type="file" accept=".xlsx,.xls" ref={xlsxRef} style={{ display: 'none' }} onChange={uploadExcel} />
-          <button className="btn btn-outline btn-sm" onClick={() => setShowSingle(true)}>단건 발주</button>
-          <button className="btn btn-primary" onClick={() => setShowGroup(true)}>발주서 작성</button>
-        </>}
+      {/* 탭 + 액션 바 */}
+      <div className="erp-panel" style={{marginBottom:8}}>
+        <div className="erp-actions">
+          <div className="qdate-bar">
+            {[['groups','발주서 목록'],['orders','발주 라인'],['remaining','미입고 잔량'],['closing','월 마감']].map(([v,l])=>(
+              <button key={v} className={`qdate-btn${tab===v?' active':''}`} onClick={()=>setTab(v)}>{l}</button>
+            ))}
+          </div>
+          <div className="spacer"/>
+          {tab==='closing' && (
+            <button className="btn btn-sm" style={{color:'#166534',border:'1px solid #16a34a'}} onClick={exportClosingExcel}>📥 Excel</button>
+          )}
+          {tab!=='closing' && <>
+            <button className="btn btn-sm btn-outline" onClick={downloadTemplate}>양식 다운로드</button>
+            <button className="btn btn-sm btn-outline" onClick={()=>xlsxRef.current?.click()}>엑셀 일괄 발주</button>
+            <input type="file" accept=".xlsx,.xls" ref={xlsxRef} style={{display:'none'}} onChange={uploadExcel}/>
+            <button className="btn btn-sm btn-outline" onClick={()=>setShowSingle(true)}>단건 발주</button>
+            <button className="btn btn-sm btn-primary" onClick={()=>setShowGroup(true)}>＋ 발주서 작성</button>
+          </>}
+        </div>
       </div>
 
       {/* 발주서(그룹) 목록 */}
       {tab === 'groups' && (
+        <>
+        <div className="result-bar">
+          <span className="result-bar-title">발주서 목록</span>
+          <span className="result-bar-count">{groups.length}건</span>
+        </div>
         <div className="table-wrap">
           <table>
             <thead>
@@ -766,6 +772,7 @@ export default function Purchase() {
             </tbody>
           </table>
         </div>
+        </>
       )}
 
       {/* 단건 발주 목록 */}
@@ -780,14 +787,22 @@ export default function Purchase() {
         })
         return (
           <div>
-            <div style={{ display:'flex', gap:12, alignItems:'center', padding:'10px 0', flexWrap:'wrap' }}>
-              <input type="month" value={orderMonth} onChange={e => setOrderMonth(e.target.value)}
-                style={{ border:'1px solid #d1d5db', borderRadius:6, padding:'4px 8px', fontSize:14 }} />
-              <label style={{ display:'flex', alignItems:'center', gap:6, fontSize:14, cursor:'pointer' }}>
-                <input type="checkbox" checked={showOnlyRemaining} onChange={e => setShowOnlyRemaining(e.target.checked)} />
-                미입고 잔량 있는 것만
-              </label>
-              <span style={{ fontSize:13, color:'#6b7280' }}>{filteredOrders.length}건</span>
+            <div className="erp-panel" style={{marginBottom:8}}>
+              <div className="erp-grid-2" style={{gridTemplateColumns:'auto 1fr auto auto'}}>
+                <div className="erp-label">조회 월</div>
+                <div className="erp-value" style={{gridColumn:'span 3'}}>
+                  <input type="month" value={orderMonth} onChange={e=>setOrderMonth(e.target.value)}
+                    style={{border:'none',background:'transparent',fontSize:13,padding:'0 4px'}}/>
+                  <label style={{display:'inline-flex',alignItems:'center',gap:4,fontSize:13,cursor:'pointer',marginLeft:16}}>
+                    <input type="checkbox" checked={showOnlyRemaining} onChange={e=>setShowOnlyRemaining(e.target.checked)}/>
+                    미입고 잔량 있는 것만
+                  </label>
+                </div>
+              </div>
+            </div>
+            <div className="result-bar">
+              <span className="result-bar-title">발주 라인</span>
+              <span className="result-bar-count">{filteredOrders.length}건</span>
             </div>
             <div className="table-wrap">
               <table>
@@ -828,6 +843,22 @@ export default function Purchase() {
 
         return (
           <div>
+            {/* erp-panel 필터 */}
+            <div className="erp-panel" style={{marginBottom:8}}>
+              <div className="erp-grid-2" style={{gridTemplateColumns:'auto 1fr'}}>
+                <div className="erp-label">업체 선택</div>
+                <div className="erp-value">
+                  <select value={remainingPartner} onChange={e=>setRemainingPartner(e.target.value)}
+                    style={{border:'none',background:'transparent',fontSize:13,padding:'0 4px',minWidth:160}}>
+                    <option value="">전체 ({remaining.length}건)</option>
+                    {[...new Set(remaining.map(o=>o.partner_id))].sort().map(p=>{
+                      const cnt=remaining.filter(o=>o.partner_id===p).length
+                      return <option key={p} value={p}>{p} ({cnt}건)</option>
+                    })}
+                  </select>
+                </div>
+              </div>
+            </div>
             {/* 납기준수율 KPI */}
             {deliveryRates.length > 0 && (
               <div style={{ marginBottom: 16 }}>
@@ -859,21 +890,10 @@ export default function Purchase() {
               </div>
             )}
 
-            {/* 필터 바 */}
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 10 }}>
-              <select value={remainingPartner} onChange={e => setRemainingPartner(e.target.value)}
-                style={{ fontSize: 13, padding: '4px 8px', borderRadius: 4, border: '1px solid var(--border)' }}>
-                <option value="">전체 업체 ({remaining.length}건)</option>
-                {partners.map(p => {
-                  const cnt = remaining.filter(o => o.partner_id === p).length
-                  return <option key={p} value={p}>{p} ({cnt}건)</option>
-                })}
-              </select>
-              {overdue.length > 0 && (
-                <span style={{ fontSize: 12, color: '#dc2626', fontWeight: 600 }}>
-                  ⚠ 납기 초과 {overdue.length}건
-                </span>
-              )}
+            <div className="result-bar">
+              <span className="result-bar-title">미입고 잔량</span>
+              <span className="result-bar-count">{filtered.length}건</span>
+              {overdue.length>0 && <span style={{marginLeft:12,color:'#dc2626',fontWeight:600,fontSize:12}}>⚠ 납기초과 {overdue.length}건</span>}
             </div>
 
             <div className="table-wrap">
@@ -912,11 +932,17 @@ export default function Purchase() {
       {/* 월 마감 */}
       {tab === 'closing' && (
         <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 0' }}>
-            <label style={{ fontSize: 13, fontWeight: 500 }}>조회 월</label>
-            <input type="month" value={closingYM} onChange={e => setClosingYM(e.target.value)}
-              style={{ padding: '4px 8px', border: '1px solid var(--border)', borderRadius: 4, fontSize: 13 }} />
-            <button className="btn btn-primary btn-sm" onClick={loadClosing}>조회</button>
+          <div className="erp-panel" style={{marginBottom:8}}>
+            <div className="erp-grid-2" style={{gridTemplateColumns:'auto 1fr'}}>
+              <div className="erp-label">조회 월</div>
+              <div className="erp-value">
+                <input type="month" value={closingYM} onChange={e=>setClosingYM(e.target.value)}
+                  style={{border:'none',background:'transparent',fontSize:13,padding:'0 4px'}}/>
+              </div>
+            </div>
+            <div className="erp-actions">
+              <button className="btn btn-primary btn-sm" onClick={loadClosing}>조회</button>
+            </div>
           </div>
 
           {closing.po_based.length === 0 && closing.outsource.length === 0 && (

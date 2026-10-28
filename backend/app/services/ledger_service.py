@@ -47,13 +47,57 @@ def get_avg_price(db: Session, part_no: str) -> float:
             total_cost += r.qty * float(r.unit_price)
             stock += r.qty
         else:
-            # 출고: 이동평균 단가로 차감
             avg = total_cost / stock if stock > 0 else 0
-            total_cost += r.qty * avg   # qty가 음수이므로 차감됨
+            total_cost += r.qty * avg
             stock += r.qty
             if stock < 0:
                 stock, total_cost = 0, 0.0
     return round(total_cost / stock, 2) if stock > 0 else 0.0
+
+
+def get_stock_bulk(db: Session, part_nos: list[str]) -> dict[str, int]:
+    """여러 품목 현재고를 1개 쿼리로 한번에 조회"""
+    if not part_nos:
+        return {}
+    rows = db.query(
+        StockLedger.part_no,
+        func.coalesce(func.sum(StockLedger.qty), 0).label("qty"),
+    ).filter(StockLedger.part_no.in_(part_nos)).group_by(StockLedger.part_no).all()
+    result = {p: 0 for p in part_nos}
+    for r in rows:
+        result[r.part_no] = int(r.qty)
+    return result
+
+
+def get_avg_price_bulk(db: Session, part_nos: list[str]) -> dict[str, float]:
+    """여러 품목 이동평균단가를 1개 쿼리로 한번에 계산"""
+    if not part_nos:
+        return {}
+    all_rows = (
+        db.query(StockLedger)
+        .filter(StockLedger.part_no.in_(part_nos))
+        .order_by(StockLedger.id)
+        .all()
+    )
+    by_part: dict[str, list] = {p: [] for p in part_nos}
+    for r in all_rows:
+        if r.part_no in by_part:
+            by_part[r.part_no].append(r)
+    result: dict[str, float] = {}
+    for part_no, ledger_rows in by_part.items():
+        stock, total_cost = 0, 0.0
+        for r in ledger_rows:
+            if r.qty > 0:
+                total_cost += r.qty * float(r.unit_price)
+                stock += r.qty
+            else:
+                avg = total_cost / stock if stock > 0 else 0
+                total_cost += r.qty * avg
+                stock += r.qty
+                if stock < 0:
+                    stock, total_cost = 0, 0.0
+        result[part_no] = round(total_cost / stock, 2) if stock > 0 else 0.0
+    return result
 
 
 def confirm_receipt(db: Session, gr_no: str) -> StockLedger:

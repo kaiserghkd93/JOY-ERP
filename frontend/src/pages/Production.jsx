@@ -467,17 +467,25 @@ export default function Production() {
 
   return (
     <div>
-      <div className="toolbar">
-        <button className={`btn ${tab === 'orders' ? 'btn-primary' : 'btn-outline'}`} onClick={() => setTab('orders')}>생산오더</button>
-        <button className={`btn ${tab === 'molds' ? 'btn-primary' : 'btn-outline'}`} onClick={() => setTab('molds')}>금형 관리</button>
-        <button className={`btn ${tab === 'upload' ? 'btn-primary' : 'btn-outline'}`} onClick={() => setTab('upload')}>실적 업로드</button>
-        <button className={`btn ${tab === 'cost' ? 'btn-primary' : 'btn-outline'}`} onClick={() => setTab('cost')}>원가분석</button>
-        <div className="spacer" />
-        {tab === 'orders' && <button className="btn btn-primary" onClick={() => setShowPord(true)}>+ 오더 등록</button>}
-        {tab === 'molds' && <button className="btn btn-primary" onClick={() => setShowMold(true)}>+ 금형 등록</button>}
+      <div className="erp-panel" style={{marginBottom:8}}>
+        <div className="erp-actions">
+          <div className="qdate-bar">
+            {[['orders','생산오더'],['molds','금형 관리'],['upload','실적 업로드'],['cost','원가분석']].map(([v,l])=>(
+              <button key={v} className={`qdate-btn${tab===v?' active':''}`} onClick={()=>setTab(v)}>{l}</button>
+            ))}
+          </div>
+          <div className="spacer"/>
+          {tab==='orders' && <button className="btn btn-sm btn-primary" onClick={()=>setShowPord(true)}>＋ 오더 등록</button>}
+          {tab==='molds' && <button className="btn btn-sm btn-primary" onClick={()=>setShowMold(true)}>＋ 금형 등록</button>}
+        </div>
       </div>
 
       {tab === 'orders' && (
+        <>
+        <div className="result-bar">
+          <span className="result-bar-title">생산오더</span>
+          <span className="result-bar-count">{orders.length}건</span>
+        </div>
         <div className="table-wrap">
           <table>
             <thead><tr><th>오더번호</th><th>품번</th><th>계획수량</th><th>실적수량</th><th>금형</th><th>계획일</th><th>상태</th><th>실적등록</th></tr></thead>
@@ -498,9 +506,15 @@ export default function Production() {
             </tbody>
           </table>
         </div>
+        </>
       )}
 
       {tab === 'molds' && (
+        <>
+        <div className="result-bar">
+          <span className="result-bar-title">금형 관리</span>
+          <span className="result-bar-count">{molds.length}건</span>
+        </div>
         <div className="table-wrap">
           <table>
             <thead><tr><th>금형번호</th><th>소유자</th><th>해당품번</th><th>보관위치</th><th>누적샷수</th><th>상태</th></tr></thead>
@@ -519,6 +533,7 @@ export default function Production() {
             </tbody>
           </table>
         </div>
+        </>
       )}
 
       {tab === 'upload' && <ExcelUpload onDone={load} />}

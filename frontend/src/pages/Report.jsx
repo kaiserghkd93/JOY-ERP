@@ -289,25 +289,30 @@ export default function Report() {
 
   return (
     <div>
-      <div className="toolbar">
-        <button className={`btn ${tab==='monthly'?'btn-primary':'btn-outline'}`} onClick={()=>setTab('monthly')}>월별 보고서</button>
-        <button className={`btn ${tab==='supplier'?'btn-primary':'btn-outline'}`} onClick={()=>setTab('supplier')}>외주처별 매입</button>
-        <button className={`btn ${tab==='customer'?'btn-primary':'btn-outline'}`} onClick={()=>setTab('customer')}>고객사별 매출</button>
-        <button className={`btn ${tab==='flow'?'btn-primary':'btn-outline'}`} onClick={()=>setTab('flow')}>외주→고객 흐름</button>
-        <button className={`btn ${tab==='auto'?'btn-primary':'btn-outline'}`} onClick={()=>setTab('auto')}>자동발주</button>
-        <button className={`btn ${tab==='spare'?'btn-primary':'btn-outline'}`} onClick={()=>setTab('spare')}>스페어파트 손익</button>
-        <button className={`btn ${tab==='delivery'?'btn-primary':'btn-outline'}`} onClick={()=>setTab('delivery')}>납기준수율 보고서</button>
-        <button className={`btn ${tab==='outsource-pl'?'btn-primary':'btn-outline'}`} onClick={()=>setTab('outsource-pl')}>외주처 손익보고서</button>
-        <div className="spacer" />
+      <div className="erp-panel" style={{marginBottom:8}}>
         {(tab==='monthly'||tab==='supplier'||tab==='customer') && (
-          <>
-            <select value={year} onChange={e=>setYear(+e.target.value)} style={{marginRight:8}}>
-              {[curYear-1, curYear, curYear+1].map(y=><option key={y} value={y}>{y}년</option>)}
-            </select>
-            <button className="btn btn-outline" onClick={loadReport}>⟳ 새로고침</button>
-            <button className="btn btn-outline" onClick={exportAnnual}>Excel 다운로드</button>
-          </>
+          <div className="erp-grid-2" style={{gridTemplateColumns:'auto 1fr'}}>
+            <div className="erp-label">연도</div>
+            <div className="erp-value">
+              <select value={year} onChange={e=>setYear(+e.target.value)} style={{border:'none',background:'transparent',fontSize:13}}>
+                {[curYear-1, curYear, curYear+1].map(y=><option key={y} value={y}>{y}년</option>)}
+              </select>
+            </div>
+          </div>
         )}
+        <div className="erp-actions">
+          <div className="qdate-bar" style={{flexWrap:'wrap'}}>
+            {[['monthly','월별 보고서'],['supplier','외주처별 매입'],['customer','고객사별 매출'],['flow','외주→고객 흐름'],['auto','자동발주'],['spare','스페어파트 손익'],['delivery','납기준수율'],['outsource-pl','외주처 손익']].map(([v,l])=>(
+              <button key={v} className={`qdate-btn${tab===v?' active':''}`} onClick={()=>setTab(v)}>{l}</button>
+            ))}
+          </div>
+          {(tab==='monthly'||tab==='supplier'||tab==='customer') && (
+            <>
+              <button className="btn btn-sm btn-outline" onClick={loadReport}>⟳ 새로고침</button>
+              <button className="btn btn-sm btn-outline" onClick={exportAnnual}>📥 Excel</button>
+            </>
+          )}
+        </div>
       </div>
 
       {/* ── 월별 요약 ── */}
@@ -420,14 +425,24 @@ export default function Report() {
       {/* ── 외주처→고객사 흐름 ── */}
       {tab === 'flow' && (
         <>
-          <div className="toolbar" style={{marginBottom:8}}>
-            <select value={flowYear} onChange={e => setFlowYear(+e.target.value)} style={{marginRight:8}}>
-              {[curYear-1,curYear].map(y=><option key={y} value={y}>{y}년</option>)}
-            </select>
-            <select value={flowMonth} onChange={e => setFlowMonth(+e.target.value)}>
-              {Array.from({length:12},(_,i)=><option key={i+1} value={i+1}>{i+1}월</option>)}
-            </select>
-            <button className="btn btn-outline" style={{marginLeft:8}} onClick={loadFlow}>⟳ 새로고침</button>
+          <div className="erp-panel" style={{marginBottom:8}}>
+            <div className="erp-grid-2" style={{gridTemplateColumns:'auto 1fr auto 1fr'}}>
+              <div className="erp-label">연도</div>
+              <div className="erp-value">
+                <select value={flowYear} onChange={e=>setFlowYear(+e.target.value)} style={{border:'none',background:'transparent',fontSize:13}}>
+                  {[curYear-1,curYear].map(y=><option key={y} value={y}>{y}년</option>)}
+                </select>
+              </div>
+              <div className="erp-label">월</div>
+              <div className="erp-value">
+                <select value={flowMonth} onChange={e=>setFlowMonth(+e.target.value)} style={{border:'none',background:'transparent',fontSize:13}}>
+                  {Array.from({length:12},(_,i)=><option key={i+1} value={i+1}>{i+1}월</option>)}
+                </select>
+              </div>
+            </div>
+            <div className="erp-actions">
+              <button className="btn btn-sm btn-outline" onClick={loadFlow}>⟳ 새로고침</button>
+            </div>
           </div>
           <div className="table-wrap">
             <table>

@@ -33,5 +33,6 @@ class InvoiceOut(BaseModel):
     issue_date: date
     status: InvoiceStatus
     note: str | None
+    closing_type: str | None = None
     lines: list[InvoiceLineOut] = []
     total_amount: float | None = None

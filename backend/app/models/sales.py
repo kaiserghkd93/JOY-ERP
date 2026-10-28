@@ -1,5 +1,5 @@
 from datetime import date, datetime
-from sqlalchemy import String, Integer, Numeric, Date, DateTime, ForeignKey, Enum as SAEnum
+from sqlalchemy import String, Integer, Numeric, Date, DateTime, ForeignKey, Enum as SAEnum, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database import Base
 import enum
@@ -66,6 +66,7 @@ class Invoice(Base):
     issue_date: Mapped[date] = mapped_column(Date, nullable=False)
     status: Mapped[InvoiceStatus] = mapped_column(SAEnum(InvoiceStatus), default=InvoiceStatus.draft)
     note: Mapped[str | None] = mapped_column(String(500))
+    closing_type: Mapped[str | None] = mapped_column(String(10), nullable=True, default=None)  # null=미설정, "금월"=금월마감, "이월"=이월
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
 
     partner: Mapped["Partner"] = relationship()
@@ -83,3 +84,17 @@ class InvoiceLine(Base):
 
     invoice: Mapped["Invoice"] = relationship(back_populates="lines")
     item: Mapped["Item"] = relationship()
+
+
+class SalesTarget(Base):
+    """거래처별 월 목표 매출"""
+    __tablename__ = "sales_target"
+    __table_args__ = (UniqueConstraint("partner_id", "year", "month", name="uq_sales_target"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    partner_id: Mapped[str] = mapped_column(ForeignKey("partner.partner_id"), nullable=False)
+    year: Mapped[int] = mapped_column(Integer, nullable=False)
+    month: Mapped[int] = mapped_column(Integer, nullable=False)
+    target_amount: Mapped[float] = mapped_column(Numeric(18, 0), nullable=False, default=0)
+
+    partner: Mapped["Partner"] = relationship()

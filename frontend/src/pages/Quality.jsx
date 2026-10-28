@@ -100,14 +100,24 @@ export default function Quality() {
 
   return (
     <div>
-      <div className="toolbar">
-        <button className={`btn ${tab === 'claims' ? 'btn-primary' : 'btn-outline'}`} onClick={() => setTab('claims')}>클레임 목록</button>
-        <button className={`btn ${tab === 'rates' ? 'btn-primary' : 'btn-outline'}`} onClick={() => setTab('rates')}>외주처별 불량율</button>
-        <div className="spacer" />
-        <button className="btn btn-primary" onClick={() => setShowModal(true)}>+ 클레임 등록</button>
+      <div className="erp-panel" style={{marginBottom:8}}>
+        <div className="erp-actions">
+          <div className="qdate-bar">
+            {[['claims','클레임 목록'],['rates','외주처별 불량율']].map(([v,l])=>(
+              <button key={v} className={`qdate-btn${tab===v?' active':''}`} onClick={()=>setTab(v)}>{l}</button>
+            ))}
+          </div>
+          <div className="spacer"/>
+          <button className="btn btn-sm btn-primary" onClick={()=>setShowModal(true)}>＋ 클레임 등록</button>
+        </div>
       </div>
 
       {tab === 'claims' && (
+        <>
+        <div className="result-bar">
+          <span className="result-bar-title">클레임 목록</span>
+          <span className="result-bar-count">{claims.length}건</span>
+        </div>
         <div className="table-wrap">
           <table>
             <thead><tr><th>클레임번호</th><th>외주처</th><th>품번</th><th>발생일</th><th>불량유형</th><th>수량</th><th>4M</th><th>상태</th><th>처리</th></tr></thead>
@@ -135,9 +145,15 @@ export default function Quality() {
             </tbody>
           </table>
         </div>
+        </>
       )}
 
       {tab === 'rates' && (
+        <>
+        <div className="result-bar">
+          <span className="result-bar-title">외주처별 불량율</span>
+          <span className="result-bar-count">{defectRates.length}건</span>
+        </div>
         <div className="table-wrap">
           <table>
             <thead><tr><th>외주처</th><th>총검사수</th><th>불합격수</th><th>불량율</th></tr></thead>
@@ -158,6 +174,7 @@ export default function Quality() {
             </tbody>
           </table>
         </div>
+        </>
       )}
 
       {showModal && <ClaimModal onClose={() => setShowModal(false)} onSaved={() => { setShowModal(false); load() }} />}

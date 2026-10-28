@@ -259,61 +259,57 @@ export default function Inventory() {
 
   return (
     <div>
-      {/* 안전재고 미달 경고 배너 */}
+      {/* 안전재고 미달 경고 */}
       {shortage.length > 0 && (
-        <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: '10px 16px', marginBottom: 14, display: 'flex', alignItems: 'center', gap: 12 }}>
-          <span style={{ fontSize: 20 }}>⚠</span>
-          <div>
-            <div style={{ fontWeight: 700, color: '#dc2626', fontSize: 14 }}>안전재고 미달 {shortage.length}건</div>
-            <div style={{ fontSize: 12, color: '#7f1d1d', marginTop: 2 }}>
-              {shortage.slice(0, 5).map(r => `${r.part_no} (현재고 ${r.current_stock} / 안전재고 ${r.safety_stock})`).join(' · ')}
-              {shortage.length > 5 && ` 외 ${shortage.length - 5}건`}
+        <div className="alert-flag alert-flag-danger" style={{ display:'flex', alignItems:'center', gap:10, padding:'7px 14px', marginBottom:8, borderRadius:2, fontSize:12 }}>
+          <span style={{fontWeight:800}}>⚠ 안전재고 미달 {shortage.length}건</span>
+          <span style={{color:'#8B1A1A', fontSize:11}}>
+            {shortage.slice(0,4).map(r=>`${r.part_no}(현재고 ${r.current_stock})`).join(' · ')}
+            {shortage.length>4 && ` 외 ${shortage.length-4}건`}
+          </span>
+        </div>
+      )}
+
+      {/* 검색 패널 */}
+      <div className="erp-panel">
+        <div className="erp-grid erp-grid-2">
+          <span className="erp-label">품목구분</span>
+          <div className="erp-value">
+            <div className="qdate-bar">
+              {[['외주품','외주품'],['원자재','원자재'],['','전체']].map(([v,l]) => (
+                <button key={v} className={`qdate-btn${typeFilter===v?' active':''}`} onClick={()=>setTypeFilter(v)}>{l}</button>
+              ))}
             </div>
           </div>
+          <span className="erp-label">품번·품명</span>
+          <div className="erp-value">
+            <input type="text" value={q} onChange={e=>setQ(e.target.value)} placeholder="검색..." style={{width:200}} />
+          </div>
         </div>
-      )}
-
-      <div className="toolbar">
-        <button className={`btn ${typeFilter === '외주품' ? 'btn-primary' : 'btn-outline'}`} onClick={() => setTypeFilter('외주품')}>외주품</button>
-        <button className={`btn ${typeFilter === '원자재' ? 'btn-primary' : 'btn-outline'}`} onClick={() => setTypeFilter('원자재')}>원자재</button>
-        <button className={`btn ${typeFilter === '' ? 'btn-primary' : 'btn-outline'}`} onClick={() => setTypeFilter('')}>전체</button>
-        <input type="search" placeholder="품번·품명 검색" value={q} onChange={e => setQ(e.target.value)} style={{ width: 220, marginLeft: 8 }} />
-        <div className="spacer" />
-        <span className="text-sm">{filtered.length}개 품목</span>
-        <button className="btn btn-outline" onClick={exportExcel} style={{ color: '#16a34a', borderColor: '#16a34a' }}>
-          ⬇ Excel
-        </button>
+        {customerList.length > 0 && (
+          <div className="erp-grid erp-grid-1" style={{borderTop:'1px solid var(--border)'}}>
+            <span className="erp-label">고객사</span>
+            <div className="erp-value" style={{flexWrap:'wrap', gap:4, padding:'4px 8px'}}>
+              {['', ...customerList].map(s => (
+                <button key={s} className={`qdate-btn${supplierFilter===s?' active':''}`}
+                  onClick={()=>setSupplierFilter(f=>f===s?'':s)}>
+                  {s||'전체'}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+        <div className="erp-actions">
+          <span style={{fontSize:12,color:'var(--text-sm)'}}>조회 {filtered.length}건</span>
+          <div className="spacer"/>
+          <button className="btn btn-sm" style={{color:'#166534',borderColor:'#16a34a',border:'1px solid'}} onClick={exportExcel}>📥 Excel</button>
+        </div>
       </div>
 
-      {/* 고객사별 필터 pill */}
-      {customerList.length > 0 && (
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10, alignItems: 'center' }}>
-          <span style={{ fontSize: 11, color: '#94a3b8', marginRight: 2 }}>고객사</span>
-          <button
-            onClick={() => setSupplierFilter('')}
-            style={{
-              padding: '4px 12px', borderRadius: 999, fontSize: 12, cursor: 'pointer', border: '1px solid',
-              background: supplierFilter === '' ? '#1d4ed8' : '#f1f5f9',
-              color: supplierFilter === '' ? '#fff' : '#475569',
-              borderColor: supplierFilter === '' ? '#1d4ed8' : '#e2e8f0',
-              fontWeight: supplierFilter === '' ? 700 : 400,
-            }}
-          >전체</button>
-          {customerList.map(s => (
-            <button key={s}
-              onClick={() => setSupplierFilter(f => f === s ? '' : s)}
-              style={{
-                padding: '4px 12px', borderRadius: 999, fontSize: 12, cursor: 'pointer', border: '1px solid',
-                background: supplierFilter === s ? '#1d4ed8' : '#f1f5f9',
-                color: supplierFilter === s ? '#fff' : '#475569',
-                borderColor: supplierFilter === s ? '#1d4ed8' : '#e2e8f0',
-                fontWeight: supplierFilter === s ? 700 : 400,
-              }}
-            >{s}</button>
-          ))}
-        </div>
-      )}
-
+      <div className="result-bar">
+        <span className="result-bar-title">재고 현황</span>
+        <span className="result-bar-count">{filtered.length}개 품목 · 재고금액 합계 ₩{filtered.reduce((s,r)=>s+(r.stock_value||0),0).toLocaleString()}</span>
+      </div>
       <div className="table-wrap">
         <table>
           <thead>

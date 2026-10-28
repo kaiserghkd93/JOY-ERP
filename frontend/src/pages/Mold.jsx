@@ -565,18 +565,23 @@ export default function Mold() {
 
   return (
     <div>
-      <div className="toolbar">
-        <div style={{ display: 'flex', gap: 6 }}>
-          {['전체', '진행중', '완료', '지연', '취소'].map(s => (
-            <button key={s} className={`btn ${filter === s ? 'btn-primary' : 'btn-outline'}`}
-              onClick={() => setFilter(s)} style={{ fontSize: 13 }}>{s}</button>
-          ))}
+      <div className="erp-panel" style={{marginBottom:8}}>
+        <div className="erp-grid-2" style={{gridTemplateColumns:'auto 1fr'}}>
+          <div className="erp-label">검색</div>
+          <div className="erp-value">
+            <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="금형명 / 고객사 검색"
+              style={{border:'none',background:'transparent',fontSize:13,width:'100%'}}/>
+          </div>
         </div>
-        <input value={search} onChange={e => setSearch(e.target.value)}
-          placeholder="금형명 / 고객사 검색"
-          style={{ width: 200, marginLeft: 8 }} />
-        <div className="spacer" />
-        <button className="btn btn-primary" onClick={() => setShowNew(true)}>+ 금형 수주 등록</button>
+        <div className="erp-actions">
+          <div className="qdate-bar">
+            {['전체','진행중','완료','지연','취소'].map(s=>(
+              <button key={s} className={`qdate-btn${filter===s?' active':''}`} onClick={()=>setFilter(s)}>{s}</button>
+            ))}
+          </div>
+          <div className="spacer"/>
+          <button className="btn btn-sm btn-primary" onClick={()=>setShowNew(true)}>＋ 금형 수주 등록</button>
+        </div>
       </div>
 
       {/* KPI 요약 */}
