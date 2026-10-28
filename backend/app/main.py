@@ -1,4 +1,4 @@
-import os, hashlib
+import os, hashlib  # noqa
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
