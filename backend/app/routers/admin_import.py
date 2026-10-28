@@ -104,27 +104,19 @@ def purge_outsource_oct(db: Session = Depends(get_db), _: User = Depends(require
 
 @router.delete("/purge-all-outsource")
 def purge_all_outsource(db: Session = Depends(get_db), _: User = Depends(require_admin)):
-    """외주 발주 전체 삭제 (po_type=outsource OR NULL) + 관련 입고·원장"""
-    po_nos = [r[0] for r in db.execute(text("""
-        SELECT po_no FROM purchase_order
-        WHERE po_type = 'outsource' OR po_type IS NULL OR po_type = ''
-    """)).fetchall()]
-
-    if not po_nos:
-        return {"deleted": 0, "message": "삭제할 외주 발주가 없습니다"}
-
-    in_clause = ", ".join(f"'{p}'" for p in po_nos)
-
-    r_ledger  = db.execute(text(f"DELETE FROM stock_ledger WHERE ref_no IN ({in_clause})"))
-    r_receipt = db.execute(text(f"DELETE FROM receipt WHERE po_no IN ({in_clause})"))
-    r_po      = db.execute(text(f"DELETE FROM purchase_order WHERE po_no IN ({in_clause})"))
+    """발주·발주서 전체 삭제 (purchase_order + purchase_order_group + receipt + 관련 원장)"""
+    po_nos = [r[0] for r in db.execute(text("SELECT po_no FROM purchase_order")).fetchall()]
+    if po_nos:
+        in_clause = ", ".join(f"'{p}'" for p in po_nos)
+        db.execute(text(f"DELETE FROM stock_ledger WHERE ref_no IN ({in_clause})"))
+        db.execute(text(f"DELETE FROM receipt WHERE po_no IN ({in_clause})"))
+    r_po    = db.execute(text("DELETE FROM purchase_order"))
+    r_group = db.execute(text("DELETE FROM purchase_order_group"))
     db.commit()
-
     return {
         "deleted_pos": r_po.rowcount,
-        "deleted_receipts": r_receipt.rowcount,
-        "deleted_ledger": r_ledger.rowcount,
-        "message": f"외주 발주 {r_po.rowcount}건 전체 삭제 완료"
+        "deleted_groups": r_group.rowcount,
+        "message": f"발주 {r_po.rowcount}건 + 발주서 {r_group.rowcount}건 전체 삭제 완료"
     }
 
 
