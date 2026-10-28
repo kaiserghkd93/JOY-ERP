@@ -1,12 +1,31 @@
 """데이터 마이그레이션용 임시 엔드포인트"""
+import hashlib, os
 from fastapi import APIRouter, Depends
 from sqlalchemy import text, inspect
 from sqlalchemy.orm import Session
 from app.database import get_db, engine
 from app.routers.auth import require_admin
-from app.models.auth import User
+from app.models.auth import User, UserRole
+
+SECRET = os.environ.get("JWT_SECRET", "joy-erp-secret-2024")
+
+def _hash(pw: str) -> str:
+    return hashlib.sha256((pw + SECRET).encode()).hexdigest()
 
 router = APIRouter(prefix="/admin", tags=["관리자"])
+
+
+@router.post("/reset-supplier-passwords")
+def reset_supplier_passwords(db: Session = Depends(get_db), _: User = Depends(require_admin)):
+    """외주처 계정 비밀번호를 아이디+1234 로 일괄 초기화"""
+    suppliers = db.query(User).filter(User.role == UserRole.supplier).all()
+    result = []
+    for u in suppliers:
+        new_pw = u.username + "1234"
+        u.password_hash = _hash(new_pw)
+        result.append({"username": u.username, "password": new_pw, "name": u.name})
+    db.commit()
+    return {"reset": len(result), "accounts": result}
 
 
 @router.post("/purge-old-receipts")
