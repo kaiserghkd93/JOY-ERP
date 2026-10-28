@@ -91,7 +91,7 @@ class UserOut(BaseModel):
     id: int
     username: str
     name: str | None
-    role: UserRole
+    role: str
     partner_id: str | None
     is_active: bool
 

@@ -15,8 +15,9 @@ class UserRole(str, enum.Enum):
     shipping   = "shipping"    # 출하관리 — 출하·재고
     quality    = "quality"     # 품질팀 — 품질·클레임·입고검사
     production = "production"  # 생산관리팀 — 생산오더·계획·금형·원가
-    material   = "material"    # 자재구매 — 자재 발주·입고
-    supplier   = "supplier"    # 외주처 포털 (외부)
+    material      = "material"      # 자재구매 — 자재 발주·입고
+    manufacturing = "manufacturing" # 제조관리 총괄 — 생산+영업 조회
+    supplier      = "supplier"      # 외주처 포털 (외부)
 
 
 class User(Base):
