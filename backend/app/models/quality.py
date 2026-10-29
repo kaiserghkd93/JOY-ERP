@@ -53,6 +53,13 @@ class Inspection(Base):
     defect_note: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
 
+    # 샘플링 정보 (ISO 2859-1)
+    standard_id: Mapped[int | None] = mapped_column(ForeignKey("inspection_standard.id"), nullable=True)
+    lot_size: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    sample_size: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    ac: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    re: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
     # 승인 워크플로 필드
     approval_status: Mapped[ApprovalStatus] = mapped_column(
         SAEnum(ApprovalStatus), default=ApprovalStatus.draft, nullable=False

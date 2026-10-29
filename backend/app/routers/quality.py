@@ -8,11 +8,12 @@ from app.models.auth import User
 from app.schemas.quality import (
     InspectionCreate, InspectionOut,
     ClaimCreate, ClaimUpdate, ClaimOut, DefectRateOut,
-    StandardCreate, StandardOut,
+    StandardCreate, StandardOut, SamplingPlanOut,
 )
 from app.services.quality_service import (
     register_inspection, get_defect_rate, create_claim, update_claim
 )
+from app.services.sampling import get_ac_re, auto_judge
 from app.routers.auth import get_current_user
 
 router = APIRouter(prefix="/quality", tags=["품질"])
@@ -33,11 +34,42 @@ def _require_manager(user: User = Depends(get_current_user)) -> User:
     return user
 
 
+@router.get("/sampling-plan", response_model=SamplingPlanOut)
+def sampling_plan(
+    lot_size: int,
+    level: str = "II",
+    aql: float = 1.0,
+):
+    """ISO 2859-1 샘플링 플랜 조회 (lot_size, level, aql → sample_size, Ac, Re)"""
+    plan = get_ac_re(lot_size, level, aql)
+    return {"lot_size": lot_size, "level": level, "aql": aql, **plan}
+
+
 @router.post("/inspections", response_model=InspectionOut)
 def post_inspection(body: InspectionCreate, db: Session = Depends(get_db), user: User = Depends(_require_quality)):
-    insp = register_inspection(db, **body.model_dump())
+    data = body.model_dump(exclude={"standard_id", "lot_size"})
+
+    # 검사기준이 연결되어 있으면 샘플링 자동계산 + 자동판정
+    std = db.get(InspectionStandard, body.standard_id) if body.standard_id else None
+    lot = body.lot_size
+    ac = re = sample_size = None
+
+    if std and lot:
+        plan = get_ac_re(lot, std.sampling_level, std.aql)
+        sample_size = plan["sample_size"]
+        ac = plan["ac"]
+        re = plan["re"]
+        # 자동판정: fail_qty 기준
+        data["result"] = auto_judge(data["fail_qty"], ac, re)
+
+    insp = register_inspection(db, **data)
     insp.inspector_id = user.username
     insp.approval_status = ApprovalStatus.draft
+    insp.standard_id = body.standard_id
+    insp.lot_size = lot
+    insp.sample_size = sample_size
+    insp.ac = ac
+    insp.re = re
     db.commit()
     db.refresh(insp)
     return insp

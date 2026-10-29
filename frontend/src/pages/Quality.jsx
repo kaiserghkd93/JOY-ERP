@@ -3,6 +3,163 @@ import api from '../api'
 import { getRole } from '../auth'
 
 const AQL_OPTIONS = [0.065, 0.1, 0.15, 0.25, 0.4, 0.65, 1.0, 1.5, 2.5, 4.0, 6.5]
+
+function InspectionModal({ onClose, onSaved }) {
+  const [receipts, setReceipts] = useState([])
+  const [standards, setStandards] = useState([])
+  const [form, setForm] = useState({
+    gr_no: '', inspect_date: new Date().toISOString().slice(0,10),
+    pass_qty: '', fail_qty: '', disposal: '보류', defect_note: '',
+    standard_id: '', lot_size: '',
+  })
+  const [plan, setPlan] = useState(null)
+  const [autoJudge, setAutoJudge] = useState(null)
+
+  useEffect(() => {
+    // 검사 대기 입고 목록
+    api.get('/receipt').then(r => {
+      const pending = (r.data || []).filter(rc => rc.status === 'pending')
+      setReceipts(pending)
+    }).catch(() => {})
+    api.get('/quality/standards?active_only=true').then(r => setStandards(r.data)).catch(() => {})
+  }, [])
+
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
+
+  const fetchPlan = async (lot, stdId) => {
+    if (!lot || !stdId) { setPlan(null); setAutoJudge(null); return }
+    const std = standards.find(s => s.id === +stdId)
+    if (!std) return
+    try {
+      const r = await api.get(`/quality/sampling-plan?lot_size=${lot}&level=${std.sampling_level}&aql=${std.aql}`)
+      setPlan(r.data)
+    } catch { setPlan(null) }
+  }
+
+  useEffect(() => {
+    fetchPlan(form.lot_size, form.standard_id)
+  }, [form.lot_size, form.standard_id])
+
+  useEffect(() => {
+    if (!plan) { setAutoJudge(null); return }
+    const fail = +form.fail_qty || 0
+    if (plan.ac === null) { setAutoJudge(null); return }
+    if (fail <= plan.ac) setAutoJudge('합격')
+    else if (fail >= plan.re) setAutoJudge('불합격')
+    else setAutoJudge('부분합격')
+  }, [plan, form.fail_qty])
+
+  const handleGrChange = (gr_no) => {
+    set('gr_no', gr_no)
+    const rc = receipts.find(r => r.gr_no === gr_no)
+    if (rc) set('lot_size', String(rc.qty || ''))
+  }
+
+  const submit = async () => {
+    if (!form.gr_no || !form.inspect_date) return alert('입고번호와 검사일은 필수입니다')
+    const payload = {
+      gr_no: form.gr_no,
+      inspect_date: form.inspect_date,
+      pass_qty: +form.pass_qty || 0,
+      fail_qty: +form.fail_qty || 0,
+      disposal: form.disposal,
+      defect_note: form.defect_note || null,
+      standard_id: form.standard_id ? +form.standard_id : null,
+      lot_size: form.lot_size ? +form.lot_size : null,
+    }
+    try {
+      await api.post('/quality/inspections', payload)
+      onSaved()
+    } catch (e) { alert(e.response?.data?.detail || '저장 실패') }
+  }
+
+  return (
+    <div className="modal-overlay">
+      <div className="modal" style={{ maxWidth: 600 }}>
+        <h3>입고검사 등록</h3>
+        <div className="grid-2">
+          <div className="form-group">
+            <label>입고번호 *</label>
+            <select value={form.gr_no} onChange={e => handleGrChange(e.target.value)}>
+              <option value="">선택</option>
+              {receipts.map(r => <option key={r.gr_no} value={r.gr_no}>{r.gr_no} — {r.part_no} ({r.qty}개)</option>)}
+            </select>
+          </div>
+          <div className="form-group">
+            <label>검사일 *</label>
+            <input type="date" value={form.inspect_date} onChange={e => set('inspect_date', e.target.value)} />
+          </div>
+        </div>
+        <div className="grid-2">
+          <div className="form-group">
+            <label>검사기준 연결</label>
+            <select value={form.standard_id} onChange={e => set('standard_id', e.target.value)}>
+              <option value="">없음 (수동판정)</option>
+              {standards.map(s => <option key={s.id} value={s.id}>{s.std_no} Rev.{s.std_rev} — {s.part_no}</option>)}
+            </select>
+          </div>
+          <div className="form-group">
+            <label>로트 크기</label>
+            <input type="number" value={form.lot_size} onChange={e => set('lot_size', e.target.value)} placeholder="입고수량" />
+          </div>
+        </div>
+
+        {/* ISO 2859-1 샘플링 정보 */}
+        {plan && (
+          <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 6, padding: '10px 14px', marginBottom: 12 }}>
+            <div style={{ fontSize: 12, color: 'var(--text-sm)', marginBottom: 6, fontWeight: 600 }}>ISO 2859-1 샘플링 플랜 (레벨 {plan.level}, AQL {plan.aql_used})</div>
+            <div style={{ display: 'flex', gap: 16, fontSize: 13 }}>
+              <span>코드 <strong>{plan.code_letter}</strong></span>
+              <span>샘플 <strong style={{ color: 'var(--primary)' }}>{plan.sample_size}개</strong></span>
+              <span>합격기준 <strong style={{ color: 'var(--success)' }}>Ac={plan.ac}</strong></span>
+              <span>기각기준 <strong style={{ color: 'var(--danger)' }}>Re={plan.re}</strong></span>
+            </div>
+          </div>
+        )}
+
+        <div className="grid-2">
+          <div className="form-group">
+            <label>합격 수량</label>
+            <input type="number" value={form.pass_qty} onChange={e => set('pass_qty', e.target.value)} />
+          </div>
+          <div className="form-group">
+            <label>불합격 수량</label>
+            <input type="number" value={form.fail_qty} onChange={e => set('fail_qty', e.target.value)} />
+          </div>
+        </div>
+
+        {autoJudge && (
+          <div style={{ textAlign: 'center', padding: '8px 0', marginBottom: 8 }}>
+            <span style={{ fontSize: 13, color: 'var(--text-sm)' }}>자동판정: </span>
+            <span className={`badge ${autoJudge === '합격' ? 'badge-green' : autoJudge === '불합격' ? 'badge-red' : 'badge-amber'}`} style={{ fontSize: 13 }}>
+              {autoJudge}
+            </span>
+          </div>
+        )}
+
+        <div className="grid-2">
+          <div className="form-group">
+            <label>처리방법</label>
+            <select value={form.disposal} onChange={e => set('disposal', e.target.value)}>
+              <option value="보류">보류</option>
+              <option value="반품">반품</option>
+              <option value="폐기">폐기</option>
+              <option value="특채">특채</option>
+            </select>
+          </div>
+          <div className="form-group">
+            <label>불량내용</label>
+            <input value={form.defect_note} onChange={e => set('defect_note', e.target.value)} placeholder="치수불량 등..." />
+          </div>
+        </div>
+        <div className="modal-footer">
+          <button className="btn btn-outline" onClick={onClose}>취소</button>
+          <button className="btn btn-primary" onClick={submit}>등록</button>
+        </div>
+      </div>
+    </div>
+  )
+}
 const STD_STATUS_BADGE = { '작성중': 'badge-gray', '승인완료': 'badge-green', '폐기': 'badge-red' }
 
 function StandardModal({ editStd, onClose, onSaved }) {
@@ -254,6 +411,7 @@ export default function Quality() {
   const [tab, setTab] = useState('inspections')
   const [showModal, setShowModal] = useState(false)
   const [showStdModal, setShowStdModal] = useState(false)
+  const [showInspModal, setShowInspModal] = useState(false)
   const [editStd, setEditStd] = useState(null)
   const [detailClaim, setDetailClaim] = useState(null)
   const [rejectTarget, setRejectTarget] = useState(null)
@@ -301,6 +459,7 @@ export default function Quality() {
             ))}
           </div>
           <div className="spacer"/>
+          {tab === 'inspections' && <button className="btn btn-sm btn-primary" onClick={()=>setShowInspModal(true)}>＋ 검사 등록</button>}
           {tab === 'claims' && <button className="btn btn-sm btn-primary" onClick={()=>setShowModal(true)}>＋ 클레임 등록</button>}
           {tab === 'standards' && <button className="btn btn-sm btn-primary" onClick={()=>{setEditStd(null);setShowStdModal(true)}}>＋ 기준 등록</button>}
         </div>
@@ -315,7 +474,8 @@ export default function Quality() {
         <div className="table-wrap">
           <table>
             <thead><tr>
-              <th>입고번호</th><th>검사일</th><th>검사수량</th><th>합격</th><th>불합격</th>
+              <th>입고번호</th><th>검사일</th><th>로트</th><th>샘플</th><th>Ac/Re</th>
+              <th>합격</th><th>불합격</th>
               <th>판정</th><th>승인상태</th><th>담당자</th>
               {isManager && <th>반려사유</th>}
               <th>액션</th>
@@ -326,7 +486,13 @@ export default function Quality() {
                 <tr key={insp.id}>
                   <td style={{fontFamily:'monospace',fontSize:11}}>{insp.gr_no}</td>
                   <td>{insp.inspect_date}</td>
-                  <td>{insp.inspect_qty?.toLocaleString()}</td>
+                  <td style={{color:'var(--text-sm)',fontSize:12}}>{insp.lot_size?.toLocaleString() || '—'}</td>
+                  <td style={{fontWeight:insp.sample_size?600:'normal',color:insp.sample_size?'var(--primary)':'var(--text-sm)',fontSize:12}}>
+                    {insp.sample_size?.toLocaleString() || '—'}
+                  </td>
+                  <td style={{fontSize:11,color:'var(--text-sm)'}}>
+                    {insp.ac != null ? `${insp.ac}/${insp.re}` : '—'}
+                  </td>
                   <td style={{color:'var(--success)'}}>{insp.pass_qty?.toLocaleString()}</td>
                   <td style={{color:'var(--danger)'}}>{insp.fail_qty?.toLocaleString()}</td>
                   <td><span className={`badge ${insp.result==='합격'?'badge-green':insp.result==='불합격'?'badge-red':'badge-amber'}`}>{insp.result}</span></td>
@@ -490,6 +656,13 @@ export default function Quality() {
           </table>
         </div>
         </>
+      )}
+
+      {showInspModal && (
+        <InspectionModal
+          onClose={() => setShowInspModal(false)}
+          onSaved={() => { setShowInspModal(false); load() }}
+        />
       )}
 
       {showStdModal && (

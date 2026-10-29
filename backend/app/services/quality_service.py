@@ -17,6 +17,7 @@ def register_inspection(
     fail_qty: int,
     disposal: DisposalType,
     defect_note: str | None = None,
+    result: str | None = None,  # 외부에서 자동판정 결과 주입 가능
 ) -> Inspection:
     receipt = db.get(Receipt, gr_no)
     if not receipt:
@@ -34,7 +35,9 @@ def register_inspection(
     if inspect_qty > receipt.qty:
         raise HTTPException(400, f"검사수량({inspect_qty}) > 입고수량({receipt.qty})")
 
-    if pass_qty > 0 and fail_qty > 0:
+    if result is not None:
+        result = InspectionResult(result)
+    elif pass_qty > 0 and fail_qty > 0:
         result = InspectionResult.partial
     elif fail_qty > 0:
         result = InspectionResult.fail

@@ -10,6 +10,8 @@ class InspectionCreate(BaseModel):
     fail_qty: int
     disposal: DisposalType = DisposalType.pending
     defect_note: str | None = None
+    standard_id: int | None = None   # 검사기준 연결 (있으면 자동판정)
+    lot_size: int | None = None      # 입고수량 (샘플링 근거 저장용)
 
 
 class InspectionOut(BaseModel):
@@ -31,6 +33,11 @@ class InspectionOut(BaseModel):
     rejection_reason: str | None = None
     confirmer_id: str | None = None
     confirmed_at: datetime | None = None
+    standard_id: int | None = None
+    lot_size: int | None = None
+    sample_size: int | None = None
+    ac: int | None = None
+    re: int | None = None
 
 
 class ClaimCreate(BaseModel):
@@ -78,6 +85,17 @@ class ClaimOut(BaseModel):
     corrective_action: str | None
     preventive_action: str | None
     status: ClaimStatus
+
+
+class SamplingPlanOut(BaseModel):
+    lot_size: int
+    level: str
+    aql: float
+    code_letter: str
+    sample_size: int
+    ac: int | None
+    re: int | None
+    aql_used: float
 
 
 class DefectRateOut(BaseModel):

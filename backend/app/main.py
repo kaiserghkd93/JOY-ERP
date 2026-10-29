@@ -25,6 +25,11 @@ with engine.connect() as _conn:
         "ALTER TABLE inspection ADD COLUMN IF NOT EXISTS rejection_reason TEXT",
         "ALTER TABLE inspection ADD COLUMN IF NOT EXISTS confirmer_id VARCHAR(50)",
         "ALTER TABLE inspection ADD COLUMN IF NOT EXISTS confirmed_at TIMESTAMP",
+        "ALTER TABLE inspection ADD COLUMN IF NOT EXISTS standard_id INTEGER",
+        "ALTER TABLE inspection ADD COLUMN IF NOT EXISTS lot_size INTEGER",
+        "ALTER TABLE inspection ADD COLUMN IF NOT EXISTS sample_size INTEGER",
+        "ALTER TABLE inspection ADD COLUMN IF NOT EXISTS ac INTEGER",
+        "ALTER TABLE inspection ADD COLUMN IF NOT EXISTS re INTEGER",
     ]:
         try:
             _conn.execute(_text(_sql))
