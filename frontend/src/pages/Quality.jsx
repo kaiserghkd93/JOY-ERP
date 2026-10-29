@@ -775,7 +775,7 @@ export default function Quality() {
   const [ncrList, setNcrList] = useState([])
   const [ncrDetail, setNcrDetail] = useState(null)
   const [showNcrModal, setShowNcrModal] = useState(false)
-  const [tab, setTab] = useState('inspections')
+  const [tab, setTab] = useState(role === 'quality_manager' ? 'defreg' : 'inspections')
   const [showModal, setShowModal] = useState(false)
   const [showStdModal, setShowStdModal] = useState(false)
   const [showInspModal, setShowInspModal] = useState(false)
@@ -783,6 +783,9 @@ export default function Quality() {
   const [detailClaim, setDetailClaim] = useState(null)
   const [rejectTarget, setRejectTarget] = useState(null)
   const [rejectReason, setRejectReason] = useState('')
+  const [defRegList, setDefRegList] = useState([])
+  const [showDefRegModal, setShowDefRegModal] = useState(false)
+  const [defRegForm, setDefRegForm] = useState({ defect_date: new Date().toISOString().slice(0,10), inspect_type:'공정검사', part_no:'', part_name:'', defect_type:'', defect_qty:0, inspect_qty:0, line_no:'', cause:'', action_taken:'', note:'' })
 
   const load = useCallback(() => {
     api.get('/quality/claims').then(r => setClaims(r.data)).catch(() => {})
@@ -790,6 +793,7 @@ export default function Quality() {
     api.get('/quality/inspections').then(r => setInspections(r.data)).catch(() => {})
     api.get('/quality/standards').then(r => setStandards(r.data)).catch(() => {})
     api.get('/quality/ncr').then(r => setNcrList(r.data)).catch(() => {})
+    api.get('/quality/defect-reg').then(r => setDefRegList(r.data)).catch(() => {})
   }, [])
 
   useEffect(() => { load() }, [load])
@@ -822,11 +826,16 @@ export default function Quality() {
       <div className="erp-panel" style={{marginBottom:8}}>
         <div className="erp-actions">
           <div className="qdate-bar">
-            {[['inspections','입고검사'], ['standards','검사기준'], ['ncr','부적합관리'], ['claims','클레임 목록'], ['rates','외주처별 불량율'], ['loss','공정불량 로스']].map(([v,l])=>(
+            {[
+              ['defreg','공정/출하 불량등록'],
+              ['inspections','입고검사'], ['standards','검사기준'], ['ncr','부적합관리'],
+              ['claims','클레임 목록'], ['rates','외주처별 불량율'], ['loss','공정불량 로스']
+            ].map(([v,l])=>(
               <button key={v} className={`qdate-btn${tab===v?' active':''}`} onClick={()=>setTab(v)}>{l}</button>
             ))}
           </div>
           <div className="spacer"/>
+          {tab === 'defreg' && <button className="btn btn-sm btn-primary" onClick={()=>setShowDefRegModal(true)}>＋ 불량 등록</button>}
           {tab === 'inspections' && <button className="btn btn-sm btn-primary" onClick={()=>setShowInspModal(true)}>＋ 검사 등록</button>}
           {tab === 'ncr' && <button className="btn btn-sm btn-primary" onClick={()=>setShowNcrModal(true)}>＋ 부적합 통보</button>}
           {tab === 'claims' && <button className="btn btn-sm btn-primary" onClick={()=>setShowModal(true)}>＋ 클레임 등록</button>}
@@ -1032,6 +1041,81 @@ export default function Quality() {
       )}
 
       {tab === 'loss' && <LossPanel />}
+
+      {tab === 'defreg' && (
+        <>
+        <div className="result-bar">
+          <span className="result-bar-title">공정/출하 불량 목록</span>
+          <span className="result-bar-count">{defRegList.length}건</span>
+        </div>
+        <div className="table-wrap">
+          <table>
+            <thead><tr>
+              <th>발생일</th><th>검사유형</th><th>품번</th><th>품명</th>
+              <th>불량유형</th><th>검사수량</th><th>불량수량</th><th>불량율</th>
+              <th>라인/공정</th><th>불량원인</th><th>처리조치</th><th>등록자</th><th>삭제</th>
+            </tr></thead>
+            <tbody>
+              {defRegList.length === 0 && <tr><td colSpan={13} className="empty">등록된 불량 없음</td></tr>}
+              {defRegList.map(r => (
+                <tr key={r.id}>
+                  <td>{r.defect_date}</td>
+                  <td><span className={`badge ${r.inspect_type==='공정검사'?'badge-blue':'badge-amber'}`}>{r.inspect_type}</span></td>
+                  <td style={{fontFamily:'monospace',fontSize:11}}>{r.part_no}</td>
+                  <td>{r.part_name||'—'}</td>
+                  <td>{r.defect_type}</td>
+                  <td style={{textAlign:'right'}}>{r.inspect_qty?.toLocaleString()}</td>
+                  <td style={{textAlign:'right',color:'var(--danger)',fontWeight:600}}>{r.defect_qty?.toLocaleString()}</td>
+                  <td style={{textAlign:'right'}}>
+                    {r.defect_rate!=null ? <span className={`badge ${r.defect_rate>5?'badge-red':r.defect_rate>2?'badge-amber':'badge-green'}`}>{r.defect_rate}%</span> : '—'}
+                  </td>
+                  <td>{r.line_no||'—'}</td>
+                  <td style={{maxWidth:120,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.cause||'—'}</td>
+                  <td style={{maxWidth:120,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.action_taken||'—'}</td>
+                  <td style={{fontSize:11,color:'var(--text-sm)'}}>{r.registered_by||'—'}</td>
+                  <td><button className="btn btn-xs btn-danger" onClick={async()=>{if(window.confirm('삭제?')){await api.delete(`/quality/defect-reg/${r.id}`);load()}}}>삭제</button></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        </>
+      )}
+
+      {showDefRegModal && (
+        <div className="modal-overlay" onClick={()=>setShowDefRegModal(false)}>
+          <div className="modal-box" style={{minWidth:520}} onClick={e=>e.stopPropagation()}>
+            <div className="modal-header"><span>공정/출하 불량 등록</span><button className="modal-close" onClick={()=>setShowDefRegModal(false)}>✕</button></div>
+            <div className="modal-body" style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'10px 16px'}}>
+              <label>발생일<input type="date" className="form-control" value={defRegForm.defect_date} onChange={e=>setDefRegForm(p=>({...p,defect_date:e.target.value}))} /></label>
+              <label>검사유형
+                <select className="form-control" value={defRegForm.inspect_type} onChange={e=>setDefRegForm(p=>({...p,inspect_type:e.target.value}))}>
+                  <option>공정검사</option><option>출하검사</option>
+                </select>
+              </label>
+              <label>품번<input className="form-control" value={defRegForm.part_no} onChange={e=>setDefRegForm(p=>({...p,part_no:e.target.value}))} /></label>
+              <label>품명<input className="form-control" value={defRegForm.part_name} onChange={e=>setDefRegForm(p=>({...p,part_name:e.target.value}))} /></label>
+              <label>불량유형<input className="form-control" value={defRegForm.defect_type} onChange={e=>setDefRegForm(p=>({...p,defect_type:e.target.value}))} /></label>
+              <label>라인/공정<input className="form-control" value={defRegForm.line_no} onChange={e=>setDefRegForm(p=>({...p,line_no:e.target.value}))} /></label>
+              <label>검사수량<input type="number" className="form-control" value={defRegForm.inspect_qty} onChange={e=>setDefRegForm(p=>({...p,inspect_qty:+e.target.value}))} /></label>
+              <label>불량수량<input type="number" className="form-control" value={defRegForm.defect_qty} onChange={e=>setDefRegForm(p=>({...p,defect_qty:+e.target.value}))} /></label>
+              <label style={{gridColumn:'1/-1'}}>불량원인<input className="form-control" value={defRegForm.cause} onChange={e=>setDefRegForm(p=>({...p,cause:e.target.value}))} /></label>
+              <label style={{gridColumn:'1/-1'}}>처리조치<input className="form-control" value={defRegForm.action_taken} onChange={e=>setDefRegForm(p=>({...p,action_taken:e.target.value}))} /></label>
+              <label style={{gridColumn:'1/-1'}}>비고<input className="form-control" value={defRegForm.note} onChange={e=>setDefRegForm(p=>({...p,note:e.target.value}))} /></label>
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-secondary" onClick={()=>setShowDefRegModal(false)}>취소</button>
+              <button className="btn btn-primary" onClick={async()=>{
+                if(!defRegForm.part_no||!defRegForm.defect_type) return alert('품번과 불량유형은 필수입니다')
+                await api.post('/quality/defect-reg', defRegForm).catch(e=>alert(e.response?.data?.detail||'오류'))
+                setShowDefRegModal(false)
+                setDefRegForm({defect_date:new Date().toISOString().slice(0,10),inspect_type:'공정검사',part_no:'',part_name:'',defect_type:'',defect_qty:0,inspect_qty:0,line_no:'',cause:'',action_taken:'',note:''})
+                load()
+              }}>저장</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showNcrModal && (
         <NcrCreateModal onClose={()=>setShowNcrModal(false)} onSaved={()=>{setShowNcrModal(false);load()}} />

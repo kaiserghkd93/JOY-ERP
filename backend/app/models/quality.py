@@ -232,3 +232,28 @@ class QualityClaim(Base):
 
     partner: Mapped["Partner"] = relationship()
     item: Mapped["Item"] = relationship()
+
+
+class InspectType(str, enum.Enum):
+    process  = "공정검사"
+    outgoing = "출하검사"
+
+
+class ProcessOutgoingDefect(Base):
+    """공정/출하 불량 등록"""
+    __tablename__ = "process_outgoing_defect"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    defect_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    inspect_type: Mapped[InspectType] = mapped_column(SAEnum(InspectType), nullable=False)
+    part_no: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
+    part_name: Mapped[str | None] = mapped_column(String(200))
+    defect_type: Mapped[str] = mapped_column(String(100), nullable=False)
+    defect_qty: Mapped[int] = mapped_column(Integer, default=0)
+    inspect_qty: Mapped[int] = mapped_column(Integer, default=0)
+    line_no: Mapped[str | None] = mapped_column(String(50))
+    cause: Mapped[str | None] = mapped_column(Text)
+    action_taken: Mapped[str | None] = mapped_column(Text)
+    registered_by: Mapped[str | None] = mapped_column(ForeignKey("user.username"), nullable=True)
+    note: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)

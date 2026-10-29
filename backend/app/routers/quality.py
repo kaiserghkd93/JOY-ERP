@@ -7,6 +7,7 @@ from app.models.quality import (
     Inspection, QualityClaim, ApprovalStatus,
     InspectionStandard, InspectionItem, StandardStatus,
     NonConformance, NcrAppeal, NcrStatus, AppealStatus,
+    ProcessOutgoingDefect, InspectType,
 )
 from app.models.auth import User
 from app.schemas.quality import (
@@ -442,3 +443,87 @@ def review_appeal(ncr_no: str, appeal_id: int, body: ReviewBody, db: Session = D
     db.commit()
     db.refresh(appeal)
     return appeal
+
+
+# ── 공정/출하 불량 등록 ───────────────────────────────────────────────
+
+class DefectRegCreate(BaseModel):
+    defect_date: date
+    inspect_type: str
+    part_no: str
+    part_name: str | None = None
+    defect_type: str
+    defect_qty: int
+    inspect_qty: int = 0
+    line_no: str | None = None
+    cause: str | None = None
+    action_taken: str | None = None
+    note: str | None = None
+
+
+@router.get("/quality/defect-reg")
+def list_defect_reg(
+    start: date | None = None,
+    end: date | None = None,
+    inspect_type: str | None = None,
+    db: Session = Depends(get_db),
+):
+    q = db.query(ProcessOutgoingDefect)
+    if start:
+        q = q.filter(ProcessOutgoingDefect.defect_date >= start)
+    if end:
+        q = q.filter(ProcessOutgoingDefect.defect_date <= end)
+    if inspect_type:
+        q = q.filter(ProcessOutgoingDefect.inspect_type == inspect_type)
+    rows = q.order_by(ProcessOutgoingDefect.defect_date.desc(), ProcessOutgoingDefect.id.desc()).all()
+    return [
+        {
+            "id": r.id,
+            "defect_date": str(r.defect_date),
+            "inspect_type": r.inspect_type,
+            "part_no": r.part_no,
+            "part_name": r.part_name,
+            "defect_type": r.defect_type,
+            "defect_qty": r.defect_qty,
+            "inspect_qty": r.inspect_qty,
+            "defect_rate": round(r.defect_qty / r.inspect_qty * 100, 2) if r.inspect_qty else None,
+            "line_no": r.line_no,
+            "cause": r.cause,
+            "action_taken": r.action_taken,
+            "registered_by": r.registered_by,
+            "note": r.note,
+            "created_at": str(r.created_at),
+        }
+        for r in rows
+    ]
+
+
+@router.post("/quality/defect-reg", status_code=201)
+def create_defect_reg(body: DefectRegCreate, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    row = ProcessOutgoingDefect(
+        defect_date=body.defect_date,
+        inspect_type=body.inspect_type,
+        part_no=body.part_no,
+        part_name=body.part_name,
+        defect_type=body.defect_type,
+        defect_qty=body.defect_qty,
+        inspect_qty=body.inspect_qty,
+        line_no=body.line_no,
+        cause=body.cause,
+        action_taken=body.action_taken,
+        registered_by=current_user.username,
+        note=body.note,
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return {"id": row.id}
+
+
+@router.delete("/quality/defect-reg/{row_id}", status_code=204)
+def delete_defect_reg(row_id: int, db: Session = Depends(get_db)):
+    row = db.get(ProcessOutgoingDefect, row_id)
+    if not row:
+        raise HTTPException(404, "not found")
+    db.delete(row)
+    db.commit()
