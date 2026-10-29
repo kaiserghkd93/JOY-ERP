@@ -10,10 +10,10 @@ const ROLE_PERMISSIONS = {
   sales:      ['/', '/sales', '/invoice', '/monthly-sales', '/sales-target', '/inventory'],
   purchase:   ['/', '/receipt', '/monthly-purchase', '/bom', '/inventory'],
   material:       ['/', '/purchase', '/mrp', '/inventory'],
-  manufacturing:  ['/', '/production', '/production-plan', '/sales', '/invoice', '/monthly-sales', '/sales-target', '/inventory', '/cost', '/cost-actual', '/mold', '/mrp', '/production-mrp'],
+  manufacturing:  ['/', '/production', '/production-plan', '/sales', '/invoice', '/monthly-sales', '/sales-target', '/inventory', '/cost', '/cost-actual', '/mold', '/mrp', '/production-mrp', '/bom'],
   shipping:   ['/', '/sales', '/invoice', '/inventory'],
   quality:    ['/', '/quality', '/receipt', '/inventory'],
-  production: ['/', '/production', '/production-plan', '/inventory', '/cost', '/mold'],
+  production: ['/', '/production', '/production-plan', '/inventory', '/cost', '/mold', '/bom'],
   supplier:   ['/'],
 }
 
