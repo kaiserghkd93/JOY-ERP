@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, CartesianGrid } from 'recharts'
 import * as XLSX from 'xlsx'
 import api from '../api'
+import { getRole } from '../auth'
 
 function exportExcel(rows, columns, filename) {
   const data = [columns.map(c => c.label), ...rows.map(r => columns.map(c => r[c.key]))]
@@ -58,6 +59,8 @@ const customTooltipStyle = {
 
 export default function Dashboard() {
   const now = new Date()
+  const role = getRole()
+  const isOwner = role === 'owner'
   const [year, setYear] = useState(now.getFullYear())
   const [month, setMonth] = useState(now.getMonth() + 1)
   const [kpi, setKpi] = useState(null)
@@ -69,21 +72,28 @@ export default function Dashboard() {
   const [purchaseByPartner, setPurchaseByPartner] = useState([])
   const [monthlyTrend, setMonthlyTrend] = useState([])
   const [vsTarget, setVsTarget] = useState(null)
+  const [qualityKpi, setQualityKpi] = useState(null)
   const [loading, setLoading] = useState(false)
 
   const load = () => {
     setLoading(true)
-    Promise.all([
-      api.get(`/dashboard/kpi?year=${year}&month=${month}`).then(r => setKpi(r.data)).catch(() => {}),
-      api.get('/dashboard/supplier-scorecard').then(r => setScorecard(r.data)).catch(() => {}),
-      api.get(`/dashboard/customer-scorecard?year=${year}&month=${month}`).then(r => setCustomerScorecard(r.data)).catch(() => {}),
-      api.get(`/dashboard/monthly-closing?year=${year}&month=${month}`).then(r => setClosing(r.data)).catch(() => {}),
-      api.get('/dashboard/stock-summary').then(r => setStockSummary(r.data)).catch(() => {}),
-      api.get(`/dashboard/sales-by-partner?year=${year}&month=${month}`).then(r => setSalesByPartner(r.data)).catch(() => {}),
-      api.get(`/dashboard/purchase-by-partner?year=${year}&month=${month}`).then(r => setPurchaseByPartner(r.data)).catch(() => {}),
-      api.get(`/dashboard/monthly-trend?year=${year}`).then(r => setMonthlyTrend(r.data)).catch(() => {}),
+    const calls = [
+      api.get(`/dashboard/quality-summary?year=${year}&month=${month}`).then(r => setQualityKpi(r.data)).catch(() => {}),
       api.get(`/dashboard/sales-vs-target?year=${year}&month=${month}`).then(r => setVsTarget(r.data)).catch(() => {}),
-    ]).finally(() => setLoading(false))
+    ]
+    if (!isOwner) {
+      calls.push(
+        api.get(`/dashboard/kpi?year=${year}&month=${month}`).then(r => setKpi(r.data)).catch(() => {}),
+        api.get('/dashboard/supplier-scorecard').then(r => setScorecard(r.data)).catch(() => {}),
+        api.get(`/dashboard/customer-scorecard?year=${year}&month=${month}`).then(r => setCustomerScorecard(r.data)).catch(() => {}),
+        api.get(`/dashboard/monthly-closing?year=${year}&month=${month}`).then(r => setClosing(r.data)).catch(() => {}),
+        api.get('/dashboard/stock-summary').then(r => setStockSummary(r.data)).catch(() => {}),
+        api.get(`/dashboard/sales-by-partner?year=${year}&month=${month}`).then(r => setSalesByPartner(r.data)).catch(() => {}),
+        api.get(`/dashboard/purchase-by-partner?year=${year}&month=${month}`).then(r => setPurchaseByPartner(r.data)).catch(() => {}),
+        api.get(`/dashboard/monthly-trend?year=${year}`).then(r => setMonthlyTrend(r.data)).catch(() => {}),
+      )
+    }
+    Promise.all(calls).finally(() => setLoading(false))
   }
 
   useEffect(() => { load() }, [year, month])
@@ -93,6 +103,152 @@ export default function Dashboard() {
   const grossProfit    = totalSales - totalPurchases
   const salesTotal     = salesByPartner.reduce((s, r) => s + r.amount, 0)
   const purchaseTotal  = purchaseByPartner.reduce((s, r) => s + r.amount, 0)
+
+  const QualityDashboard = () => {
+    if (!qualityKpi) return null
+    const insp = qualityKpi.inspection
+    const ncr = qualityKpi.ncr
+    const loss = qualityKpi.loss
+    const fmtW = (n) => n > 0 ? `₩${Math.round(n).toLocaleString()}` : '—'
+    return (
+      <div>
+        <div className="section-title mt-16">품질 대시보드 — {qualityKpi.year}년 {qualityKpi.month}월</div>
+        {/* KPI 3종 */}
+        <div className="kpi-grid" style={{ marginBottom: 16 }}>
+          <KpiCard icon="🔍" label="수입검사 불량율"
+            value={insp.defect_rate != null ? insp.defect_rate.toFixed(2) : null} unit=" %"
+            sub={`검사 ${insp.total}건 · 합격율 ${insp.pass_rate != null ? insp.pass_rate.toFixed(1) : '—'}%`}
+            accent={insp.defect_rate <= 1 ? 'var(--success)' : insp.defect_rate <= 5 ? 'var(--warn)' : 'var(--danger)'}
+            trend={insp.defect_rate <= 1 ? '양호' : '관리 필요'}
+            trendDir={insp.defect_rate <= 1 ? 'up' : 'down'}
+          />
+          <KpiCard icon="⚠️" label="부적합통보(NCR) 미결"
+            value={ncr.open + ncr.in_progress} unit="건"
+            sub={`접수 ${ncr.open} · 처리중 ${ncr.in_progress} · 완료 ${ncr.closed} · 이번달신규 ${ncr.this_month_new}`}
+            accent={ncr.open + ncr.in_progress === 0 ? 'var(--success)' : ncr.open + ncr.in_progress <= 3 ? 'var(--warn)' : 'var(--danger)'}
+            trend={ncr.open + ncr.in_progress === 0 ? '이슈없음' : '처리 필요'}
+            trendDir={ncr.open + ncr.in_progress === 0 ? 'up' : 'down'}
+          />
+          <KpiCard icon="📉" label="공정불량 로스율"
+            value={loss.loss_rate != null ? loss.loss_rate.toFixed(2) : null} unit=" %"
+            sub={`불량금액 ${fmtW(loss.total_defect_cost)} / 생산금액 ${fmtW(loss.total_production_cost)}`}
+            accent={loss.loss_rate == null ? 'var(--border)' : loss.loss_rate <= 2 ? 'var(--success)' : loss.loss_rate <= 5 ? 'var(--warn)' : 'var(--danger)'}
+            trend={loss.loss_rate == null ? 'MES 업로드 필요' : loss.loss_rate <= 2 ? '양호' : '관리 필요'}
+            trendDir={loss.loss_rate == null ? null : loss.loss_rate <= 2 ? 'up' : 'down'}
+          />
+        </div>
+        {/* 불량유형 상위 5 */}
+        {loss.top_defects.length > 0 && (
+          <>
+          <div className="section-title" style={{fontSize:13}}>공정불량 유형별 순위 (이번 달)</div>
+          <div className="table-wrap" style={{marginBottom:16}}>
+            <table style={{fontSize:12}}>
+              <thead><tr><th>순위</th><th>불량유형</th><th className="text-right">불량수량</th><th className="text-right">불량금액(원)</th></tr></thead>
+              <tbody>
+                {loss.top_defects.map((d,i) => (
+                  <tr key={d.defect_type}>
+                    <td style={{textAlign:'center',color:'var(--text-sm)'}}>{i===0?'🥇':i===1?'🥈':i===2?'🥉':i+1}</td>
+                    <td style={{fontWeight:i<3?600:400}}>{d.defect_type}</td>
+                    <td className="text-right">{d.qty.toLocaleString()}</td>
+                    <td className="text-right" style={{color:'var(--danger)',fontWeight:600}}>{fmtW(d.cost)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          </>
+        )}
+        {/* 검사 현황 */}
+        <div className="table-wrap" style={{marginBottom:16}}>
+          <table style={{fontSize:12}}>
+            <thead><tr><th>구분</th><th className="text-right">건수</th><th className="text-right">비고</th></tr></thead>
+            <tbody>
+              <tr><td>총 검사</td><td className="text-right">{insp.total}건</td><td className="text-right" style={{color:'var(--text-sm)'}}>불량수량 {insp.total_fail_qty.toLocaleString()}개</td></tr>
+              <tr style={{background:'#f0fdf4'}}><td>합격</td><td className="text-right" style={{color:'var(--success)',fontWeight:600}}>{insp.pass}건</td><td className="text-right" style={{color:'var(--text-sm)'}}>{insp.pass_rate != null ? insp.pass_rate.toFixed(1)+'%' : '—'}</td></tr>
+              <tr style={{background:'#fef2f2'}}><td>불합격</td><td className="text-right" style={{color:'var(--danger)',fontWeight:600}}>{insp.fail}건</td><td className="text-right" style={{color:'var(--text-sm)'}}>{insp.total > 0 ? (100 - insp.pass_rate).toFixed(1)+'%' : '—'}</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    )
+  }
+
+  if (isOwner) {
+    return (
+      <div>
+        <div className="toolbar" style={{ marginBottom: 16 }}>
+          <select value={year} onChange={e => setYear(+e.target.value)} style={{ width: 90 }}>
+            {[2024, 2025, 2026, 2027].map(y => <option key={y}>{y}</option>)}
+          </select>
+          <select value={month} onChange={e => setMonth(+e.target.value)} style={{ width: 75 }}>
+            {Array.from({ length: 12 }, (_, i) => i + 1).map(m =>
+              <option key={m} value={m}>{m}월</option>
+            )}
+          </select>
+          <button className="btn btn-outline" onClick={load} disabled={loading}>{loading ? '...' : '⟳ 새로고침'}</button>
+          <div className="spacer" />
+          <span className="text-muted">{year}년 {month}월 기준</span>
+        </div>
+
+        {/* ── 목표매출 대시보드 ── */}
+        {vsTarget && (
+          <div className="card" style={{ marginBottom: 16, padding: '12px 16px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 10 }}>
+              <div className="section-title" style={{ margin: 0 }}>{year}년 {month}월 매출 목표 달성률</div>
+              <div className="spacer" />
+              <span style={{ fontSize: 13, fontWeight: 800, color: vsTarget.total_rate != null && vsTarget.total_rate >= 100 ? 'var(--success)' : vsTarget.total_rate != null && vsTarget.total_rate >= 70 ? '#E67E22' : 'var(--danger)' }}>
+                {vsTarget.total_rate != null ? `${vsTarget.total_rate}%` : '목표 미설정'}
+              </span>
+            </div>
+            {vsTarget.total_target > 0 && (
+              <div style={{ marginBottom: 14 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--text-sm)', marginBottom: 3 }}>
+                  <span>실적 ₩{Math.round(vsTarget.total_actual / 10000).toLocaleString()}만</span>
+                  <span>목표 ₩{Math.round(vsTarget.total_target / 10000).toLocaleString()}만</span>
+                </div>
+                <div style={{ background: 'var(--border)', borderRadius: 4, height: 10, overflow: 'hidden' }}>
+                  <div style={{ width: `${Math.min(100, vsTarget.total_rate ?? 0)}%`, height: '100%', background: vsTarget.total_rate >= 100 ? 'var(--success)' : vsTarget.total_rate >= 70 ? '#E67E22' : 'var(--danger)', borderRadius: 4, transition: 'width .4s' }} />
+                </div>
+              </div>
+            )}
+            {vsTarget.details.length > 0 && (
+              <table style={{ fontSize: 12 }}>
+                <thead><tr><th>거래처</th><th className="text-right">목표(만원)</th><th className="text-right">실적(만원)</th><th className="text-right">달성률</th><th style={{width:120}}>진행도</th></tr></thead>
+                <tbody>
+                  {vsTarget.details.map(d => {
+                    const rate = d.rate ?? 0
+                    const barColor = rate >= 100 ? 'var(--success)' : rate >= 70 ? '#E67E22' : d.target > 0 ? 'var(--danger)' : 'var(--primary)'
+                    return (
+                      <tr key={d.partner_id}>
+                        <td style={{ fontWeight: 600 }}>{d.partner_name}</td>
+                        <td className="text-right">{d.target > 0 ? `₩${Math.round(d.target/10000).toLocaleString()}만` : <span className="text-muted">—</span>}</td>
+                        <td className="text-right" style={{ color: 'var(--primary)', fontWeight: 700 }}>
+                          {d.actual > 0 ? `₩${Math.round(d.actual/10000).toLocaleString()}만` : <span className="text-muted">—</span>}
+                        </td>
+                        <td className="text-right" style={{ fontWeight: 700, color: barColor }}>
+                          {d.rate != null ? `${d.rate}%` : <span className="text-muted">—</span>}
+                        </td>
+                        <td style={{ padding: '4px 8px' }}>
+                          {d.target > 0 ? (
+                            <div style={{ background: 'var(--border)', borderRadius: 3, height: 7, overflow: 'hidden' }}>
+                              <div style={{ width: `${Math.min(100, rate)}%`, height: '100%', background: barColor, borderRadius: 3 }} />
+                            </div>
+                          ) : <span className="text-muted" style={{ fontSize: 10 }}>목표없음</span>}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            )}
+          </div>
+        )}
+
+        {/* ── 품질 대시보드 ── */}
+        <QualityDashboard />
+      </div>
+    )
+  }
 
   return (
     <div>
@@ -483,6 +639,9 @@ export default function Dashboard() {
       ) : (
         <div className="empty" style={{ marginBottom: 18 }}>고객사 데이터 없음</div>
       )}
+
+      {/* ── 품질 대시보드 ── */}
+      <QualityDashboard />
 
       {/* ── 외주처 스코어카드 ── */}
       <div className="section-title mt-16">외주처 스코어카드</div>

@@ -15,6 +15,9 @@ const ROLE_PERMISSIONS = {
   quality:         ['/', '/quality', '/receipt', '/inventory'],
   quality_manager: ['/', '/quality', '/receipt', '/inventory'],
   production: ['/', '/production', '/production-plan', '/inventory', '/cost', '/mold', '/bom'],
+  owner:      ['/', '/report', '/inventory', '/invoice', '/sales', '/monthly-sales', '/sales-target',
+                '/quality', '/production', '/production-plan', '/production-mrp',
+                '/cost', '/cost-actual', '/mold', '/master', '/bom'],
   supplier:   ['/'],
 }
 
@@ -35,6 +38,7 @@ export const ROLE_LABELS = {
   production: '생산관리',
   material:      '자재구매',
   manufacturing: '제조관리 총괄',
+  owner:         '오너',
   supplier:      '외주처 (외부)',
 }
 

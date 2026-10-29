@@ -18,6 +18,7 @@ class UserRole(str, enum.Enum):
     production = "production"  # 생산관리팀 — 생산오더·계획·금형·원가
     material      = "material"      # 자재구매 — 자재 발주·입고
     manufacturing = "manufacturing" # 제조관리 총괄 — 생산+영업 조회
+    owner         = "owner"         # 시크릿 오너 — 구매·계정관리 제외 전체
     supplier      = "supplier"      # 외주처 포털 (외부)
 
 

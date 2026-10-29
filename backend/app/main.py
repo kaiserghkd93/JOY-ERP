@@ -41,7 +41,7 @@ with engine.connect() as _conn:
 # DDL must run outside transactions for PostgreSQL enum operations
 with engine.connect().execution_options(isolation_level="AUTOCOMMIT") as _ddl:
     for _role in ['executive','manager','accounting','sales','purchase',
-                  'shipping','quality','quality_manager','production','material','manufacturing','supplier']:
+                  'shipping','quality','quality_manager','production','material','manufacturing','supplier','owner']:
         try:
             _ddl.execute(_text(f"ALTER TYPE userrole ADD VALUE IF NOT EXISTS '{_role}'"))
         except Exception:

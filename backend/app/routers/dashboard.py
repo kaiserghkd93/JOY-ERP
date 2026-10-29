@@ -7,7 +7,8 @@ from app.models.purchase import PurchaseOrder, PurchaseOrderGroup, Receipt, Rece
 from app.models.sales import SalesOrder, Shipment, SOStatus, ShipmentStatus, SalesTarget
 from app.models.ledger import StockLedger
 from app.models.master import Item, Partner
-from app.models.quality import Inspection
+from app.models.quality import Inspection, NonConformance, NcrStatus
+from sqlalchemy import text as _text
 from app.services.ledger_service import get_stock, get_avg_price, get_stock_bulk, get_avg_price_bulk
 
 router = APIRouter(prefix="/dashboard", tags=["대시보드"])
@@ -814,4 +815,95 @@ def sales_vs_target(year: int | None = None, month: int | None = None, db: Sessi
         "total_actual": total_actual,
         "total_rate": total_rate,
         "details": sorted(details, key=lambda x: x["actual"], reverse=True),
+    }
+
+
+@router.get("/quality-summary")
+def quality_summary(year: int | None = None, month: int | None = None, db: Session = Depends(get_db)):
+    """품질 대시보드 — 불량율·NCR현황·검사통계·공정불량 로스율"""
+    from app.models.quality import InspectionResult
+    y = year or date.today().year
+    m = month or date.today().month
+    first_day = date(y, m, 1)
+    if m == 12:
+        last_day = date(y + 1, 1, 1) - timedelta(days=1)
+    else:
+        last_day = date(y, m + 1, 1) - timedelta(days=1)
+
+    # ── 검사 통계 (이번 달) ─────────────────────────────────────────
+    inspections = db.query(Inspection).filter(
+        Inspection.inspect_date >= first_day,
+        Inspection.inspect_date <= last_day,
+    ).all()
+    total_insp = len(inspections)
+    pass_count = sum(1 for i in inspections if i.result == InspectionResult.pass_)
+    fail_count = sum(1 for i in inspections if i.result == InspectionResult.fail)
+    total_fail_qty = sum(i.fail_qty for i in inspections)
+    total_insp_qty = sum(i.inspect_qty for i in inspections)
+    defect_rate = round(total_fail_qty / total_insp_qty * 100, 2) if total_insp_qty > 0 else 0.0
+    pass_rate = round(pass_count / total_insp * 100, 1) if total_insp > 0 else None
+
+    # ── NCR 현황 (누계) ────────────────────────────────────────────
+    ncr_counts = {}
+    for status in [NcrStatus.open, NcrStatus.in_progress, NcrStatus.closed]:
+        ncr_counts[status.value] = db.query(NonConformance).filter(
+            NonConformance.status == status
+        ).count()
+    ncr_this_month = db.query(NonConformance).filter(
+        NonConformance.created_at >= first_day,
+        NonConformance.created_at <= last_day,
+    ).count()
+
+    # ── 공정불량 로스율 (이번 달, MesDefectDetail) ────────────────
+    try:
+        loss_row = db.execute(_text("""
+            SELECT
+                SUM(defect_cost)      AS total_defect_cost,
+                SUM(production_cost)  AS total_production_cost
+            FROM mes_defect_detail
+            WHERE prod_date BETWEEN :s AND :e AND defect_qty > 0
+        """), {"s": str(first_day), "e": str(last_day)}).fetchone()
+        defect_cost = float(loss_row[0] or 0)
+        prod_cost = float(loss_row[1] or 0)
+        loss_rate = round(defect_cost / prod_cost * 100, 2) if prod_cost > 0 else None
+    except Exception:
+        defect_cost, prod_cost, loss_rate = 0.0, 0.0, None
+
+    # ── 불량유형별 상위 5 (이번 달) ─────────────────────────────────
+    try:
+        top_defects = db.execute(_text("""
+            SELECT defect_type, SUM(defect_qty) AS qty, SUM(defect_cost) AS cost
+            FROM mes_defect_detail
+            WHERE prod_date BETWEEN :s AND :e AND defect_qty > 0
+            GROUP BY defect_type
+            ORDER BY SUM(defect_cost) DESC
+            LIMIT 5
+        """), {"s": str(first_day), "e": str(last_day)}).fetchall()
+        top_defect_list = [{"defect_type": r[0], "qty": int(r[1] or 0), "cost": float(r[2] or 0)} for r in top_defects]
+    except Exception:
+        top_defect_list = []
+
+    return {
+        "year": y,
+        "month": m,
+        "inspection": {
+            "total": total_insp,
+            "pass": pass_count,
+            "fail": fail_count,
+            "pass_rate": pass_rate,
+            "defect_rate": defect_rate,
+            "total_fail_qty": total_fail_qty,
+        },
+        "ncr": {
+            "open": ncr_counts.get("접수", 0),
+            "in_progress": ncr_counts.get("처리중", 0),
+            "closed": ncr_counts.get("완료", 0),
+            "this_month_new": ncr_this_month,
+        },
+        "loss": {
+            "total_defect_cost": round(defect_cost, 0),
+            "total_production_cost": round(prod_cost, 0),
+            "loss_rate": loss_rate,
+            "top_defects": top_defect_list,
+        },
     }
