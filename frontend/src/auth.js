@@ -14,7 +14,7 @@ const ROLE_PERMISSIONS = {
                '/master', '/bom'],
   material:       ['/', '/purchase', '/mrp', '/inventory'],
   manufacturing:  ['/', '/production', '/production-plan', '/sales', '/invoice', '/monthly-sales', '/sales-target', '/inventory', '/cost', '/cost-actual', '/mold', '/mrp', '/production-mrp', '/bom'],
-  shipping:   ['/', '/sales', '/invoice', '/inventory'],
+  shipping:   ['/', '/sales', '/invoice', '/inventory', '/quality'],
   quality:         ['/', '/quality', '/inventory', '/production', '/production-plan', '/production-mrp'],
   quality_manager: ['/', '/quality', '/inventory', '/production', '/production-plan', '/production-mrp'],
   production: ['/', '/production', '/production-plan', '/inventory', '/cost', '/mold', '/bom'],
