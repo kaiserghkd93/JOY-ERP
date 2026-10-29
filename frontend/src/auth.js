@@ -18,7 +18,7 @@ const ROLE_PERMISSIONS = {
   quality:         ['/', '/quality', '/inventory', '/production', '/production-plan', '/production-mrp'],
   quality_manager: ['/', '/quality', '/inventory', '/production', '/production-plan', '/production-mrp', '/sales', '/invoice'],
   production: ['/', '/production', '/production-plan', '/inventory', '/cost', '/mold', '/bom'],
-  owner:      ['/', '/report', '/inventory', '/invoice', '/sales', '/monthly-sales', '/sales-target',
+  owner:      ['/', '/inventory', '/invoice', '/sales', '/monthly-sales', '/sales-target',
                 '/quality', '/production', '/production-plan', '/production-mrp',
                 '/cost', '/cost-actual', '/mold', '/master', '/bom',
                 '/purchase', '/mrp', '/monthly-purchase'],
