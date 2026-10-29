@@ -9,6 +9,8 @@ from app.routers import purchase_group, invoice, auto_order, import_ls, bom, rep
 from app.routers import auth, portal, admin_import, monthly_sales, monthly_purchase, sales_target
 from app.routers import material, mrp, cost_actual
 from app.routers import inventory_adj
+from app.routers import quality_advanced
+from app.models import quality_advanced as _qa_models  # noqa: ensure tables
 from app.models import inventory_adj as _inv_adj_models  # noqa: ensure tables registered
 
 Base.metadata.create_all(bind=engine)
@@ -119,6 +121,7 @@ app.include_router(auto_order.router)
 app.include_router(import_ls.router)
 app.include_router(bom.router)
 app.include_router(inventory_adj.router)
+app.include_router(quality_advanced.router)
 app.include_router(reports.router)
 app.include_router(cost.router)
 app.include_router(mold.router)

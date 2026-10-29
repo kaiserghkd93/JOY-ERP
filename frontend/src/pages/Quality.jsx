@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import api from '../api'
 import { getRole } from '../auth'
+import { SpcPanel, ControlPlanPanel, PfmeaPanel, CalibrationPanel, AuditPanel, PpapPanel, MsaPanel } from './QualityAdvanced'
 
 const AQL_OPTIONS = [0.065, 0.1, 0.15, 0.25, 0.4, 0.65, 1.0, 1.5, 2.5, 4.0, 6.5]
 
@@ -835,7 +836,9 @@ export default function Quality() {
             {[
               ['defreg','공정/출하 불량등록'],
               ['inspections','입고검사'], ['standards','검사기준'], ['ncr','부적합관리'],
-              ['claims','클레임 목록'], ['rates','외주처별 불량율'], ['loss','공정불량 로스']
+              ['claims','클레임 목록'], ['rates','외주처별 불량율'], ['loss','공정불량 로스'],
+              ['spc','SPC 관리도'], ['cp','관리계획서'], ['pfmea','PFMEA'],
+              ['calib','교정관리'], ['audit','내부감사'], ['ppap','PPAP'], ['msa','MSA']
             ].map(([v,l])=>(
               <button key={v} className={`qdate-btn${tab===v?' active':''}`} onClick={()=>setTab(v)}>{l}</button>
             ))}
@@ -1047,6 +1050,13 @@ export default function Quality() {
       )}
 
       {tab === 'loss' && <LossPanel />}
+      {tab === 'spc' && <SpcPanel />}
+      {tab === 'cp' && <ControlPlanPanel />}
+      {tab === 'pfmea' && <PfmeaPanel />}
+      {tab === 'calib' && <CalibrationPanel />}
+      {tab === 'audit' && <AuditPanel />}
+      {tab === 'ppap' && <PpapPanel />}
+      {tab === 'msa' && <MsaPanel />}
 
       {tab === 'defreg' && (
         <>
