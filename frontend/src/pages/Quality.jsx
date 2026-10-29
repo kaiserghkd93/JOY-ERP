@@ -793,7 +793,7 @@ export default function Quality() {
     api.get('/quality/inspections').then(r => setInspections(r.data)).catch(() => {})
     api.get('/quality/standards').then(r => setStandards(r.data)).catch(() => {})
     api.get('/quality/ncr').then(r => setNcrList(r.data)).catch(() => {})
-    api.get('/quality/defect-reg').then(r => setDefRegList(r.data)).catch(() => {})
+    api.get('/quality/defect-reg').then(r => setDefRegList(Array.isArray(r.data) ? r.data : [])).catch(() => {})
   }, [])
 
   useEffect(() => { load() }, [load])
