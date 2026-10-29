@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react'
 import api from '../api'
+import { getRole } from '../auth'
 
 function ClaimModal({ onClose, onSaved }) {
   const [partners, setPartners] = useState([])
@@ -78,17 +79,28 @@ function ClaimModal({ onClose, onSaved }) {
 }
 
 const STATUS_BADGE = { '접수': 'badge-blue', '조사중': 'badge-amber', '완료': 'badge-green', '보류': 'badge-gray' }
+const APPR_BADGE = {
+  '작성중': 'badge-gray', '승인대기': 'badge-amber',
+  '반려': 'badge-red', '승인완료': 'badge-blue', '최종확정': 'badge-green',
+}
 
 export default function Quality() {
+  const role = getRole()
+  const isManager = role === 'admin' || role === 'quality_manager'
+
   const [claims, setClaims] = useState([])
   const [defectRates, setDefectRates] = useState([])
-  const [tab, setTab] = useState('claims')
+  const [inspections, setInspections] = useState([])
+  const [tab, setTab] = useState('inspections')
   const [showModal, setShowModal] = useState(false)
   const [detailClaim, setDetailClaim] = useState(null)
+  const [rejectTarget, setRejectTarget] = useState(null)
+  const [rejectReason, setRejectReason] = useState('')
 
   const load = useCallback(() => {
     api.get('/quality/claims').then(r => setClaims(r.data)).catch(() => {})
     api.get('/quality/defect-rate').then(r => setDefectRates(r.data)).catch(() => {})
+    api.get('/quality/inspections').then(r => setInspections(r.data)).catch(() => {})
   }, [])
 
   useEffect(() => { load() }, [load])
@@ -98,19 +110,106 @@ export default function Quality() {
     load()
   }
 
+  const requestApproval = async (id) => {
+    await api.post(`/quality/inspections/${id}/request-approval`).catch(e => alert(e.response?.data?.detail || '오류'))
+    load()
+  }
+  const approve = async (id) => {
+    await api.post(`/quality/inspections/${id}/approve`).catch(e => alert(e.response?.data?.detail || '오류'))
+    load()
+  }
+  const reject = async (id) => {
+    if (!rejectReason.trim()) return alert('반려 사유를 입력하세요')
+    await api.post(`/quality/inspections/${id}/reject`, { reason: rejectReason }).catch(e => alert(e.response?.data?.detail || '오류'))
+    setRejectTarget(null); setRejectReason(''); load()
+  }
+  const confirm = async (id) => {
+    await api.post(`/quality/inspections/${id}/confirm`).catch(e => alert(e.response?.data?.detail || '오류'))
+    load()
+  }
+
   return (
     <div>
       <div className="erp-panel" style={{marginBottom:8}}>
         <div className="erp-actions">
           <div className="qdate-bar">
-            {[['claims','클레임 목록'],['rates','외주처별 불량율']].map(([v,l])=>(
+            {[['inspections','입고검사'], ['claims','클레임 목록'], ['rates','외주처별 불량율']].map(([v,l])=>(
               <button key={v} className={`qdate-btn${tab===v?' active':''}`} onClick={()=>setTab(v)}>{l}</button>
             ))}
           </div>
           <div className="spacer"/>
-          <button className="btn btn-sm btn-primary" onClick={()=>setShowModal(true)}>＋ 클레임 등록</button>
+          {tab === 'claims' && <button className="btn btn-sm btn-primary" onClick={()=>setShowModal(true)}>＋ 클레임 등록</button>}
         </div>
       </div>
+
+      {tab === 'inspections' && (
+        <>
+        <div className="result-bar">
+          <span className="result-bar-title">입고검사 목록</span>
+          <span className="result-bar-count">{inspections.length}건</span>
+        </div>
+        <div className="table-wrap">
+          <table>
+            <thead><tr>
+              <th>입고번호</th><th>검사일</th><th>검사수량</th><th>합격</th><th>불합격</th>
+              <th>판정</th><th>승인상태</th><th>담당자</th>
+              {isManager && <th>반려사유</th>}
+              <th>액션</th>
+            </tr></thead>
+            <tbody>
+              {inspections.length === 0 && <tr><td colSpan={10} className="empty">검사결과 없음</td></tr>}
+              {inspections.map(insp => (
+                <tr key={insp.id}>
+                  <td style={{fontFamily:'monospace',fontSize:11}}>{insp.gr_no}</td>
+                  <td>{insp.inspect_date}</td>
+                  <td>{insp.inspect_qty?.toLocaleString()}</td>
+                  <td style={{color:'var(--success)'}}>{insp.pass_qty?.toLocaleString()}</td>
+                  <td style={{color:'var(--danger)'}}>{insp.fail_qty?.toLocaleString()}</td>
+                  <td><span className={`badge ${insp.result==='합격'?'badge-green':insp.result==='불합격'?'badge-red':'badge-amber'}`}>{insp.result}</span></td>
+                  <td><span className={`badge ${APPR_BADGE[insp.approval_status||'작성중']}`}>{insp.approval_status||'작성중'}</span></td>
+                  <td style={{fontSize:11,color:'var(--text-sm)'}}>{insp.inspector_id||'—'}</td>
+                  {isManager && <td style={{fontSize:11,color:'var(--danger)',maxWidth:120,overflow:'hidden',textOverflow:'ellipsis'}}>{insp.rejection_reason||'—'}</td>}
+                  <td>
+                    <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>
+                      {/* 담당자: 승인요청 버튼 */}
+                      {!isManager && (insp.approval_status==='작성중'||insp.approval_status==='반려'||!insp.approval_status) && (
+                        <button className="btn btn-sm btn-primary" onClick={()=>requestApproval(insp.id)}>승인요청</button>
+                      )}
+                      {/* 책임자: 승인/반려/최종확정 */}
+                      {isManager && insp.approval_status==='승인대기' && (<>
+                        <button className="btn btn-sm btn-success" onClick={()=>approve(insp.id)}>승인</button>
+                        <button className="btn btn-sm btn-danger" onClick={()=>setRejectTarget(insp.id)}>반려</button>
+                      </>)}
+                      {isManager && insp.approval_status==='승인완료' && (
+                        <button className="btn btn-sm btn-primary" onClick={()=>confirm(insp.id)}>최종확정</button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        </>
+      )}
+
+      {/* 반려 사유 모달 */}
+      {rejectTarget && (
+        <div className="modal-overlay">
+          <div className="modal" style={{maxWidth:400}}>
+            <h3>반려 사유 입력</h3>
+            <div className="form-group">
+              <textarea rows={4} style={{width:'100%',padding:8,borderRadius:6,border:'1px solid var(--border)'}}
+                placeholder="반려 사유를 입력하세요"
+                value={rejectReason} onChange={e=>setRejectReason(e.target.value)} />
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-outline" onClick={()=>{setRejectTarget(null);setRejectReason('')}}>취소</button>
+              <button className="btn btn-danger" onClick={()=>reject(rejectTarget)}>반려 확정</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {tab === 'claims' && (
         <>

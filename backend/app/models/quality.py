@@ -31,6 +31,14 @@ class M4Category(str, enum.Enum):
     method = "Method(방법)"
 
 
+class ApprovalStatus(str, enum.Enum):
+    draft     = "작성중"
+    pending   = "승인대기"
+    rejected  = "반려"
+    approved  = "승인완료"
+    confirmed = "최종확정"
+
+
 class Inspection(Base):
     __tablename__ = "inspection"
 
@@ -44,6 +52,18 @@ class Inspection(Base):
     disposal: Mapped[DisposalType] = mapped_column(SAEnum(DisposalType), default=DisposalType.pending)
     defect_note: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+
+    # 승인 워크플로 필드
+    approval_status: Mapped[ApprovalStatus] = mapped_column(
+        SAEnum(ApprovalStatus), default=ApprovalStatus.draft, nullable=False
+    )
+    inspector_id: Mapped[str | None] = mapped_column(ForeignKey("user.username"), nullable=True)
+    requested_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    approver_id: Mapped[str | None] = mapped_column(ForeignKey("user.username"), nullable=True)
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    rejection_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    confirmer_id: Mapped[str | None] = mapped_column(ForeignKey("user.username"), nullable=True)
+    confirmed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     receipt: Mapped["Receipt"] = relationship()
 

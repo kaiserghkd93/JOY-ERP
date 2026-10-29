@@ -17,6 +17,14 @@ with engine.connect() as _conn:
         "ALTER TABLE invoice ADD COLUMN IF NOT EXISTS closing_type VARCHAR(10)",
         "ALTER TABLE purchase_order ADD COLUMN IF NOT EXISTS po_type VARCHAR(20) DEFAULT 'outsource'",
         "ALTER TABLE item ADD COLUMN IF NOT EXISTS avg_cost NUMERIC(15,4) DEFAULT 0",
+        "ALTER TABLE inspection ADD COLUMN IF NOT EXISTS approval_status VARCHAR(20) DEFAULT '작성중'",
+        "ALTER TABLE inspection ADD COLUMN IF NOT EXISTS inspector_id VARCHAR(50)",
+        "ALTER TABLE inspection ADD COLUMN IF NOT EXISTS requested_at TIMESTAMP",
+        "ALTER TABLE inspection ADD COLUMN IF NOT EXISTS approver_id VARCHAR(50)",
+        "ALTER TABLE inspection ADD COLUMN IF NOT EXISTS approved_at TIMESTAMP",
+        "ALTER TABLE inspection ADD COLUMN IF NOT EXISTS rejection_reason TEXT",
+        "ALTER TABLE inspection ADD COLUMN IF NOT EXISTS confirmer_id VARCHAR(50)",
+        "ALTER TABLE inspection ADD COLUMN IF NOT EXISTS confirmed_at TIMESTAMP",
     ]:
         try:
             _conn.execute(_text(_sql))

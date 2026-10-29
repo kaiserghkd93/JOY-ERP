@@ -13,7 +13,8 @@ class UserRole(str, enum.Enum):
     sales      = "sales"       # 영업관리 — 수주·출하·거래명세
     purchase   = "purchase"    # 외주구매 — 입고·BOM (발주는 admin 전용)
     shipping   = "shipping"    # 출하관리 — 출하·재고
-    quality    = "quality"     # 품질팀 — 품질·클레임·입고검사
+    quality         = "quality"          # 품질검사 담당자 — 검사결과 입력·승인요청
+    quality_manager = "quality_manager"  # 품질책임자 — 승인·반려·최종확정
     production = "production"  # 생산관리팀 — 생산오더·계획·금형·원가
     material      = "material"      # 자재구매 — 자재 발주·입고
     manufacturing = "manufacturing" # 제조관리 총괄 — 생산+영업 조회

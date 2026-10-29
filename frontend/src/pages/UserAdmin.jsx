@@ -64,7 +64,7 @@ export default function UserAdmin() {
   const ROLE_COLOR = {
     admin: '#1d4ed8', executive: '#7c3aed', manager: '#0891b2',
     accounting: '#b45309', sales: '#15803d', purchase: '#c2410c',
-    shipping: '#0369a1', quality: '#7c3aed', production: '#4d7c0f', supplier: '#64748b',
+    shipping: '#0369a1', quality: '#7c3aed', quality_manager: '#6d28d9', production: '#4d7c0f', supplier: '#64748b',
   }
 
   return (
