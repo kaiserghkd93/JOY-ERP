@@ -30,6 +30,8 @@ with engine.connect() as _conn:
         "ALTER TABLE inspection ADD COLUMN IF NOT EXISTS sample_size INTEGER",
         "ALTER TABLE inspection ADD COLUMN IF NOT EXISTS ac INTEGER",
         "ALTER TABLE inspection ADD COLUMN IF NOT EXISTS re INTEGER",
+        "ALTER TABLE mold ADD COLUMN IF NOT EXISTS lent_to_partner_id VARCHAR(50)",
+        "ALTER TABLE mold ADD COLUMN IF NOT EXISTS lent_date DATE",
         # NCR / 이의신청 (Base.metadata.create_all로 테이블 자동 생성)
     ]:
         try:

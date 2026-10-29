@@ -598,8 +598,24 @@ tbody tr:hover { background: #f8fafc; }
 
     <!-- 대여 금형 -->
     <div id="tab-molds" class="section">
+      <!-- 등록 폼 -->
+      <div class="card" style="margin-bottom:12px">
+        <div class="card-header">금형 등록</div>
+        <div style="padding:16px 20px;display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
+          <div class="form-group" style="margin:0;flex:1;min-width:160px">
+            <label style="font-size:11px;font-weight:600;color:var(--text-sm);letter-spacing:.5px;text-transform:uppercase;margin-bottom:5px;display:block">금형번호</label>
+            <input id="mold-reg-no" class="form-control" placeholder="금형번호 입력" style="height:34px" />
+          </div>
+          <div class="form-group" style="margin:0;flex:1;min-width:160px">
+            <label style="font-size:11px;font-weight:600;color:var(--text-sm);letter-spacing:.5px;text-transform:uppercase;margin-bottom:5px;display:block">수령일자</label>
+            <input id="mold-reg-date" type="date" class="form-control" style="height:34px" />
+          </div>
+          <button class="btn btn-primary" style="height:34px;white-space:nowrap" onclick="registerMold()">금형 등록</button>
+        </div>
+      </div>
+      <!-- 목록 -->
       <div class="card">
-        <div class="card-header">대여 금형 현황</div>
+        <div class="card-header">보유 금형 현황</div>
         <div id="molds-body"><div style="padding:40px;text-align:center;color:var(--text-sm)">로딩 중...</div></div>
       </div>
     </div>
@@ -1058,7 +1074,7 @@ async function loadMyMolds() {
   body.innerHTML = '<div style="padding:40px;text-align:center;color:var(--text-sm)">로딩 중...</div>';
   const data = await api('GET', '/portal/my-molds');
   if (!data || !data.length) {
-    body.innerHTML = '<div style="padding:40px;text-align:center;color:var(--text-sm)">대여 중인 금형이 없습니다.</div>';
+    body.innerHTML = '<div style="padding:40px;text-align:center;color:var(--text-sm)">등록된 금형이 없습니다. 위 양식으로 등록해 주세요.</div>';
     return;
   }
   const statusLabel = { '정상':'정상','수리중':'수리중','폐기':'폐기' };
@@ -1066,20 +1082,41 @@ async function loadMyMolds() {
   body.innerHTML = `
     <table class="table">
       <thead><tr>
-        <th>금형번호</th><th>자산귀속</th><th>해당품번</th><th>품명</th><th>대여일자</th><th>누적샷수</th><th>상태</th>
+        <th>금형번호</th><th>자산귀속</th><th>해당품번</th><th>품명</th><th>수령일자</th><th>누적샷수</th><th>상태</th><th></th>
       </tr></thead>
       <tbody>
         ${data.map(m => `<tr>
-          <td style="font-weight:600">${m.mold_no}</td>
+          <td style="font-weight:600;font-family:monospace">${m.mold_no}</td>
           <td>${m.owner || '-'}</td>
           <td>${m.part_no || '-'}</td>
           <td>${m.part_name || '-'}</td>
           <td>${m.lent_date || '-'}</td>
           <td style="text-align:right;font-variant-numeric:tabular-nums">${(m.total_shots||0).toLocaleString()}</td>
           <td><span style="color:${statusColor[m.status]||'var(--text)'};font-weight:600">${statusLabel[m.status]||m.status}</span></td>
+          <td><button onclick="returnMold('${m.mold_no}')" style="font-size:11px;padding:2px 8px;border:1px solid var(--border-md);background:white;border-radius:var(--radius);cursor:pointer;color:var(--danger)">반납</button></td>
         </tr>`).join('')}
       </tbody>
     </table>`;
+}
+
+async function registerMold() {
+  const no = document.getElementById('mold-reg-no').value.trim();
+  const dt = document.getElementById('mold-reg-date').value;
+  if (!no) { alert('금형번호를 입력해주세요.'); return; }
+  if (!dt) { alert('수령일자를 선택해주세요.'); return; }
+  const res = await api('POST', '/portal/my-molds/register', { mold_no: no, lent_date: dt });
+  if (res && res.ok) {
+    document.getElementById('mold-reg-no').value = '';
+    document.getElementById('mold-reg-date').value = '';
+    await loadMyMolds();
+    alert(`금형 ${no} 등록 완료`);
+  }
+}
+
+async function returnMold(moldNo) {
+  if (!confirm(`금형 ${moldNo}을(를) 반납 처리하시겠습니까?`)) return;
+  const res = await api('DELETE', `/portal/my-molds/${moldNo}`);
+  if (res && res.ok) { await loadMyMolds(); }
 }
 
 // ── 월별 집계 ──

@@ -321,3 +321,37 @@ def my_molds(user: User = Depends(get_current_user), db: Session = Depends(get_d
             "status": m.status,
         })
     return result
+
+
+class MoldRegisterReq(BaseModel):
+    mold_no: str
+    lent_date: date_type
+
+
+@router.post("/my-molds/register")
+def register_mold(body: MoldRegisterReq, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """협력사가 직접 대여 금형을 등록 — 해당 금형번호가 시스템에 없으면 자동 생성"""
+    partner_id = _supplier_partner(user)
+    mold = db.get(Mold, body.mold_no)
+    if mold is None:
+        mold = Mold(mold_no=body.mold_no, owner="JOY INDUSTRY")
+        db.add(mold)
+    elif mold.lent_to_partner_id and mold.lent_to_partner_id != partner_id:
+        raise HTTPException(400, "이미 다른 협력사에 대여 중인 금형번호입니다.")
+    mold.lent_to_partner_id = partner_id
+    mold.lent_date = body.lent_date
+    db.commit()
+    return {"ok": True, "mold_no": mold.mold_no}
+
+
+@router.delete("/my-molds/{mold_no}")
+def return_mold(mold_no: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """협력사가 금형 반납 처리"""
+    partner_id = _supplier_partner(user)
+    mold = db.get(Mold, mold_no)
+    if not mold or mold.lent_to_partner_id != partner_id:
+        raise HTTPException(404, "해당 금형을 찾을 수 없습니다.")
+    mold.lent_to_partner_id = None
+    mold.lent_date = None
+    db.commit()
+    return {"ok": True}
