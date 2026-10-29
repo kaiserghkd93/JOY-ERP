@@ -630,6 +630,134 @@ function ClaimModal({ onClose, onSaved }) {
   )
 }
 
+function LossPanel() {
+  const today = new Date()
+  const ym = today.toISOString().slice(0, 7)
+  const [start, setStart] = useState(ym + '-01')
+  const [end, setEnd] = useState(today.toISOString().slice(0, 10))
+  const [data, setData] = useState(null)
+  const [byPart, setByPart] = useState([])
+  const [loading, setLoading] = useState(false)
+  const [viewMode, setViewMode] = useState('type') // 'type' | 'part'
+
+  const load = () => {
+    setLoading(true)
+    Promise.all([
+      api.get('/mes/loss-analysis', { params: { start, end } }),
+      api.get('/mes/loss-by-part', { params: { start, end } }),
+    ]).then(([r1, r2]) => {
+      setData(r1.data)
+      setByPart(r2.data)
+    }).catch(() => {}).finally(() => setLoading(false))
+  }
+
+  useEffect(() => { load() }, [])
+
+  const fmt = (n) => n == null ? '—' : Math.round(n).toLocaleString()
+  const fmtRate = (n) => n == null ? '—' : n.toFixed(2) + '%'
+
+  const summary = data?.summary
+  const rows = viewMode === 'type' ? (data?.by_defect_type || []) : byPart
+
+  return (
+    <div>
+      <div className="erp-panel" style={{marginBottom:8}}>
+        <div className="erp-actions" style={{flexWrap:'wrap',gap:8}}>
+          <div style={{display:'flex',gap:6,alignItems:'center'}}>
+            <label style={{fontSize:12,color:'var(--text-sm)'}}>기간</label>
+            <input type="date" value={start} onChange={e=>setStart(e.target.value)} style={{fontSize:12,padding:'3px 6px'}} />
+            <span style={{fontSize:12}}>~</span>
+            <input type="date" value={end} onChange={e=>setEnd(e.target.value)} style={{fontSize:12,padding:'3px 6px'}} />
+            <button className="btn btn-sm btn-primary" onClick={load} disabled={loading}>조회</button>
+          </div>
+          <div style={{display:'flex',gap:4}}>
+            {[['type','불량유형별'],['part','품번별']].map(([v,l])=>(
+              <button key={v} className={`qdate-btn${viewMode===v?' active':''}`} style={{fontSize:12}} onClick={()=>setViewMode(v)}>{l}</button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {summary && (
+        <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:8,marginBottom:12}}>
+          <div className="erp-panel" style={{padding:12,textAlign:'center'}}>
+            <div style={{fontSize:11,color:'var(--text-sm)',marginBottom:4}}>총 불량금액</div>
+            <div style={{fontSize:18,fontWeight:700,color:'var(--danger)'}}>{fmt(summary.total_defect_cost)}원</div>
+          </div>
+          <div className="erp-panel" style={{padding:12,textAlign:'center'}}>
+            <div style={{fontSize:11,color:'var(--text-sm)',marginBottom:4}}>총 생산금액</div>
+            <div style={{fontSize:18,fontWeight:700}}>{fmt(summary.total_production_cost)}원</div>
+          </div>
+          <div className="erp-panel" style={{padding:12,textAlign:'center'}}>
+            <div style={{fontSize:11,color:'var(--text-sm)',marginBottom:4}}>전체 로스율</div>
+            <div style={{fontSize:18,fontWeight:700,color:summary.overall_loss_rate>5?'var(--danger)':summary.overall_loss_rate>2?'var(--warning)':'var(--success)'}}>
+              {fmtRate(summary.overall_loss_rate)}
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="result-bar">
+        <span className="result-bar-title">{viewMode==='type'?'불량유형별 집계':'품번별 집계'}</span>
+        <span className="result-bar-count">{rows.length}건</span>
+      </div>
+      <div className="table-wrap">
+        {viewMode === 'type' ? (
+          <table>
+            <thead><tr>
+              <th>불량유형</th><th>불량수량</th><th>불량금액(원)</th>
+              <th>생산금액(원)</th><th>로스율</th><th>구성비</th><th>품번수</th>
+            </tr></thead>
+            <tbody>
+              {rows.length === 0 && <tr><td colSpan={7} className="empty">{loading?'조회 중…':'데이터 없음 (MES 엑셀 업로드 후 자동 계산됩니다)'}</td></tr>}
+              {rows.map((r,i) => (
+                <tr key={r.defect_type}>
+                  <td style={{fontWeight:i<3?600:400}}>{r.defect_type}</td>
+                  <td style={{textAlign:'right',fontVariantNumeric:'tabular-nums'}}>{r.total_defect_qty?.toLocaleString()}</td>
+                  <td style={{textAlign:'right',fontVariantNumeric:'tabular-nums',color:'var(--danger)'}}>{fmt(r.total_defect_cost)}</td>
+                  <td style={{textAlign:'right',fontVariantNumeric:'tabular-nums'}}>{fmt(r.total_production_cost)}</td>
+                  <td>
+                    <span className={`badge ${r.loss_rate==null?'badge-gray':r.loss_rate>5?'badge-red':r.loss_rate>2?'badge-amber':'badge-green'}`}>
+                      {fmtRate(r.loss_rate)}
+                    </span>
+                  </td>
+                  <td style={{textAlign:'right',fontVariantNumeric:'tabular-nums'}}>{r.share_rate?.toFixed(1)}%</td>
+                  <td style={{textAlign:'right'}}>{r.part_count}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : (
+          <table>
+            <thead><tr>
+              <th>품번</th><th>품명</th><th>불량수량</th><th>불량금액(원)</th>
+              <th>생산금액(원)</th><th>로스율</th><th>불량유형수</th>
+            </tr></thead>
+            <tbody>
+              {rows.length === 0 && <tr><td colSpan={7} className="empty">{loading?'조회 중…':'데이터 없음'}</td></tr>}
+              {rows.map(r => (
+                <tr key={r.part_no}>
+                  <td style={{fontFamily:'monospace',fontSize:11}}>{r.part_no}</td>
+                  <td style={{fontSize:12}}>{r.part_name || '—'}</td>
+                  <td style={{textAlign:'right',fontVariantNumeric:'tabular-nums'}}>{r.total_defect_qty?.toLocaleString()}</td>
+                  <td style={{textAlign:'right',fontVariantNumeric:'tabular-nums',color:'var(--danger)'}}>{fmt(r.total_defect_cost)}</td>
+                  <td style={{textAlign:'right',fontVariantNumeric:'tabular-nums'}}>{fmt(r.total_production_cost)}</td>
+                  <td>
+                    <span className={`badge ${r.loss_rate==null?'badge-gray':r.loss_rate>5?'badge-red':r.loss_rate>2?'badge-amber':'badge-green'}`}>
+                      {fmtRate(r.loss_rate)}
+                    </span>
+                  </td>
+                  <td style={{textAlign:'right'}}>{r.defect_type_count}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </div>
+  )
+}
+
 const STATUS_BADGE = { '접수': 'badge-blue', '조사중': 'badge-amber', '완료': 'badge-green', '보류': 'badge-gray' }
 const APPR_BADGE = {
   '작성중': 'badge-gray', '승인대기': 'badge-amber',
@@ -694,7 +822,7 @@ export default function Quality() {
       <div className="erp-panel" style={{marginBottom:8}}>
         <div className="erp-actions">
           <div className="qdate-bar">
-            {[['inspections','입고검사'], ['standards','검사기준'], ['ncr','부적합관리'], ['claims','클레임 목록'], ['rates','외주처별 불량율']].map(([v,l])=>(
+            {[['inspections','입고검사'], ['standards','검사기준'], ['ncr','부적합관리'], ['claims','클레임 목록'], ['rates','외주처별 불량율'], ['loss','공정불량 로스']].map(([v,l])=>(
               <button key={v} className={`qdate-btn${tab===v?' active':''}`} onClick={()=>setTab(v)}>{l}</button>
             ))}
           </div>
@@ -902,6 +1030,8 @@ export default function Quality() {
         </div>
         </>
       )}
+
+      {tab === 'loss' && <LossPanel />}
 
       {showNcrModal && (
         <NcrCreateModal onClose={()=>setShowNcrModal(false)} onSaved={()=>{setShowNcrModal(false);load()}} />

@@ -50,6 +50,27 @@ class MesSyncLog(Base):
     message: Mapped[str | None] = mapped_column(Text)
 
 
+class MesDefectDetail(Base):
+    """불량유형별 원가·로스율 상세"""
+    __tablename__ = "mes_defect_detail"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    prod_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    part_no: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
+    part_name: Mapped[str | None] = mapped_column(String(200))
+    machine_no: Mapped[str | None] = mapped_column(String(50))
+    shift: Mapped[str | None] = mapped_column(String(10))
+    defect_type: Mapped[str] = mapped_column(String(100), nullable=False, index=True)  # 불량유형
+    defect_qty: Mapped[int] = mapped_column(Integer, default=0)     # 불량수량
+    production_qty: Mapped[int] = mapped_column(Integer, default=0) # 해당 품번 양품수량 (로스율 분모용)
+    unit_cost: Mapped[float] = mapped_column(Numeric(18, 4), default=0)   # EA당 BOM+공수 원가
+    defect_cost: Mapped[float] = mapped_column(Numeric(18, 2), default=0) # 불량금액 = defect_qty × unit_cost
+    production_cost: Mapped[float] = mapped_column(Numeric(18, 2), default=0) # 생산금액 = production_qty × unit_cost
+    loss_rate: Mapped[float | None] = mapped_column(Float)          # 로스율 % = defect_cost / production_cost × 100
+    mes_log_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("mes_production_log.id"))
+    calc_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+
+
 class MesProductionLog(Base):
     """MES에서 수신한 일일 생산실적 원본"""
     __tablename__ = "mes_production_log"

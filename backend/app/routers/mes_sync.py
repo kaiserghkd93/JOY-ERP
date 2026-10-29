@@ -13,7 +13,7 @@ import json
 import io
 
 from app.database import get_db
-from app.models.mes import MesSyncLog, MesProductionLog, MesPartMap, MesProductionCost
+from app.models.mes import MesSyncLog, MesProductionLog, MesPartMap, MesProductionCost, MesDefectDetail
 from app.models.production import ProductionOrder, DailyActual, POrdStatus
 from app.models.ledger import StockLedger, LedgerType
 from app.models.cost import ProductCostStd, LaborRate
@@ -210,6 +210,80 @@ def _calc_and_deduct(db: Session, log: MesProductionLog):
     db.flush()
 
 
+def _get_unit_cost(db: Session, part_no: str) -> float:
+    """BOM 원자재비 + 공수비 기준 EA당 단가 (없으면 0)"""
+    from app.models.master import BomLine, Item
+    from app.models.cost import ProductCostStd, LaborRate
+
+    bom_lines = db.query(BomLine).filter(BomLine.product_part_no == part_no).all()
+    material = 0.0
+    if bom_lines:
+        component_nos = [b.component_part_no for b in bom_lines]
+        items = {i.part_no: i for i in db.query(Item).filter(Item.part_no.in_(component_nos)).all()}
+        for b in bom_lines:
+            item = items.get(b.component_part_no)
+            price = float(item.std_buy_price or 0) if item else 0
+            material += float(b.qty_per) * price
+
+    cost_std = db.query(ProductCostStd).filter(ProductCostStd.part_no == part_no).first()
+    labor = 0.0
+    if cost_std:
+        rate_row = db.query(LaborRate).filter(LaborRate.id == cost_std.process_id).first()
+        if rate_row:
+            labor = float(cost_std.std_labor_min) / 60.0 * float(rate_row.rate_per_hour)
+
+    return round(material + labor, 4)
+
+
+def _save_defect_detail(db: Session, log: MesProductionLog, unit_cost: float | None = None):
+    """불량유형이 있을 때 mes_defect_detail에 upsert."""
+    if not log.defect_reason or log.defect_qty == 0:
+        return
+
+    if unit_cost is None:
+        unit_cost = _get_unit_cost(db, log.part_no)
+
+    production_qty = log.actual_qty or 0
+    defect_qty = log.defect_qty or 0
+    defect_cost = round(defect_qty * unit_cost, 2)
+    production_cost = round(production_qty * unit_cost, 2)
+    loss_rate = round(defect_cost / production_cost * 100, 2) if production_cost > 0 else None
+
+    existing = db.query(MesDefectDetail).filter(
+        MesDefectDetail.prod_date == log.prod_date,
+        MesDefectDetail.part_no == log.part_no,
+        MesDefectDetail.machine_no == log.machine_no,
+        MesDefectDetail.shift == log.shift,
+        MesDefectDetail.defect_type == log.defect_reason,
+    ).first()
+
+    if existing:
+        existing.defect_qty = defect_qty
+        existing.production_qty = production_qty
+        existing.unit_cost = unit_cost
+        existing.defect_cost = defect_cost
+        existing.production_cost = production_cost
+        existing.loss_rate = loss_rate
+        existing.calc_at = datetime.now()
+    else:
+        db.add(MesDefectDetail(
+            prod_date=log.prod_date,
+            part_no=log.part_no,
+            part_name=log.part_name,
+            machine_no=log.machine_no,
+            shift=log.shift,
+            defect_type=log.defect_reason,
+            defect_qty=defect_qty,
+            production_qty=production_qty,
+            unit_cost=unit_cost,
+            defect_cost=defect_cost,
+            production_cost=production_cost,
+            loss_rate=loss_rate,
+            mes_log_id=log.id,
+        ))
+    db.flush()
+
+
 @router.post("/push")
 def push_production(body: dict, db: Session = Depends(get_db)):
     """
@@ -291,6 +365,7 @@ def push_production(body: dict, db: Session = Depends(get_db)):
             db.flush()
             _link_to_erp(db, log)
             db.flush()
+            _save_defect_detail(db, log)
             rows_ok += 1
 
         except Exception as e:
@@ -551,6 +626,8 @@ async def upload_excel(file: UploadFile = File(...), db: Session = Depends(get_d
             _link_to_erp(db, log)
             db.flush()
             _calc_and_deduct(db, log)
+            unit_cost = _get_unit_cost(db, part_no)
+            _save_defect_detail(db, log, unit_cost)
             dates_seen.add(str(prod_date))
             rows_ok += 1
 
@@ -716,3 +793,132 @@ def download_template():
         "date_formats": ["YYYY-MM-DD", "YYYY/MM/DD", "YYYY.MM.DD"],
         "note": "첫 번째 행이 헤더여야 합니다. 엑셀의 날짜 형식 셀도 인식합니다.",
     }
+
+
+@router.get("/loss-analysis")
+def loss_analysis(
+    start: str = Query(..., description="시작일 YYYY-MM-DD"),
+    end: str = Query(..., description="종료일 YYYY-MM-DD"),
+    part_no: str | None = Query(None),
+    db: Session = Depends(get_db),
+):
+    """불량유형별 불량금액·로스율 집계"""
+    sql = """
+        SELECT
+            d.defect_type,
+            COUNT(*)                      AS rows,
+            SUM(d.defect_qty)             AS total_defect_qty,
+            SUM(d.defect_cost)            AS total_defect_cost,
+            SUM(d.production_cost)        AS total_production_cost,
+            COUNT(DISTINCT d.part_no)     AS part_count
+        FROM mes_defect_detail d
+        WHERE d.prod_date BETWEEN :s AND :e
+          AND (:part_no IS NULL OR d.part_no = :part_no)
+          AND d.defect_qty > 0
+        GROUP BY d.defect_type
+        ORDER BY SUM(d.defect_cost) DESC
+    """
+    rows = db.execute(text(sql), {"s": start, "e": end, "part_no": part_no}).fetchall()
+
+    total_defect_cost = sum(float(r[3] or 0) for r in rows)
+    total_prod_cost = sum(float(r[4] or 0) for r in rows)
+
+    result = []
+    for r in rows:
+        defect_cost = float(r[3] or 0)
+        prod_cost = float(r[4] or 0)
+        result.append({
+            "defect_type": r[0],
+            "rows": r[1],
+            "total_defect_qty": int(r[2] or 0),
+            "total_defect_cost": round(defect_cost, 0),
+            "total_production_cost": round(prod_cost, 0),
+            "loss_rate": round(defect_cost / prod_cost * 100, 2) if prod_cost > 0 else None,
+            "share_rate": round(defect_cost / total_defect_cost * 100, 1) if total_defect_cost > 0 else None,
+            "part_count": r[5],
+        })
+
+    return {
+        "start": start,
+        "end": end,
+        "summary": {
+            "total_defect_cost": round(total_defect_cost, 0),
+            "total_production_cost": round(total_prod_cost, 0),
+            "overall_loss_rate": round(total_defect_cost / total_prod_cost * 100, 2) if total_prod_cost > 0 else None,
+        },
+        "by_defect_type": result,
+    }
+
+
+@router.get("/loss-by-part")
+def loss_by_part(
+    start: str = Query(...),
+    end: str = Query(...),
+    db: Session = Depends(get_db),
+):
+    """품번별 불량금액·로스율 집계"""
+    sql = """
+        SELECT
+            d.part_no,
+            MAX(d.part_name)              AS part_name,
+            SUM(d.defect_qty)             AS total_defect_qty,
+            SUM(d.defect_cost)            AS total_defect_cost,
+            SUM(d.production_cost)        AS total_production_cost,
+            COUNT(DISTINCT d.defect_type) AS defect_type_count
+        FROM mes_defect_detail d
+        WHERE d.prod_date BETWEEN :s AND :e AND d.defect_qty > 0
+        GROUP BY d.part_no
+        ORDER BY SUM(d.defect_cost) DESC
+    """
+    rows = db.execute(text(sql), {"s": start, "e": end}).fetchall()
+    result = []
+    for r in rows:
+        defect_cost = float(r[3] or 0)
+        prod_cost = float(r[4] or 0)
+        result.append({
+            "part_no": r[0],
+            "part_name": r[1],
+            "total_defect_qty": int(r[2] or 0),
+            "total_defect_cost": round(defect_cost, 0),
+            "total_production_cost": round(prod_cost, 0),
+            "loss_rate": round(defect_cost / prod_cost * 100, 2) if prod_cost > 0 else None,
+            "defect_type_count": r[5],
+        })
+    return result
+
+
+@router.get("/loss-detail")
+def loss_detail(
+    start: str = Query(...),
+    end: str = Query(...),
+    part_no: str | None = Query(None),
+    defect_type: str | None = Query(None),
+    db: Session = Depends(get_db),
+):
+    """불량상세 원본 목록"""
+    rows = db.execute(text("""
+        SELECT prod_date, part_no, part_name, machine_no, shift,
+               defect_type, defect_qty, unit_cost, defect_cost, production_cost, loss_rate, calc_at
+        FROM mes_defect_detail
+        WHERE prod_date BETWEEN :s AND :e
+          AND (:part_no IS NULL OR part_no = :part_no)
+          AND (:defect_type IS NULL OR defect_type = :defect_type)
+          AND defect_qty > 0
+        ORDER BY prod_date DESC, defect_cost DESC
+        LIMIT 500
+    """), {"s": start, "e": end, "part_no": part_no, "defect_type": defect_type}).fetchall()
+
+    return [{
+        "prod_date": str(r[0]),
+        "part_no": r[1],
+        "part_name": r[2],
+        "machine_no": r[3],
+        "shift": r[4],
+        "defect_type": r[5],
+        "defect_qty": r[6],
+        "unit_cost": float(r[7] or 0),
+        "defect_cost": float(r[8] or 0),
+        "production_cost": float(r[9] or 0),
+        "loss_rate": float(r[10]) if r[10] is not None else None,
+        "calc_at": str(r[11])[:16],
+    } for r in rows]
