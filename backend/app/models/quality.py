@@ -130,6 +130,86 @@ class InspectionItem(Base):
     standard: Mapped["InspectionStandard"] = relationship(back_populates="items")
 
 
+class NcrOccurType(str, enum.Enum):
+    receipt    = "입고검사"
+    process    = "공정검사"
+    shipment   = "출하검사"
+    customer   = "고객클레임"
+
+
+class NcrStatus(str, enum.Enum):
+    open       = "접수"
+    processing = "처리중"
+    closed     = "완료"
+
+
+class NcrDisposal(str, enum.Enum):
+    return_    = "반품"
+    scrap      = "폐기"
+    concession = "특채"
+    repair     = "수리"
+    pending    = "미결"
+
+
+class AppealStatus(str, enum.Enum):
+    submitted  = "접수"
+    reviewing  = "검토중"
+    accepted   = "인정"
+    rejected   = "기각"
+
+
+class NonConformance(Base):
+    """부적합품 관리(NCR)"""
+    __tablename__ = "non_conformance"
+
+    ncr_no: Mapped[str] = mapped_column(String(30), primary_key=True)
+    gr_no: Mapped[str | None] = mapped_column(ForeignKey("receipt.gr_no"), nullable=True)
+    inspection_id: Mapped[int | None] = mapped_column(ForeignKey("inspection.id"), nullable=True)
+    part_no: Mapped[str] = mapped_column(ForeignKey("item.part_no"), nullable=False)
+    partner_id: Mapped[str | None] = mapped_column(ForeignKey("partner.partner_id"), nullable=True)
+    occur_type: Mapped[NcrOccurType] = mapped_column(SAEnum(NcrOccurType), default=NcrOccurType.receipt)
+    defect_type: Mapped[str] = mapped_column(String(200), nullable=False)
+    defect_qty: Mapped[int] = mapped_column(Integer, default=0)
+    disposal: Mapped[NcrDisposal] = mapped_column(SAEnum(NcrDisposal), default=NcrDisposal.pending)
+    status: Mapped[NcrStatus] = mapped_column(SAEnum(NcrStatus), default=NcrStatus.open)
+    # 8D 대응
+    d1_team: Mapped[str | None] = mapped_column(Text)
+    d2_desc: Mapped[str | None] = mapped_column(Text)        # 문제기술
+    d3_containment: Mapped[str | None] = mapped_column(Text) # 봉쇄조치
+    d4_root_cause: Mapped[str | None] = mapped_column(Text)  # 근본원인
+    d5_corrective: Mapped[str | None] = mapped_column(Text)  # 시정조치
+    d6_implemented: Mapped[str | None] = mapped_column(Text) # 실행확인
+    d7_preventive: Mapped[str | None] = mapped_column(Text)  # 재발방지
+    d8_verification: Mapped[str | None] = mapped_column(Text)# 효과검증
+    note: Mapped[str | None] = mapped_column(Text)
+    notified_at: Mapped[datetime | None] = mapped_column(DateTime)  # 업체 통보일시
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+    closed_at: Mapped[datetime | None] = mapped_column(DateTime)
+
+    item: Mapped["Item"] = relationship(foreign_keys=[part_no])
+    partner: Mapped["Partner | None"] = relationship(foreign_keys=[partner_id])
+    appeals: Mapped[list["NcrAppeal"]] = relationship(back_populates="ncr", cascade="all, delete-orphan")
+
+
+class NcrAppeal(Base):
+    """NCR 이의신청"""
+    __tablename__ = "ncr_appeal"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    ncr_no: Mapped[str] = mapped_column(ForeignKey("non_conformance.ncr_no"), nullable=False)
+    partner_id: Mapped[str] = mapped_column(ForeignKey("partner.partner_id"), nullable=False)
+    appeal_reason: Mapped[str] = mapped_column(Text, nullable=False)
+    evidence_text: Mapped[str | None] = mapped_column(Text)
+    status: Mapped[AppealStatus] = mapped_column(SAEnum(AppealStatus), default=AppealStatus.submitted)
+    reviewer_id: Mapped[str | None] = mapped_column(ForeignKey("user.username"), nullable=True)
+    review_note: Mapped[str | None] = mapped_column(Text)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+
+    ncr: Mapped["NonConformance"] = relationship(back_populates="appeals")
+    partner: Mapped["Partner"] = relationship(foreign_keys=[partner_id])
+
+
 class QualityClaim(Base):
     __tablename__ = "quality_claim"
 

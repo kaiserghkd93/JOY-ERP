@@ -105,6 +105,78 @@ class DefectRateOut(BaseModel):
     defect_rate: float
 
 
+# ── NCR + 이의신청 ──────────────────────────────────────────────────
+
+from app.models.quality import NcrOccurType, NcrStatus, NcrDisposal, AppealStatus  # noqa (conditional import ok)
+
+
+class AppealOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    ncr_no: str
+    partner_id: str
+    appeal_reason: str
+    evidence_text: str | None
+    status: AppealStatus
+    reviewer_id: str | None
+    review_note: str | None
+    reviewed_at: datetime | None
+    created_at: datetime
+
+
+class NcrCreate(BaseModel):
+    part_no: str
+    partner_id: str | None = None
+    gr_no: str | None = None
+    inspection_id: int | None = None
+    occur_type: NcrOccurType = NcrOccurType.receipt
+    defect_type: str
+    defect_qty: int = 0
+    disposal: NcrDisposal = NcrDisposal.pending
+    note: str | None = None
+
+
+class NcrUpdate(BaseModel):
+    disposal: NcrDisposal | None = None
+    status: NcrStatus | None = None
+    d1_team: str | None = None
+    d2_desc: str | None = None
+    d3_containment: str | None = None
+    d4_root_cause: str | None = None
+    d5_corrective: str | None = None
+    d6_implemented: str | None = None
+    d7_preventive: str | None = None
+    d8_verification: str | None = None
+    note: str | None = None
+
+
+class NcrOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    ncr_no: str
+    gr_no: str | None
+    inspection_id: int | None
+    part_no: str
+    partner_id: str | None
+    occur_type: NcrOccurType
+    defect_type: str
+    defect_qty: int
+    disposal: NcrDisposal
+    status: NcrStatus
+    d1_team: str | None
+    d2_desc: str | None
+    d3_containment: str | None
+    d4_root_cause: str | None
+    d5_corrective: str | None
+    d6_implemented: str | None
+    d7_preventive: str | None
+    d8_verification: str | None
+    note: str | None
+    notified_at: datetime | None
+    created_at: datetime
+    closed_at: datetime | None
+    appeals: list[AppealOut] = []
+
+
 # ── 검사기준 마스터 ─────────────────────────────────────────────────
 
 class InspectionItemCreate(BaseModel):

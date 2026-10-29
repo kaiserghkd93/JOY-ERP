@@ -3,12 +3,17 @@ from sqlalchemy.orm import Session
 from datetime import date, datetime
 from pydantic import BaseModel
 from app.database import get_db
-from app.models.quality import Inspection, QualityClaim, ApprovalStatus, InspectionStandard, InspectionItem, StandardStatus
+from app.models.quality import (
+    Inspection, QualityClaim, ApprovalStatus,
+    InspectionStandard, InspectionItem, StandardStatus,
+    NonConformance, NcrAppeal, NcrStatus, AppealStatus,
+)
 from app.models.auth import User
 from app.schemas.quality import (
     InspectionCreate, InspectionOut,
     ClaimCreate, ClaimUpdate, ClaimOut, DefectRateOut,
     StandardCreate, StandardOut, SamplingPlanOut,
+    NcrCreate, NcrUpdate, NcrOut, AppealOut,
 )
 from app.services.quality_service import (
     register_inspection, get_defect_rate, create_claim, update_claim
@@ -328,3 +333,112 @@ def delete_standard_item(item_id: int, db: Session = Depends(get_db), user: User
     db.delete(item)
     db.commit()
     return {"ok": True}
+
+
+# ── NCR (부적합품 관리) ──────────────────────────────────────────────
+
+def _next_ncr_no(db: Session) -> str:
+    from datetime import date as _date
+    prefix = f"NCR-{_date.today().strftime('%Y%m%d')}"
+    count = db.query(NonConformance).filter(NonConformance.ncr_no.like(f"{prefix}-%")).count()
+    return f"{prefix}-{count+1:03d}"
+
+
+@router.get("/ncr", response_model=list[NcrOut])
+def list_ncr(
+    partner_id: str | None = None,
+    status: str | None = None,
+    db: Session = Depends(get_db),
+    _: User = Depends(_require_quality),
+):
+    q = db.query(NonConformance)
+    if partner_id:
+        q = q.filter(NonConformance.partner_id == partner_id)
+    if status:
+        q = q.filter(NonConformance.status == status)
+    return q.order_by(NonConformance.created_at.desc()).all()
+
+
+@router.post("/ncr", response_model=NcrOut)
+def create_ncr(body: NcrCreate, db: Session = Depends(get_db), user: User = Depends(_require_quality)):
+    ncr = NonConformance(ncr_no=_next_ncr_no(db), **body.model_dump())
+    ncr.notified_at = datetime.now()
+    db.add(ncr)
+    db.commit()
+    db.refresh(ncr)
+    return ncr
+
+
+@router.get("/ncr/{ncr_no}", response_model=NcrOut)
+def get_ncr(ncr_no: str, db: Session = Depends(get_db), _: User = Depends(_require_quality)):
+    ncr = db.get(NonConformance, ncr_no)
+    if not ncr:
+        raise HTTPException(404)
+    return ncr
+
+
+@router.patch("/ncr/{ncr_no}", response_model=NcrOut)
+def update_ncr(ncr_no: str, body: NcrUpdate, db: Session = Depends(get_db), user: User = Depends(_require_quality)):
+    ncr = db.get(NonConformance, ncr_no)
+    if not ncr:
+        raise HTTPException(404)
+    for k, v in body.model_dump(exclude_none=True).items():
+        setattr(ncr, k, v)
+    if body.status == NcrStatus.closed and not ncr.closed_at:
+        ncr.closed_at = datetime.now()
+    db.commit()
+    db.refresh(ncr)
+    return ncr
+
+
+# ── NCR 이의신청 ───────────────────────────────────────────────────
+
+class AppealBody(BaseModel):
+    appeal_reason: str
+    evidence_text: str | None = None
+
+
+class ReviewBody(BaseModel):
+    status: AppealStatus
+    review_note: str | None = None
+
+
+@router.post("/ncr/{ncr_no}/appeal", response_model=AppealOut)
+def create_appeal(ncr_no: str, body: AppealBody, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    """협력업체(포털 포함)가 NCR에 이의신청"""
+    ncr = db.get(NonConformance, ncr_no)
+    if not ncr:
+        raise HTTPException(404)
+    # 본인 업체 NCR에만 이의신청 가능
+    if user.role == "supplier" and ncr.partner_id != user.partner_id:
+        raise HTTPException(403, "본인 업체의 부적합통보에만 이의신청 가능합니다")
+    appeal = NcrAppeal(
+        ncr_no=ncr_no,
+        partner_id=ncr.partner_id or (user.partner_id or ""),
+        appeal_reason=body.appeal_reason,
+        evidence_text=body.evidence_text,
+    )
+    db.add(appeal)
+    db.commit()
+    db.refresh(appeal)
+    return appeal
+
+
+@router.patch("/ncr/{ncr_no}/appeal/{appeal_id}", response_model=AppealOut)
+def review_appeal(ncr_no: str, appeal_id: int, body: ReviewBody, db: Session = Depends(get_db), user: User = Depends(_require_manager)):
+    """품질책임자가 이의신청 검토"""
+    appeal = db.get(NcrAppeal, appeal_id)
+    if not appeal or appeal.ncr_no != ncr_no:
+        raise HTTPException(404)
+    appeal.status = body.status
+    appeal.review_note = body.review_note
+    appeal.reviewer_id = user.username
+    appeal.reviewed_at = datetime.now()
+    # 이의신청 인정 시 NCR 처리중으로 변경
+    if body.status == AppealStatus.accepted:
+        ncr = db.get(NonConformance, ncr_no)
+        if ncr:
+            ncr.status = NcrStatus.processing
+    db.commit()
+    db.refresh(appeal)
+    return appeal

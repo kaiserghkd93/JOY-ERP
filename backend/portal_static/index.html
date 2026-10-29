@@ -188,6 +188,7 @@ tr:last-child td { border-bottom: none; }
     <div class="tab active" onclick="showTab('orders')">📋 발주 현황</div>
     <div class="tab" onclick="showTab('deliver')">📦 납품 입력</div>
     <div class="tab" onclick="showTab('monthly')">📊 월별 집계</div>
+    <div class="tab" onclick="showTab('ncr')">⚠️ 부적합 통보</div>
   </div>
 
   <div class="content">
@@ -264,6 +265,35 @@ tr:last-child td { border-bottom: none; }
     <!-- 월별 집계 -->
     <div id="tab-monthly" class="section">
       <div id="monthly-body"><div style="padding:40px;text-align:center;color:#888">로딩 중...</div></div>
+    </div>
+
+    <!-- 부적합 통보 -->
+    <div id="tab-ncr" class="section">
+      <div class="card">
+        <div class="card-header">⚠️ 부적합 통보(NCR) 목록</div>
+        <div id="ncr-body"><div style="padding:40px;text-align:center;color:#888">로딩 중...</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 이의신청 모달 -->
+<div id="appeal-modal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:1000;overflow-y:auto">
+  <div style="background:white;max-width:500px;margin:60px auto;border-radius:12px;padding:32px;box-shadow:0 8px 40px rgba(0,0,0,0.2)">
+    <h3 style="margin-bottom:20px;color:#1a1a2e">이의신청</h3>
+    <div id="appeal-ncr-info" style="background:#fef3c7;border:1px solid #fcd34d;border-radius:8px;padding:12px 16px;margin-bottom:16px;font-size:13px"></div>
+    <div class="form-group">
+      <label>이의신청 사유 *</label>
+      <textarea id="appeal-reason" rows="4" style="width:100%;padding:10px 12px;border:1px solid #ddd;border-radius:8px;font-size:14px;font-family:inherit;resize:vertical" placeholder="이의신청 사유를 상세히 입력하세요"></textarea>
+    </div>
+    <div class="form-group">
+      <label>근거 자료 (텍스트)</label>
+      <textarea id="appeal-evidence" rows="3" style="width:100%;padding:10px 12px;border:1px solid #ddd;border-radius:8px;font-size:14px;font-family:inherit;resize:vertical" placeholder="측정값, 검사성적서 내용 등 근거 입력"></textarea>
+    </div>
+    <div id="appeal-error" class="alert alert-error" style="display:none"></div>
+    <div style="display:flex;gap:12px;margin-top:20px">
+      <button class="btn" style="flex:1;background:#f1f5f9;color:#374151" onclick="closeAppealModal()">취소</button>
+      <button class="btn btn-primary" style="flex:1" onclick="submitAppeal()">이의신청 제출</button>
     </div>
   </div>
 </div>
@@ -531,10 +561,80 @@ function filterPoList() {
 }
 
 function showTab(tab) {
-  document.querySelectorAll('.tab').forEach((t,i) => t.classList.toggle('active', ['orders','deliver','monthly'][i]===tab));
+  document.querySelectorAll('.tab').forEach((t,i) => t.classList.toggle('active', ['orders','deliver','monthly','ncr'][i]===tab));
   document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
   document.getElementById('tab-' + tab).classList.add('active');
   if (tab === 'monthly') loadMonthly();
+  if (tab === 'ncr') loadNcr();
+}
+
+// ── 부적합 통보(NCR) ──
+let currentNcrNo = null;
+
+async function loadNcr() {
+  const data = await api('GET', '/portal/ncr');
+  const body = document.getElementById('ncr-body');
+  if (!data || !data.length) {
+    body.innerHTML = '<div style="padding:40px;text-align:center;color:#aaa">부적합 통보 내역이 없습니다</div>';
+    return;
+  }
+  const statusBadge = { '접수': '#fef3c7;color:#d97706', '처리중': '#dbeafe;color:#1d4ed8', '완료': '#dcfce7;color:#15803d' };
+  const appealBadge = { '접수': '#fef3c7;color:#d97706', '검토중': '#dbeafe;color:#1d4ed8', '인정': '#dcfce7;color:#15803d', '기각': '#fee2e2;color:#dc2626' };
+  body.innerHTML = `<table><thead><tr>
+    <th>NCR번호</th><th>품번</th><th>불량내용</th><th>수량</th><th>처리방법</th><th>상태</th><th>이의신청</th><th>통보일</th><th></th>
+  </tr></thead><tbody>
+  ${data.map(n => {
+    const st = statusBadge[n.status] || '#f1f5f9;color:#374151';
+    const ap = n.latest_appeal_status ? (appealBadge[n.latest_appeal_status]||'#f1f5f9;color:#374151') : null;
+    const canAppeal = n.status !== '완료' && (!n.latest_appeal_status || n.latest_appeal_status === '기각');
+    return `<tr>
+      <td style="font-family:monospace;font-size:12px">${n.ncr_no}</td>
+      <td style="font-size:13px">${n.part_no}<br><small style="color:#888">${n.item_name}</small></td>
+      <td style="font-size:13px;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${n.defect_type}</td>
+      <td style="text-align:right">${n.defect_qty.toLocaleString()}</td>
+      <td style="font-size:12px">${n.disposal}</td>
+      <td><span class="badge" style="background:${st.split(';')[0]};${st.split(';')[1]}">${n.status}</span></td>
+      <td>${ap ? `<span class="badge" style="background:${ap.split(';')[0]};${ap.split(';')[1]}">${n.latest_appeal_status}</span>` : '<span style="color:#aaa;font-size:12px">없음</span>'}</td>
+      <td style="font-size:12px;color:#888">${(n.notified_at||n.created_at||'').slice(0,10)}</td>
+      <td>${canAppeal ? `<button class="btn" style="background:#fef3c7;color:#92400e;border:1px solid #fcd34d;padding:5px 12px;font-size:12px" onclick="openAppealModal('${n.ncr_no}','${n.part_no} — ${n.defect_type.replace(/'/g,"\\'")}')">이의신청</button>` : ''}</td>
+    </tr>`;
+  }).join('')}</tbody></table>`;
+}
+
+function openAppealModal(ncrNo, info) {
+  currentNcrNo = ncrNo;
+  document.getElementById('appeal-ncr-info').textContent = `NCR: ${ncrNo} | ${info}`;
+  document.getElementById('appeal-reason').value = '';
+  document.getElementById('appeal-evidence').value = '';
+  document.getElementById('appeal-error').style.display = 'none';
+  document.getElementById('appeal-modal').style.display = 'block';
+}
+
+function closeAppealModal() {
+  document.getElementById('appeal-modal').style.display = 'none';
+  currentNcrNo = null;
+}
+
+async function submitAppeal() {
+  const reason = document.getElementById('appeal-reason').value.trim();
+  if (!reason) {
+    document.getElementById('appeal-error').textContent = '이의신청 사유를 입력하세요';
+    document.getElementById('appeal-error').style.display = 'block';
+    return;
+  }
+  const evidence = document.getElementById('appeal-evidence').value.trim();
+  const r = await api('POST', `/portal/ncr/${currentNcrNo}/appeal`, {
+    appeal_reason: reason,
+    evidence_text: evidence || null,
+  });
+  if (!r || r.detail) {
+    document.getElementById('appeal-error').textContent = r?.detail || '제출 실패';
+    document.getElementById('appeal-error').style.display = 'block';
+    return;
+  }
+  closeAppealModal();
+  loadNcr();
+  alert('이의신청이 접수되었습니다.');
 }
 
 // ── 발주 없는 품목 직접 추가 ──

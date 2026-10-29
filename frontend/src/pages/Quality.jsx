@@ -4,6 +4,242 @@ import { getRole } from '../auth'
 
 const AQL_OPTIONS = [0.065, 0.1, 0.15, 0.25, 0.4, 0.65, 1.0, 1.5, 2.5, 4.0, 6.5]
 
+const NCR_STATUS_BADGE = { '접수': 'badge-amber', '처리중': 'badge-blue', '완료': 'badge-green' }
+const APPEAL_STATUS_BADGE = { '접수': 'badge-amber', '검토중': 'badge-blue', '인정': 'badge-green', '기각': 'badge-red' }
+
+function NcrPanel({ ncrList, isManager, onRefresh, onDetail }) {
+  const reviewAppeal = async (ncrNo, appealId, status, note) => {
+    await api.patch(`/quality/ncr/${ncrNo}/appeal/${appealId}`, { status, review_note: note })
+      .catch(e => alert(e.response?.data?.detail || '오류'))
+    onRefresh()
+  }
+
+  return (
+    <>
+    <div className="result-bar">
+      <span className="result-bar-title">부적합 통보(NCR) 목록</span>
+      <span className="result-bar-count">{ncrList.length}건</span>
+    </div>
+    <div className="table-wrap">
+      <table>
+        <thead><tr>
+          <th>NCR번호</th><th>품번</th><th>발생경로</th><th>불량내용</th><th>수량</th>
+          <th>처리방법</th><th>상태</th><th>이의신청</th><th>통보일</th><th>액션</th>
+        </tr></thead>
+        <tbody>
+          {ncrList.length === 0 && <tr><td colSpan={10} className="empty">부적합 통보 없음</td></tr>}
+          {ncrList.map(n => (
+            <tr key={n.ncr_no}>
+              <td style={{fontFamily:'monospace',fontSize:11}}>{n.ncr_no}</td>
+              <td style={{fontSize:12}}>{n.part_no}</td>
+              <td><span className="badge badge-purple" style={{fontSize:10}}>{n.occur_type}</span></td>
+              <td style={{maxWidth:160,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',fontSize:12}}>{n.defect_type}</td>
+              <td style={{textAlign:'right',fontVariantNumeric:'tabular-nums'}}>{n.defect_qty?.toLocaleString()}</td>
+              <td style={{fontSize:12}}>{n.disposal}</td>
+              <td><span className={`badge ${NCR_STATUS_BADGE[n.status]||'badge-gray'}`}>{n.status}</span></td>
+              <td>
+                {n.appeals?.length > 0 ? (
+                  <div style={{display:'flex',flexDirection:'column',gap:3}}>
+                    {n.appeals.map(a => (
+                      <div key={a.id} style={{display:'flex',gap:4,alignItems:'center'}}>
+                        <span className={`badge ${APPEAL_STATUS_BADGE[a.status]||'badge-gray'}`} style={{fontSize:10}}>{a.status}</span>
+                        {isManager && a.status === '접수' && (
+                          <>
+                            <button className="btn btn-sm btn-success" style={{fontSize:10,padding:'2px 6px'}}
+                              onClick={()=>reviewAppeal(n.ncr_no, a.id, '인정', null)}>인정</button>
+                            <button className="btn btn-sm btn-danger" style={{fontSize:10,padding:'2px 6px'}}
+                              onClick={()=>{const note=prompt('기각 사유');if(note!==null)reviewAppeal(n.ncr_no,a.id,'기각',note)}}>기각</button>
+                          </>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                ) : <span style={{color:'var(--text-sm)',fontSize:11}}>없음</span>}
+              </td>
+              <td style={{fontSize:11,color:'var(--text-sm)'}}>{n.notified_at?.slice(0,10) || n.created_at?.slice(0,10)}</td>
+              <td>
+                <button className="btn btn-sm btn-outline" onClick={()=>onDetail(n)}>8D 상세</button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+    </>
+  )
+}
+
+function NcrCreateModal({ onClose, onSaved }) {
+  const [allItems, setAllItems] = useState([])
+  const [partners, setPartners] = useState([])
+  const [form, setForm] = useState({
+    part_no: '', partner_id: '', gr_no: '', occur_type: '입고검사',
+    defect_type: '', defect_qty: '', disposal: '미결', note: '',
+  })
+
+  useEffect(() => {
+    api.get('/master/items').then(r => setAllItems(r.data)).catch(() => {})
+    api.get('/master/partners').then(r => setPartners(r.data)).catch(() => {})
+  }, [])
+
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
+  const submit = async () => {
+    if (!form.part_no || !form.defect_type) return alert('품번과 불량내용은 필수입니다')
+    await api.post('/quality/ncr', {
+      ...form,
+      defect_qty: +form.defect_qty || 0,
+      gr_no: form.gr_no || null,
+      partner_id: form.partner_id || null,
+    }).catch(e => { alert(e.response?.data?.detail || '저장 실패'); throw e })
+    onSaved()
+  }
+
+  return (
+    <div className="modal-overlay">
+      <div className="modal" style={{maxWidth:520}}>
+        <h3>부적합 통보 등록</h3>
+        <div className="grid-2">
+          <div className="form-group">
+            <label>품번 *</label>
+            <select value={form.part_no} onChange={e=>set('part_no',e.target.value)}>
+              <option value="">선택</option>
+              {allItems.map(i=><option key={i.part_no} value={i.part_no}>{i.part_no} — {i.name}</option>)}
+            </select>
+          </div>
+          <div className="form-group">
+            <label>협력업체</label>
+            <select value={form.partner_id} onChange={e=>set('partner_id',e.target.value)}>
+              <option value="">없음</option>
+              {partners.map(p=><option key={p.partner_id} value={p.partner_id}>{p.name}</option>)}
+            </select>
+          </div>
+        </div>
+        <div className="grid-2">
+          <div className="form-group">
+            <label>발생경로</label>
+            <select value={form.occur_type} onChange={e=>set('occur_type',e.target.value)}>
+              {['입고검사','공정검사','출하검사','고객클레임'].map(v=><option key={v}>{v}</option>)}
+            </select>
+          </div>
+          <div className="form-group">
+            <label>처리방법</label>
+            <select value={form.disposal} onChange={e=>set('disposal',e.target.value)}>
+              {['미결','반품','폐기','특채','수리'].map(v=><option key={v}>{v}</option>)}
+            </select>
+          </div>
+        </div>
+        <div className="grid-2">
+          <div className="form-group">
+            <label>불량내용 *</label>
+            <input value={form.defect_type} onChange={e=>set('defect_type',e.target.value)} placeholder="치수불량, 외관불량..." />
+          </div>
+          <div className="form-group">
+            <label>불량수량</label>
+            <input type="number" value={form.defect_qty} onChange={e=>set('defect_qty',e.target.value)} />
+          </div>
+        </div>
+        <div className="form-group">
+          <label>입고번호 (해당 시)</label>
+          <input value={form.gr_no} onChange={e=>set('gr_no',e.target.value)} placeholder="GR-20261029-001" />
+        </div>
+        <div className="form-group">
+          <label>비고</label>
+          <textarea rows={2} value={form.note} onChange={e=>set('note',e.target.value)} style={{width:'100%',padding:8,borderRadius:6,border:'1px solid var(--border)'}} />
+        </div>
+        <div className="modal-footer">
+          <button className="btn btn-outline" onClick={onClose}>취소</button>
+          <button className="btn btn-primary" onClick={submit}>등록 (업체 통보)</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function NcrDetailModal({ ncr, isManager, onClose, onSaved }) {
+  const [form, setForm] = useState({
+    d1_team: ncr.d1_team||'', d2_desc: ncr.d2_desc||'',
+    d3_containment: ncr.d3_containment||'', d4_root_cause: ncr.d4_root_cause||'',
+    d5_corrective: ncr.d5_corrective||'', d6_implemented: ncr.d6_implemented||'',
+    d7_preventive: ncr.d7_preventive||'', d8_verification: ncr.d8_verification||'',
+    disposal: ncr.disposal, status: ncr.status,
+  })
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
+
+  const save = async () => {
+    await api.patch(`/quality/ncr/${ncr.ncr_no}`, form).catch(e=>alert(e.response?.data?.detail||'오류'))
+    onSaved()
+  }
+
+  const D_LABELS = [
+    ['d1_team','D1 팀 구성'],['d2_desc','D2 문제 기술'],['d3_containment','D3 봉쇄조치'],
+    ['d4_root_cause','D4 근본원인'],['d5_corrective','D5 시정조치'],
+    ['d6_implemented','D6 실행 확인'],['d7_preventive','D7 재발방지'],['d8_verification','D8 효과 검증'],
+  ]
+
+  return (
+    <div className="modal-overlay">
+      <div className="modal modal-lg" style={{maxWidth:700,maxHeight:'90vh',overflowY:'auto'}}>
+        <h3>NCR 상세 — {ncr.ncr_no}</h3>
+        <div style={{display:'flex',gap:12,marginBottom:12,flexWrap:'wrap'}}>
+          <span><strong>품번:</strong> {ncr.part_no}</span>
+          <span><strong>불량:</strong> {ncr.defect_type} ({ncr.defect_qty}개)</span>
+          <span><strong>통보일:</strong> {ncr.notified_at?.slice(0,10)||ncr.created_at?.slice(0,10)}</span>
+        </div>
+        {isManager && (
+          <div className="grid-2" style={{marginBottom:12}}>
+            <div className="form-group">
+              <label>처리방법</label>
+              <select value={form.disposal} onChange={e=>set('disposal',e.target.value)}>
+                {['미결','반품','폐기','특채','수리'].map(v=><option key={v}>{v}</option>)}
+              </select>
+            </div>
+            <div className="form-group">
+              <label>상태</label>
+              <select value={form.status} onChange={e=>set('status',e.target.value)}>
+                {['접수','처리중','완료'].map(v=><option key={v}>{v}</option>)}
+              </select>
+            </div>
+          </div>
+        )}
+        <div style={{borderTop:'1px solid var(--border)',paddingTop:12}}>
+          <div className="section-title" style={{marginBottom:10}}>8D 대응 보고서</div>
+          {D_LABELS.map(([key, label]) => (
+            <div className="form-group" key={key}>
+              <label style={{fontSize:12,fontWeight:600,color:'var(--primary)'}}>{label}</label>
+              <textarea rows={2} style={{width:'100%',padding:8,borderRadius:6,border:'1px solid var(--border)',resize:'vertical'}}
+                value={form[key]} onChange={e=>set(key,e.target.value)}
+                disabled={!isManager} placeholder={isManager ? '내용 입력...' : '—'} />
+            </div>
+          ))}
+        </div>
+
+        {/* 이의신청 목록 */}
+        {ncr.appeals?.length > 0 && (
+          <div style={{borderTop:'1px solid var(--border)',paddingTop:12,marginTop:4}}>
+            <div className="section-title" style={{marginBottom:8}}>이의신청 내역</div>
+            {ncr.appeals.map(a => (
+              <div key={a.id} style={{background:'var(--surface)',border:'1px solid var(--border)',borderRadius:6,padding:'10px 14px',marginBottom:8}}>
+                <div style={{display:'flex',justifyContent:'space-between',marginBottom:4}}>
+                  <span className={`badge ${APPEAL_STATUS_BADGE[a.status]||'badge-gray'}`}>{a.status}</span>
+                  <span style={{fontSize:11,color:'var(--text-sm)'}}>{a.created_at?.slice(0,10)}</span>
+                </div>
+                <div style={{fontSize:13,marginBottom:4}}><strong>사유:</strong> {a.appeal_reason}</div>
+                {a.evidence_text && <div style={{fontSize:12,color:'var(--text-sm)'}}><strong>근거:</strong> {a.evidence_text}</div>}
+                {a.review_note && <div style={{fontSize:12,color:'var(--danger)',marginTop:4}}><strong>검토의견:</strong> {a.review_note}</div>}
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div className="modal-footer">
+          <button className="btn btn-outline" onClick={onClose}>닫기</button>
+          {isManager && <button className="btn btn-primary" onClick={save}>저장</button>}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function InspectionModal({ onClose, onSaved }) {
   const [receipts, setReceipts] = useState([])
   const [standards, setStandards] = useState([])
@@ -408,6 +644,9 @@ export default function Quality() {
   const [defectRates, setDefectRates] = useState([])
   const [inspections, setInspections] = useState([])
   const [standards, setStandards] = useState([])
+  const [ncrList, setNcrList] = useState([])
+  const [ncrDetail, setNcrDetail] = useState(null)
+  const [showNcrModal, setShowNcrModal] = useState(false)
   const [tab, setTab] = useState('inspections')
   const [showModal, setShowModal] = useState(false)
   const [showStdModal, setShowStdModal] = useState(false)
@@ -422,6 +661,7 @@ export default function Quality() {
     api.get('/quality/defect-rate').then(r => setDefectRates(r.data)).catch(() => {})
     api.get('/quality/inspections').then(r => setInspections(r.data)).catch(() => {})
     api.get('/quality/standards').then(r => setStandards(r.data)).catch(() => {})
+    api.get('/quality/ncr').then(r => setNcrList(r.data)).catch(() => {})
   }, [])
 
   useEffect(() => { load() }, [load])
@@ -454,12 +694,13 @@ export default function Quality() {
       <div className="erp-panel" style={{marginBottom:8}}>
         <div className="erp-actions">
           <div className="qdate-bar">
-            {[['inspections','입고검사'], ['standards','검사기준'], ['claims','클레임 목록'], ['rates','외주처별 불량율']].map(([v,l])=>(
+            {[['inspections','입고검사'], ['standards','검사기준'], ['ncr','부적합관리'], ['claims','클레임 목록'], ['rates','외주처별 불량율']].map(([v,l])=>(
               <button key={v} className={`qdate-btn${tab===v?' active':''}`} onClick={()=>setTab(v)}>{l}</button>
             ))}
           </div>
           <div className="spacer"/>
           {tab === 'inspections' && <button className="btn btn-sm btn-primary" onClick={()=>setShowInspModal(true)}>＋ 검사 등록</button>}
+          {tab === 'ncr' && <button className="btn btn-sm btn-primary" onClick={()=>setShowNcrModal(true)}>＋ 부적합 통보</button>}
           {tab === 'claims' && <button className="btn btn-sm btn-primary" onClick={()=>setShowModal(true)}>＋ 클레임 등록</button>}
           {tab === 'standards' && <button className="btn btn-sm btn-primary" onClick={()=>{setEditStd(null);setShowStdModal(true)}}>＋ 기준 등록</button>}
         </div>
@@ -539,6 +780,10 @@ export default function Quality() {
             </div>
           </div>
         </div>
+      )}
+
+      {tab === 'ncr' && (
+        <NcrPanel ncrList={ncrList} isManager={isManager} onRefresh={load} onDetail={setNcrDetail} />
       )}
 
       {tab === 'standards' && (
@@ -656,6 +901,14 @@ export default function Quality() {
           </table>
         </div>
         </>
+      )}
+
+      {showNcrModal && (
+        <NcrCreateModal onClose={()=>setShowNcrModal(false)} onSaved={()=>{setShowNcrModal(false);load()}} />
+      )}
+
+      {ncrDetail && (
+        <NcrDetailModal ncr={ncrDetail} isManager={isManager} onClose={()=>setNcrDetail(null)} onSaved={()=>{setNcrDetail(null);load()}} />
       )}
 
       {showInspModal && (

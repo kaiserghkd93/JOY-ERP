@@ -9,6 +9,7 @@ from app.models.auth import User
 from app.models.purchase import PurchaseOrder, POStatus, Receipt, ReceiptStatus
 from app.models.master import Partner, Item
 from app.models.ledger import LedgerType
+from app.models.quality import NonConformance, NcrAppeal, AppealStatus
 from app.routers.auth import get_current_user
 from app.services.doc_no import next_doc_no
 from app.services.ledger_service import post_ledger
@@ -234,3 +235,64 @@ def my_history(user: User = Depends(get_current_user), db: Session = Depends(get
             "note": r.note,
         })
     return result
+
+
+# ── 부적합 통보 (포털용) ────────────────────────────────────────────
+
+@router.get("/ncr")
+def my_ncr(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """내 업체에 발송된 부적합 통보 목록"""
+    partner_id = _supplier_partner(user)
+    ncrs = (
+        db.query(NonConformance)
+        .filter(NonConformance.partner_id == partner_id)
+        .order_by(NonConformance.created_at.desc())
+        .limit(100)
+        .all()
+    )
+    result = []
+    for n in ncrs:
+        item = db.get(Item, n.part_no)
+        result.append({
+            "ncr_no": n.ncr_no,
+            "part_no": n.part_no,
+            "item_name": item.name if item else n.part_no,
+            "occur_type": n.occur_type,
+            "defect_type": n.defect_type,
+            "defect_qty": n.defect_qty,
+            "disposal": n.disposal,
+            "status": n.status,
+            "notified_at": str(n.notified_at)[:16] if n.notified_at else None,
+            "created_at": str(n.created_at)[:10],
+            "appeal_count": len(n.appeals),
+            "latest_appeal_status": n.appeals[-1].status if n.appeals else None,
+        })
+    return result
+
+
+class PortalAppealBody(BaseModel):
+    appeal_reason: str
+    evidence_text: str | None = None
+
+
+@router.post("/ncr/{ncr_no}/appeal")
+def portal_appeal(ncr_no: str, body: PortalAppealBody,
+                  user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """포털에서 이의신청 등록"""
+    partner_id = _supplier_partner(user)
+    ncr = db.get(NonConformance, ncr_no)
+    if not ncr:
+        raise HTTPException(404, "부적합통보를 찾을 수 없습니다")
+    if ncr.partner_id != partner_id:
+        raise HTTPException(403, "본인 업체의 부적합통보에만 이의신청 가능합니다")
+    appeal = NcrAppeal(
+        ncr_no=ncr_no,
+        partner_id=partner_id,
+        appeal_reason=body.appeal_reason,
+        evidence_text=body.evidence_text,
+        status=AppealStatus.submitted,
+    )
+    db.add(appeal)
+    db.commit()
+    db.refresh(appeal)
+    return {"ok": True, "appeal_id": appeal.id, "status": appeal.status}

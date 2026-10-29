@@ -30,6 +30,7 @@ with engine.connect() as _conn:
         "ALTER TABLE inspection ADD COLUMN IF NOT EXISTS sample_size INTEGER",
         "ALTER TABLE inspection ADD COLUMN IF NOT EXISTS ac INTEGER",
         "ALTER TABLE inspection ADD COLUMN IF NOT EXISTS re INTEGER",
+        # NCR / 이의신청 (Base.metadata.create_all로 테이블 자동 생성)
     ]:
         try:
             _conn.execute(_text(_sql))
