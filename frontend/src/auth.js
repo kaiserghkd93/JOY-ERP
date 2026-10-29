@@ -17,7 +17,8 @@ const ROLE_PERMISSIONS = {
   production: ['/', '/production', '/production-plan', '/inventory', '/cost', '/mold', '/bom'],
   owner:      ['/', '/report', '/inventory', '/invoice', '/sales', '/monthly-sales', '/sales-target',
                 '/quality', '/production', '/production-plan', '/production-mrp',
-                '/cost', '/cost-actual', '/mold', '/master', '/bom'],
+                '/cost', '/cost-actual', '/mold', '/master', '/bom',
+                '/purchase', '/mrp', '/monthly-purchase'],
   supplier:   ['/'],
 }
 
