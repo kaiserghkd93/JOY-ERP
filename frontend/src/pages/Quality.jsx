@@ -1126,17 +1126,19 @@ export default function Quality() {
                     onBlur={()=>setTimeout(()=>setPartAcOpen(false),160)}
                   />
                   {partAcOpen && partAcList.length > 0 && (
-                    <div style={{position:'absolute',top:'100%',left:0,right:0,background:'var(--card)',border:'1px solid var(--border)',borderRadius:6,boxShadow:'0 4px 16px rgba(0,0,0,0.12)',zIndex:300,maxHeight:200,overflowY:'auto'}}>
+                    <div style={{position:'absolute',top:'100%',left:0,right:0,background:'#fff',border:'1px solid #cbd5e1',borderRadius:6,boxShadow:'0 6px 20px rgba(0,0,0,0.18)',zIndex:9999,maxHeight:200,overflowY:'auto'}}>
                       {partAcList.map(it=>(
                         <div key={it.part_no}
-                          style={{padding:'7px 12px',cursor:'pointer',borderBottom:'1px solid var(--border)',fontSize:13}}
+                          style={{padding:'7px 12px',cursor:'pointer',borderBottom:'1px solid #e2e8f0',fontSize:13,background:'#fff'}}
+                          onMouseEnter={e=>e.currentTarget.style.background='#f0f9ff'}
+                          onMouseLeave={e=>e.currentTarget.style.background='#fff'}
                           onMouseDown={()=>{
                             setDefRegForm(p=>({...p,part_no:it.part_no,part_name:it.name||''}))
                             setPartAcOpen(false)
                             setPartAcList([])
                           }}>
-                          <span style={{fontFamily:'monospace',fontSize:11,color:'var(--primary)',marginRight:8}}>{it.part_no}</span>
-                          <span style={{fontSize:12}}>{it.name}</span>
+                          <span style={{fontFamily:'monospace',fontSize:11,color:'#1d4ed8',marginRight:8,fontWeight:600}}>{it.part_no}</span>
+                          <span style={{fontSize:12,color:'#1e293b'}}>{it.name}</span>
                         </div>
                       ))}
                     </div>
