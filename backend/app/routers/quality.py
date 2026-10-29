@@ -3,11 +3,12 @@ from sqlalchemy.orm import Session
 from datetime import date, datetime
 from pydantic import BaseModel
 from app.database import get_db
-from app.models.quality import Inspection, QualityClaim, ApprovalStatus
+from app.models.quality import Inspection, QualityClaim, ApprovalStatus, InspectionStandard, InspectionItem, StandardStatus
 from app.models.auth import User
 from app.schemas.quality import (
     InspectionCreate, InspectionOut,
     ClaimCreate, ClaimUpdate, ClaimOut, DefectRateOut,
+    StandardCreate, StandardOut,
 )
 from app.services.quality_service import (
     register_inspection, get_defect_rate, create_claim, update_claim
@@ -176,3 +177,122 @@ def list_pending(db: Session = Depends(get_db), user: User = Depends(_require_ma
         Inspection.approval_status == ApprovalStatus.pending
     ).order_by(Inspection.requested_at).all()
     return rows
+
+
+# ── 검사기준 마스터 ─────────────────────────────────────────────────
+
+def _next_std_no(db: Session) -> str:
+    from datetime import date as _date
+    prefix = f"QS-{_date.today().strftime('%Y%m')}"
+    rows = db.query(InspectionStandard.std_no).filter(
+        InspectionStandard.std_no.like(f"{prefix}-%")
+    ).all()
+    seq = len(rows) + 1
+    return f"{prefix}-{seq:03d}"
+
+
+@router.get("/standards", response_model=list[StandardOut])
+def list_standards(
+    part_no: str | None = None,
+    partner_id: str | None = None,
+    active_only: bool = False,
+    db: Session = Depends(get_db),
+):
+    q = db.query(InspectionStandard)
+    if part_no:
+        q = q.filter(InspectionStandard.part_no == part_no)
+    if partner_id:
+        q = q.filter(InspectionStandard.partner_id == partner_id)
+    if active_only:
+        q = q.filter(InspectionStandard.status == StandardStatus.approved)
+    return q.order_by(InspectionStandard.std_no.desc()).all()
+
+
+@router.post("/standards", response_model=StandardOut)
+def create_standard(body: StandardCreate, db: Session = Depends(get_db), user: User = Depends(_require_quality)):
+    std_no = _next_std_no(db)
+    std = InspectionStandard(
+        std_no=std_no, std_rev="00",
+        part_no=body.part_no, partner_id=body.partner_id,
+        drawing_no=body.drawing_no, drawing_rev=body.drawing_rev,
+        sampling_level=body.sampling_level, aql=body.aql,
+        note=body.note, effective_date=body.effective_date,
+        status=StandardStatus.draft,
+    )
+    db.add(std)
+    db.flush()
+    for i, item in enumerate(body.items):
+        db.add(InspectionItem(standard_id=std.id, sort_order=i, **item.model_dump(exclude={"sort_order"})))
+    db.commit()
+    db.refresh(std)
+    return std
+
+
+@router.get("/standards/{std_id}", response_model=StandardOut)
+def get_standard(std_id: int, db: Session = Depends(get_db)):
+    s = db.get(InspectionStandard, std_id)
+    if not s:
+        raise HTTPException(404)
+    return s
+
+
+@router.post("/standards/{std_id}/approve", response_model=StandardOut)
+def approve_standard(std_id: int, db: Session = Depends(get_db), user: User = Depends(_require_manager)):
+    s = db.get(InspectionStandard, std_id)
+    if not s:
+        raise HTTPException(404)
+    if s.status != StandardStatus.draft:
+        raise HTTPException(400, "작성중 상태에서만 승인 가능합니다")
+    s.status = StandardStatus.approved
+    s.approver_id = user.username
+    s.approved_at = datetime.now()
+    db.commit()
+    db.refresh(s)
+    return s
+
+
+@router.post("/standards/{std_id}/revise", response_model=StandardOut)
+def revise_standard(std_id: int, body: StandardCreate, db: Session = Depends(get_db), user: User = Depends(_require_quality)):
+    """기존 기준서를 기반으로 새 개정본 생성 (원본은 폐기)"""
+    orig = db.get(InspectionStandard, std_id)
+    if not orig:
+        raise HTTPException(404)
+    new_rev = f"{int(orig.std_rev) + 1:02d}"
+    new_std = InspectionStandard(
+        std_no=orig.std_no, std_rev=new_rev,
+        part_no=body.part_no, partner_id=body.partner_id,
+        drawing_no=body.drawing_no, drawing_rev=body.drawing_rev,
+        sampling_level=body.sampling_level, aql=body.aql,
+        note=body.note, effective_date=body.effective_date,
+        status=StandardStatus.draft,
+    )
+    orig.status = StandardStatus.obsolete
+    db.add(new_std)
+    db.flush()
+    for i, item in enumerate(body.items):
+        db.add(InspectionItem(standard_id=new_std.id, sort_order=i, **item.model_dump(exclude={"sort_order"})))
+    db.commit()
+    db.refresh(new_std)
+    return new_std
+
+
+@router.post("/standards/{std_id}/items", response_model=StandardOut)
+def add_standard_item(std_id: int, body: dict, db: Session = Depends(get_db), user: User = Depends(_require_quality)):
+    s = db.get(InspectionStandard, std_id)
+    if not s:
+        raise HTTPException(404)
+    item = InspectionItem(standard_id=std_id, **body)
+    db.add(item)
+    db.commit()
+    db.refresh(s)
+    return s
+
+
+@router.delete("/standards/items/{item_id}")
+def delete_standard_item(item_id: int, db: Session = Depends(get_db), user: User = Depends(_require_quality)):
+    item = db.get(InspectionItem, item_id)
+    if not item:
+        raise HTTPException(404)
+    db.delete(item)
+    db.commit()
+    return {"ok": True}

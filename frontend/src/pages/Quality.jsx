@@ -2,6 +2,165 @@ import { useEffect, useState, useCallback } from 'react'
 import api from '../api'
 import { getRole } from '../auth'
 
+const AQL_OPTIONS = [0.065, 0.1, 0.15, 0.25, 0.4, 0.65, 1.0, 1.5, 2.5, 4.0, 6.5]
+const STD_STATUS_BADGE = { '작성중': 'badge-gray', '승인완료': 'badge-green', '폐기': 'badge-red' }
+
+function StandardModal({ editStd, onClose, onSaved }) {
+  const [partners, setPartners] = useState([])
+  const [items, setItems] = useState([])
+  const [form, setForm] = useState({
+    part_no: editStd?.part_no || '',
+    partner_id: editStd?.partner_id || '',
+    drawing_no: editStd?.drawing_no || '',
+    drawing_rev: editStd?.drawing_rev || '',
+    sampling_level: editStd?.sampling_level || 'II',
+    aql: editStd?.aql ?? 1.0,
+    note: editStd?.note || '',
+    effective_date: editStd?.effective_date || '',
+  })
+  const [stdItems, setStdItems] = useState(
+    editStd?.items?.map(i => ({ ...i })) || [{ item_name: '', unit: 'mm', spec_nominal: '', spec_upper: '', spec_lower: '', is_critical: false, is_special: false, method: '', equipment: '', frequency: '매회', sort_order: 0 }]
+  )
+  const [allItems, setAllItems] = useState([])
+
+  useEffect(() => {
+    api.get('/master/partners').then(r => setPartners(r.data)).catch(() => {})
+    api.get('/master/items').then(r => setAllItems(r.data)).catch(() => {})
+  }, [])
+
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
+  const setItem = (idx, k, v) => setStdItems(arr => arr.map((r, i) => i === idx ? { ...r, [k]: v } : r))
+  const addItem = () => setStdItems(arr => [...arr, { item_name: '', unit: 'mm', spec_nominal: '', spec_upper: '', spec_lower: '', is_critical: false, is_special: false, method: '', equipment: '', frequency: '매회', sort_order: arr.length }])
+  const removeItem = (idx) => setStdItems(arr => arr.filter((_, i) => i !== idx))
+
+  const submit = async () => {
+    const payload = {
+      ...form,
+      aql: +form.aql,
+      effective_date: form.effective_date || null,
+      items: stdItems.map((it, i) => ({
+        item_name: it.item_name, unit: it.unit,
+        spec_nominal: it.spec_nominal !== '' ? +it.spec_nominal : null,
+        spec_upper: it.spec_upper !== '' ? +it.spec_upper : null,
+        spec_lower: it.spec_lower !== '' ? +it.spec_lower : null,
+        is_critical: it.is_critical, is_special: it.is_special,
+        method: it.method, equipment: it.equipment,
+        frequency: it.frequency || '매회',
+        sort_order: i,
+      }))
+    }
+    try {
+      if (editStd) {
+        await api.post(`/quality/standards/${editStd.id}/revise`, payload)
+      } else {
+        await api.post('/quality/standards', payload)
+      }
+      onSaved()
+    } catch (e) {
+      alert(e.response?.data?.detail || '저장 실패')
+    }
+  }
+
+  return (
+    <div className="modal-overlay">
+      <div className="modal modal-lg" style={{ maxWidth: 900, maxHeight: '90vh', overflowY: 'auto' }}>
+        <h3>{editStd ? `개정 — ${editStd.std_no} Rev.${editStd.std_rev}` : '검사기준 등록'}</h3>
+        <div className="grid-2">
+          <div className="form-group">
+            <label>품번 *</label>
+            <select value={form.part_no} onChange={e => set('part_no', e.target.value)}>
+              <option value="">선택</option>
+              {allItems.map(i => <option key={i.part_no} value={i.part_no}>{i.part_no} — {i.name}</option>)}
+            </select>
+          </div>
+          <div className="form-group">
+            <label>협력업체 (없으면 전사공통)</label>
+            <select value={form.partner_id} onChange={e => set('partner_id', e.target.value)}>
+              <option value="">전사공통</option>
+              {partners.map(p => <option key={p.partner_id} value={p.partner_id}>{p.name}</option>)}
+            </select>
+          </div>
+        </div>
+        <div className="grid-2">
+          <div className="form-group"><label>도면번호</label><input value={form.drawing_no} onChange={e => set('drawing_no', e.target.value)} /></div>
+          <div className="form-group"><label>도면개정</label><input value={form.drawing_rev} onChange={e => set('drawing_rev', e.target.value)} placeholder="A, B, 01..." /></div>
+        </div>
+        <div className="grid-2" style={{ gridTemplateColumns: '1fr 1fr' }}>
+          <div className="form-group">
+            <label>샘플링 레벨 (ISO 2859-1)</label>
+            <select value={form.sampling_level} onChange={e => set('sampling_level', e.target.value)}>
+              {['I','II','III'].map(l => <option key={l}>{l}</option>)}
+            </select>
+          </div>
+          <div className="form-group">
+            <label>AQL</label>
+            <select value={form.aql} onChange={e => set('aql', e.target.value)}>
+              {AQL_OPTIONS.map(v => <option key={v} value={v}>{v}</option>)}
+            </select>
+          </div>
+        </div>
+        <div className="grid-2">
+          <div className="form-group"><label>적용일</label><input type="date" value={form.effective_date} onChange={e => set('effective_date', e.target.value)} /></div>
+          <div className="form-group"><label>비고</label><input value={form.note} onChange={e => set('note', e.target.value)} /></div>
+        </div>
+
+        <div style={{ borderTop: '1px solid var(--border)', marginTop: 12, paddingTop: 12 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+            <span className="section-title">검사항목</span>
+            <button className="btn btn-sm btn-outline" onClick={addItem}>＋ 항목 추가</button>
+          </div>
+          {stdItems.map((it, idx) => (
+            <div key={idx} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 6, padding: '8px 12px', marginBottom: 8 }}>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+                <div className="form-group" style={{ flex: '2 1 160px', marginBottom: 4 }}>
+                  <label style={{ fontSize: 11 }}>항목명 *</label>
+                  <input value={it.item_name} onChange={e => setItem(idx, 'item_name', e.target.value)} placeholder="외관, 치수A..." />
+                </div>
+                <div className="form-group" style={{ flex: '1 1 60px', marginBottom: 4 }}>
+                  <label style={{ fontSize: 11 }}>단위</label>
+                  <input value={it.unit} onChange={e => setItem(idx, 'unit', e.target.value)} style={{ width: 60 }} />
+                </div>
+                <div className="form-group" style={{ flex: '1 1 70px', marginBottom: 4 }}>
+                  <label style={{ fontSize: 11 }}>기준값</label>
+                  <input type="number" value={it.spec_nominal} onChange={e => setItem(idx, 'spec_nominal', e.target.value)} />
+                </div>
+                <div className="form-group" style={{ flex: '1 1 70px', marginBottom: 4 }}>
+                  <label style={{ fontSize: 11 }}>상한</label>
+                  <input type="number" value={it.spec_upper} onChange={e => setItem(idx, 'spec_upper', e.target.value)} />
+                </div>
+                <div className="form-group" style={{ flex: '1 1 70px', marginBottom: 4 }}>
+                  <label style={{ fontSize: 11 }}>하한</label>
+                  <input type="number" value={it.spec_lower} onChange={e => setItem(idx, 'spec_lower', e.target.value)} />
+                </div>
+                <div className="form-group" style={{ flex: '2 1 120px', marginBottom: 4 }}>
+                  <label style={{ fontSize: 11 }}>검사방법</label>
+                  <input value={it.method} onChange={e => setItem(idx, 'method', e.target.value)} placeholder="버니어캘리퍼스..." />
+                </div>
+                <div style={{ display: 'flex', gap: 12, alignItems: 'center', paddingTop: 18 }}>
+                  <label style={{ fontSize: 11, display: 'flex', gap: 4, alignItems: 'center', cursor: 'pointer' }}>
+                    <input type="checkbox" checked={it.is_critical} onChange={e => setItem(idx, 'is_critical', e.target.checked)} />
+                    중요
+                  </label>
+                  <label style={{ fontSize: 11, display: 'flex', gap: 4, alignItems: 'center', cursor: 'pointer' }}>
+                    <input type="checkbox" checked={it.is_special} onChange={e => setItem(idx, 'is_special', e.target.checked)} />
+                    특별
+                  </label>
+                  <button className="btn btn-sm btn-danger" style={{ fontSize: 11 }} onClick={() => removeItem(idx)}>삭제</button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="modal-footer">
+          <button className="btn btn-outline" onClick={onClose}>취소</button>
+          <button className="btn btn-primary" onClick={submit}>{editStd ? '개정 저장' : '등록'}</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function ClaimModal({ onClose, onSaved }) {
   const [partners, setPartners] = useState([])
   const [items, setItems] = useState([])
@@ -91,8 +250,11 @@ export default function Quality() {
   const [claims, setClaims] = useState([])
   const [defectRates, setDefectRates] = useState([])
   const [inspections, setInspections] = useState([])
+  const [standards, setStandards] = useState([])
   const [tab, setTab] = useState('inspections')
   const [showModal, setShowModal] = useState(false)
+  const [showStdModal, setShowStdModal] = useState(false)
+  const [editStd, setEditStd] = useState(null)
   const [detailClaim, setDetailClaim] = useState(null)
   const [rejectTarget, setRejectTarget] = useState(null)
   const [rejectReason, setRejectReason] = useState('')
@@ -101,6 +263,7 @@ export default function Quality() {
     api.get('/quality/claims').then(r => setClaims(r.data)).catch(() => {})
     api.get('/quality/defect-rate').then(r => setDefectRates(r.data)).catch(() => {})
     api.get('/quality/inspections').then(r => setInspections(r.data)).catch(() => {})
+    api.get('/quality/standards').then(r => setStandards(r.data)).catch(() => {})
   }, [])
 
   useEffect(() => { load() }, [load])
@@ -133,12 +296,13 @@ export default function Quality() {
       <div className="erp-panel" style={{marginBottom:8}}>
         <div className="erp-actions">
           <div className="qdate-bar">
-            {[['inspections','입고검사'], ['claims','클레임 목록'], ['rates','외주처별 불량율']].map(([v,l])=>(
+            {[['inspections','입고검사'], ['standards','검사기준'], ['claims','클레임 목록'], ['rates','외주처별 불량율']].map(([v,l])=>(
               <button key={v} className={`qdate-btn${tab===v?' active':''}`} onClick={()=>setTab(v)}>{l}</button>
             ))}
           </div>
           <div className="spacer"/>
           {tab === 'claims' && <button className="btn btn-sm btn-primary" onClick={()=>setShowModal(true)}>＋ 클레임 등록</button>}
+          {tab === 'standards' && <button className="btn btn-sm btn-primary" onClick={()=>{setEditStd(null);setShowStdModal(true)}}>＋ 기준 등록</button>}
         </div>
       </div>
 
@@ -211,6 +375,58 @@ export default function Quality() {
         </div>
       )}
 
+      {tab === 'standards' && (
+        <>
+        <div className="result-bar">
+          <span className="result-bar-title">검사기준 목록</span>
+          <span className="result-bar-count">{standards.length}건</span>
+        </div>
+        <div className="table-wrap">
+          <table>
+            <thead><tr>
+              <th>기준번호</th><th>Rev</th><th>품번</th><th>협력업체</th><th>도면번호</th>
+              <th>샘플링</th><th>AQL</th><th>항목수</th><th>상태</th><th>승인자</th><th>적용일</th>
+              {isManager && <th>관리</th>}
+            </tr></thead>
+            <tbody>
+              {standards.length === 0 && <tr><td colSpan={12} className="empty">등록된 검사기준 없음</td></tr>}
+              {standards.map(s => (
+                <tr key={s.id}>
+                  <td style={{fontFamily:'monospace',fontSize:11}}>{s.std_no}</td>
+                  <td style={{fontWeight:600}}>{s.std_rev}</td>
+                  <td style={{fontSize:12}}>{s.part_no}</td>
+                  <td style={{fontSize:12,color:'var(--text-sm)'}}>{s.partner_id || '전사공통'}</td>
+                  <td style={{fontSize:12}}>{s.drawing_no ? `${s.drawing_no}${s.drawing_rev ? '-'+s.drawing_rev : ''}` : '—'}</td>
+                  <td><span className="badge badge-blue">{s.sampling_level}</span></td>
+                  <td style={{fontVariantNumeric:'tabular-nums'}}>{s.aql}</td>
+                  <td style={{textAlign:'center'}}>
+                    {s.items?.filter(i=>i.is_critical).length > 0 && <span className="badge badge-red" style={{fontSize:10}}>중요{s.items.filter(i=>i.is_critical).length}</span>}
+                    {' '}{s.items?.length || 0}
+                  </td>
+                  <td><span className={`badge ${STD_STATUS_BADGE[s.status]||'badge-gray'}`}>{s.status}</span></td>
+                  <td style={{fontSize:11,color:'var(--text-sm)'}}>{s.approver_id || '—'}</td>
+                  <td style={{fontSize:11}}>{s.effective_date || '—'}</td>
+                  {isManager && (
+                    <td>
+                      <div style={{display:'flex',gap:4}}>
+                        {s.status === '작성중' && (
+                          <button className="btn btn-sm btn-success" onClick={async()=>{
+                            await api.post(`/quality/standards/${s.id}/approve`).catch(e=>alert(e.response?.data?.detail||'오류'))
+                            load()
+                          }}>승인</button>
+                        )}
+                        <button className="btn btn-sm btn-outline" onClick={()=>{setEditStd(s);setShowStdModal(true)}}>개정</button>
+                      </div>
+                    </td>
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        </>
+      )}
+
       {tab === 'claims' && (
         <>
         <div className="result-bar">
@@ -274,6 +490,14 @@ export default function Quality() {
           </table>
         </div>
         </>
+      )}
+
+      {showStdModal && (
+        <StandardModal
+          editStd={editStd}
+          onClose={() => setShowStdModal(false)}
+          onSaved={() => { setShowStdModal(false); load() }}
+        />
       )}
 
       {showModal && <ClaimModal onClose={() => setShowModal(false)} onSaved={() => { setShowModal(false); load() }} />}

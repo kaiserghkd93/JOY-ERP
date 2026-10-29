@@ -68,6 +68,61 @@ class Inspection(Base):
     receipt: Mapped["Receipt"] = relationship()
 
 
+class StandardStatus(str, enum.Enum):
+    draft    = "작성중"
+    approved = "승인완료"
+    obsolete = "폐기"
+
+
+class InspectionStandard(Base):
+    """검사기준 마스터 (버전관리 포함)"""
+    __tablename__ = "inspection_standard"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    std_no: Mapped[str] = mapped_column(String(30), nullable=False, index=True)  # QS-XXXXXXX
+    std_rev: Mapped[str] = mapped_column(String(10), nullable=False, default="00")  # 00,01,02...
+    part_no: Mapped[str] = mapped_column(ForeignKey("item.part_no"), nullable=False)
+    partner_id: Mapped[str | None] = mapped_column(ForeignKey("partner.partner_id"), nullable=True)
+    drawing_no: Mapped[str | None] = mapped_column(String(50))
+    drawing_rev: Mapped[str | None] = mapped_column(String(10))
+    sampling_level: Mapped[str] = mapped_column(String(5), default="II")   # I / II / III
+    aql: Mapped[float] = mapped_column(default=1.0)                         # 0.65 / 1.0 / 1.5 / 2.5 / 4.0
+    status: Mapped[StandardStatus] = mapped_column(SAEnum(StandardStatus), default=StandardStatus.draft)
+    approver_id: Mapped[str | None] = mapped_column(ForeignKey("user.username"), nullable=True)
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    effective_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    note: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+
+    item: Mapped["Item"] = relationship(foreign_keys=[part_no])
+    partner: Mapped["Partner | None"] = relationship(foreign_keys=[partner_id])
+    items: Mapped[list["InspectionItem"]] = relationship(back_populates="standard", cascade="all, delete-orphan", order_by="InspectionItem.sort_order")
+
+
+class InspectionItem(Base):
+    """검사기준 항목 (상·하한, 중요특성 등)"""
+    __tablename__ = "inspection_item"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    standard_id: Mapped[int] = mapped_column(ForeignKey("inspection_standard.id"), nullable=False)
+    item_name: Mapped[str] = mapped_column(String(100), nullable=False)
+    measure_position: Mapped[str | None] = mapped_column(String(100))
+    spec_nominal: Mapped[float | None] = mapped_column()
+    spec_upper: Mapped[float | None] = mapped_column()
+    spec_lower: Mapped[float | None] = mapped_column()
+    unit: Mapped[str] = mapped_column(String(20), default="mm")
+    is_critical: Mapped[bool] = mapped_column(default=False)   # 중요특성
+    is_special: Mapped[bool] = mapped_column(default=False)    # 특별특성
+    method: Mapped[str | None] = mapped_column(String(100))    # 검사방법
+    equipment: Mapped[str | None] = mapped_column(String(100)) # 측정장비
+    frequency: Mapped[str] = mapped_column(String(50), default="매회")  # 검사주기
+    skip_condition: Mapped[str | None] = mapped_column(Text)   # 검사생략조건
+    inspect_condition: Mapped[str | None] = mapped_column(Text)# 검사조건
+    sort_order: Mapped[int] = mapped_column(Integer, default=0)
+
+    standard: Mapped["InspectionStandard"] = relationship(back_populates="items")
+
+
 class QualityClaim(Base):
     __tablename__ = "quality_claim"
 
