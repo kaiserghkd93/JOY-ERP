@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback, useRef, Fragment } from 'react'
 import * as XLSX from 'xlsx'
 import api from '../api'
-import { isMaster } from '../auth'
+import { isMaster, getRole } from '../auth'
 
 const today = () => { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0') }
 
@@ -1090,13 +1090,14 @@ export default function Purchase() {
   }
 
   const isAdmin = isMaster()
+  const role = getRole()
 
-  // 자재구매 역할은 자재구매 탭만 보임
+  // admin만 외주구매 탭 표시 (owner 포함 나머지는 자재구매만)
   const tabs = isAdmin
     ? [['outsource','외주구매'],['material','자재구매']]
     : [['material','자재구매']]
 
-  // 자재구매 역할로 접속하면 material 탭으로 고정
+  // 외주구매 탭 없는 역할로 접속하면 material 탭으로 고정
   const effectiveTab = (!isAdmin && mainTab === 'outsource') ? 'material' : mainTab
 
   return (
