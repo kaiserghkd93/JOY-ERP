@@ -845,7 +845,7 @@ def quality_summary(year: int | None = None, month: int | None = None, db: Sessi
 
     # ── NCR 현황 (누계) ────────────────────────────────────────────
     ncr_counts = {}
-    for status in [NcrStatus.open, NcrStatus.in_progress, NcrStatus.closed]:
+    for status in [NcrStatus.open, NcrStatus.processing, NcrStatus.closed]:
         ncr_counts[status.value] = db.query(NonConformance).filter(
             NonConformance.status == status
         ).count()
