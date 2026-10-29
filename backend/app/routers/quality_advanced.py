@@ -235,6 +235,16 @@ def delete_cp_item(item_id: int, db: Session = Depends(get_db)):
     return {"ok": True}
 
 
+@router.delete("/control-plan/{cp_id}")
+def delete_control_plan(cp_id: int, db: Session = Depends(get_db)):
+    cp = db.get(ControlPlan, cp_id)
+    if not cp: raise HTTPException(404)
+    # 하위 항목 먼저 삭제
+    db.query(ControlPlanItem).filter(ControlPlanItem.cp_id == cp_id).delete()
+    db.delete(cp); db.commit()
+    return {"ok": True}
+
+
 @router.patch("/control-plan/{cp_id}/approve")
 def approve_control_plan(cp_id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     cp = db.get(ControlPlan, cp_id)
@@ -358,6 +368,15 @@ def delete_pfmea_item(item_id: int, db: Session = Depends(get_db)):
     row = db.get(PfmeaItem, item_id)
     if not row: raise HTTPException(404)
     db.delete(row); db.commit()
+    return {"ok": True}
+
+
+@router.delete("/pfmea/{pfmea_id}")
+def delete_pfmea(pfmea_id: int, db: Session = Depends(get_db)):
+    pf = db.get(Pfmea, pfmea_id)
+    if not pf: raise HTTPException(404)
+    db.query(PfmeaItem).filter(PfmeaItem.pfmea_id == pfmea_id).delete()
+    db.delete(pf); db.commit()
     return {"ok": True}
 
 

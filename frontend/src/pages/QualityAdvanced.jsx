@@ -292,9 +292,13 @@ export function ControlPlanPanel() {
             style={{ padding: '8px 10px', borderRadius: 6, cursor: 'pointer', marginBottom: 4,
               background: selected?.id === p.id ? 'var(--primary-light, #eff6ff)' : 'var(--surface)',
               border: `1px solid ${selected?.id === p.id ? 'var(--primary)' : 'var(--border)'}` }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
               <span style={{ fontWeight: 600, fontSize: 12 }}>{p.cp_no}</span>
-              <span className={`badge ${p.status === '승인완료' ? 'badge-green' : 'badge-gray'}`} style={{ fontSize: 10 }}>{p.status}</span>
+              <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                <span className={`badge ${p.status === '승인완료' ? 'badge-green' : 'badge-gray'}`} style={{ fontSize: 10 }}>{p.status}</span>
+                <button className="btn btn-sm" style={{ fontSize: 10, padding: '1px 6px', background: '#fee2e2', color: '#dc2626', border: 'none' }}
+                  onClick={async e => { e.stopPropagation(); if (!confirm(`"${p.cp_no}" 삭제?`)) return; await api.delete(`/quality-adv/control-plan/${p.id}`); load(); if (selected?.id === p.id) setSelected(null) }}>삭제</button>
+              </div>
             </div>
             <div style={{ fontSize: 11, color: 'var(--text-sm)' }}>{p.part_no} Rev.{p.revision}</div>
             <div style={{ fontSize: 11, color: 'var(--text-sm)' }}>{p.part_name}</div>
@@ -524,7 +528,11 @@ export function PfmeaPanel() {
             style={{ padding: '8px 10px', borderRadius: 6, cursor: 'pointer', marginBottom: 4,
               background: selected?.id === p.id ? 'var(--primary-light,#eff6ff)' : 'var(--surface)',
               border: `1px solid ${selected?.id === p.id ? 'var(--primary)' : 'var(--border)'}` }}>
-            <div style={{ fontWeight: 600, fontSize: 12 }}>{p.pfmea_no}</div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+              <span style={{ fontWeight: 600, fontSize: 12 }}>{p.pfmea_no}</span>
+              <button className="btn btn-sm" style={{ fontSize: 10, padding: '1px 6px', background: '#fee2e2', color: '#dc2626', border: 'none' }}
+                onClick={async e => { e.stopPropagation(); if (!confirm(`"${p.pfmea_no}" 삭제?`)) return; await api.delete(`/quality-adv/pfmea/${p.id}`); load(); if (selected?.id === p.id) setSelected(null) }}>삭제</button>
+            </div>
             <div style={{ fontSize: 11, color: 'var(--text-sm)' }}>{p.part_no} Rev.{p.revision}</div>
             <div style={{ fontSize: 11, color: 'var(--text-sm)' }}>{p.part_name}</div>
             <span className={`badge ${p.status === '승인완료' ? 'badge-green' : p.status === '검토완료' ? 'badge-blue' : 'badge-gray'}`} style={{ fontSize: 10 }}>{p.status}</span>
