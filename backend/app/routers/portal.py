@@ -10,6 +10,7 @@ from app.models.purchase import PurchaseOrder, POStatus, Receipt, ReceiptStatus
 from app.models.master import Partner, Item
 from app.models.ledger import LedgerType
 from app.models.quality import NonConformance, NcrAppeal, AppealStatus
+from app.models.production import Mold
 from app.routers.auth import get_current_user
 from app.services.doc_no import next_doc_no
 from app.services.ledger_service import post_ledger
@@ -296,3 +297,27 @@ def portal_appeal(ncr_no: str, body: PortalAppealBody,
     db.commit()
     db.refresh(appeal)
     return {"ok": True, "appeal_id": appeal.id, "status": appeal.status}
+
+
+# ── 대여 금형 목록 ───────────────────────────────────────────────
+@router.get("/my-molds")
+def my_molds(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    partner_id = _supplier_partner(user)
+    molds = (
+        db.query(Mold)
+        .filter(Mold.lent_to_partner_id == partner_id)
+        .all()
+    )
+    result = []
+    for m in molds:
+        item = db.get(Item, m.part_no) if m.part_no else None
+        result.append({
+            "mold_no": m.mold_no,
+            "owner": m.owner,
+            "part_no": m.part_no,
+            "part_name": item.name if item else m.part_no,
+            "lent_date": str(m.lent_date) if m.lent_date else None,
+            "total_shots": m.total_shots,
+            "status": m.status,
+        })
+    return result

@@ -6,7 +6,7 @@ from datetime import date, timedelta
 from calendar import monthrange
 from app.database import get_db
 from app.models.production import ProductionOrder, Mold, POrdStatus, MoldStatus, MonthlyPlan, DailyActual
-from app.models.master import Item, BomLine
+from app.models.master import Item, BomLine, Partner
 from app.services.production_service import create_pord, post_production_result, create_mold
 from app.services.ledger_service import get_stock_bulk
 
@@ -42,6 +42,8 @@ class MoldCreate(BaseModel):
     owner: str | None = None
     part_no: str | None = None
     location: str | None = None
+    lent_to_partner_id: str | None = None
+    lent_date: date | None = None
 
 
 class MoldOut(BaseModel):
@@ -50,8 +52,16 @@ class MoldOut(BaseModel):
     owner: str | None
     part_no: str | None
     location: str | None
+    lent_to_partner_id: str | None = None
+    lent_date: date | None = None
+    lent_partner_name: str | None = None
     total_shots: int
     status: MoldStatus
+
+
+class MoldLendIn(BaseModel):
+    lent_to_partner_id: str | None = None
+    lent_date: date | None = None
 
 
 @router.post("/orders", response_model=POrdOut)
@@ -74,9 +84,28 @@ def post_mold(body: MoldCreate, db: Session = Depends(get_db)):
     return create_mold(db, **body.model_dump())
 
 
-@router.get("/molds", response_model=list[MoldOut])
+@router.get("/molds")
 def list_molds(db: Session = Depends(get_db)):
-    return db.query(Mold).all()
+    molds = db.query(Mold).all()
+    result = []
+    for m in molds:
+        partner_name = None
+        if m.lent_to_partner_id:
+            p = db.get(Partner, m.lent_to_partner_id)
+            partner_name = p.name if p else m.lent_to_partner_id
+        effective_location = partner_name or m.location
+        result.append({
+            "mold_no": m.mold_no,
+            "owner": m.owner,
+            "part_no": m.part_no,
+            "location": effective_location,
+            "lent_to_partner_id": m.lent_to_partner_id,
+            "lent_date": m.lent_date,
+            "lent_partner_name": partner_name,
+            "total_shots": m.total_shots,
+            "status": m.status,
+        })
+    return result
 
 
 @router.patch("/molds/{mold_no}")
@@ -91,6 +120,21 @@ def patch_mold(mold_no: str, repair_note: str | None = None, status: MoldStatus 
     db.commit()
     db.refresh(mold)
     return mold
+
+
+@router.patch("/molds/{mold_no}/lend")
+def lend_mold(mold_no: str, body: MoldLendIn, db: Session = Depends(get_db)):
+    mold = db.get(Mold, mold_no)
+    if not mold:
+        raise HTTPException(404)
+    mold.lent_to_partner_id = body.lent_to_partner_id
+    mold.lent_date = body.lent_date
+    db.commit()
+    partner_name = None
+    if mold.lent_to_partner_id:
+        p = db.get(Partner, mold.lent_to_partner_id)
+        partner_name = p.name if p else mold.lent_to_partner_id
+    return {"ok": True, "lent_partner_name": partner_name}
 
 
 # ── 월 생산계획 ──────────────────────────────────────────────────

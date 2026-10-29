@@ -519,6 +519,7 @@ tbody tr:hover { background: #f8fafc; }
     <div class="tab" onclick="showTab('deliver')">납품 입력</div>
     <div class="tab" onclick="showTab('monthly')">월별 집계</div>
     <div class="tab" onclick="showTab('ncr')">부적합 통보</div>
+    <div class="tab" onclick="showTab('molds')">대여 금형</div>
   </div>
 
   <div class="content">
@@ -593,6 +594,14 @@ tbody tr:hover { background: #f8fafc; }
     <!-- 월별 집계 -->
     <div id="tab-monthly" class="section">
       <div id="monthly-body"><div style="padding:40px;text-align:center;color:var(--text-sm)">로딩 중...</div></div>
+    </div>
+
+    <!-- 대여 금형 -->
+    <div id="tab-molds" class="section">
+      <div class="card">
+        <div class="card-header">대여 금형 현황</div>
+        <div id="molds-body"><div style="padding:40px;text-align:center;color:var(--text-sm)">로딩 중...</div></div>
+      </div>
     </div>
 
     <!-- 부적합 통보 -->
@@ -891,11 +900,12 @@ function filterPoList() {
 }
 
 function showTab(tab) {
-  document.querySelectorAll('.tab').forEach((t,i) => t.classList.toggle('active', ['orders','deliver','monthly','ncr'][i]===tab));
+  document.querySelectorAll('.tab').forEach((t,i) => t.classList.toggle('active', ['orders','deliver','monthly','ncr','molds'][i]===tab));
   document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
   document.getElementById('tab-' + tab).classList.add('active');
   if (tab === 'monthly') loadMonthly();
   if (tab === 'ncr') loadNcr();
+  if (tab === 'molds') loadMyMolds();
 }
 
 // ── 부적합 통보(NCR) ──
@@ -1040,6 +1050,36 @@ function selectAc(id, name, unit, price) {
 function hideAc(id) {
   const dd = document.getElementById('ac-' + id);
   if (dd) dd.style.display = 'none';
+}
+
+// ── 대여 금형 ──
+async function loadMyMolds() {
+  const body = document.getElementById('molds-body');
+  body.innerHTML = '<div style="padding:40px;text-align:center;color:var(--text-sm)">로딩 중...</div>';
+  const data = await api('GET', '/portal/my-molds');
+  if (!data || !data.length) {
+    body.innerHTML = '<div style="padding:40px;text-align:center;color:var(--text-sm)">대여 중인 금형이 없습니다.</div>';
+    return;
+  }
+  const statusLabel = { '정상':'정상','수리중':'수리중','폐기':'폐기' };
+  const statusColor = { '정상':'var(--success)','수리중':'var(--warn)','폐기':'var(--danger)' };
+  body.innerHTML = `
+    <table class="table">
+      <thead><tr>
+        <th>금형번호</th><th>자산귀속</th><th>해당품번</th><th>품명</th><th>대여일자</th><th>누적샷수</th><th>상태</th>
+      </tr></thead>
+      <tbody>
+        ${data.map(m => `<tr>
+          <td style="font-weight:600">${m.mold_no}</td>
+          <td>${m.owner || '-'}</td>
+          <td>${m.part_no || '-'}</td>
+          <td>${m.part_name || '-'}</td>
+          <td>${m.lent_date || '-'}</td>
+          <td style="text-align:right;font-variant-numeric:tabular-nums">${(m.total_shots||0).toLocaleString()}</td>
+          <td><span style="color:${statusColor[m.status]||'var(--text)'};font-weight:600">${statusLabel[m.status]||m.status}</span></td>
+        </tr>`).join('')}
+      </tbody>
+    </table>`;
 }
 
 // ── 월별 집계 ──

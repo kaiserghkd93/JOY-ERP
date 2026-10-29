@@ -110,6 +110,53 @@ function MoldModal({ onClose, onSaved }) {
   )
 }
 
+function LendMoldModal({ mold, onClose, onSaved }) {
+  const [partners, setPartners] = useState([])
+  const [form, setForm] = useState({
+    lent_to_partner_id: mold.lent_to_partner_id || '',
+    lent_date: mold.lent_date || new Date().toISOString().slice(0, 10),
+  })
+
+  useEffect(() => {
+    api.get('/master/partners').then(r => setPartners(Array.isArray(r.data) ? r.data : [])).catch(() => {})
+  }, [])
+
+  const submit = async () => {
+    await api.patch(`/production/molds/${mold.mold_no}/lend`, {
+      lent_to_partner_id: form.lent_to_partner_id || null,
+      lent_date: form.lent_to_partner_id ? form.lent_date : null,
+    })
+    onSaved()
+  }
+
+  return (
+    <div className="modal-overlay">
+      <div className="modal">
+        <h3>대여 설정 — {mold.mold_no}</h3>
+        <div className="form-group">
+          <label>대여 협력사</label>
+          <select value={form.lent_to_partner_id} onChange={e => setForm(f => ({ ...f, lent_to_partner_id: e.target.value }))}>
+            <option value="">(대여 없음 — 사내 보관)</option>
+            {partners.filter(p => p.partner_type === '외주처' || !p.partner_type).map(p => (
+              <option key={p.partner_id} value={p.partner_id}>{p.name}</option>
+            ))}
+          </select>
+        </div>
+        {form.lent_to_partner_id && (
+          <div className="form-group">
+            <label>대여일자</label>
+            <input type="date" value={form.lent_date} onChange={e => setForm(f => ({ ...f, lent_date: e.target.value }))} />
+          </div>
+        )}
+        <div className="modal-footer">
+          <button className="btn btn-outline" onClick={onClose}>취소</button>
+          <button className="btn btn-primary" onClick={submit}>저장</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function PartMapModal({ onClose, onSaved }) {
   const [maps, setMaps] = useState([])
   const [form, setForm] = useState({ mes_part_no: '', erp_part_no: '', note: '' })
@@ -601,6 +648,7 @@ export default function Production() {
   const [tab, setTab] = useState('orders')
   const [showPord, setShowPord] = useState(false)
   const [showMold, setShowMold] = useState(false)
+  const [lendMold, setLendMold] = useState(null)
   const [resultPord, setResultPord] = useState(null)
 
   const load = useCallback(() => {
@@ -664,17 +712,22 @@ export default function Production() {
         </div>
         <div className="table-wrap">
           <table>
-            <thead><tr><th>금형번호</th><th>소유자</th><th>해당품번</th><th>보관위치</th><th>누적샷수</th><th>상태</th></tr></thead>
+            <thead><tr><th>금형번호</th><th>소유자</th><th>해당품번</th><th>보관위치</th><th>누적샷수</th><th>상태</th><th></th></tr></thead>
             <tbody>
-              {molds.length === 0 && <tr><td colSpan={6} className="empty">금형 없음</td></tr>}
+              {molds.length === 0 && <tr><td colSpan={7} className="empty">금형 없음</td></tr>}
               {molds.map(m => (
                 <tr key={m.mold_no}>
                   <td style={{ fontFamily: 'monospace' }}>{m.mold_no}</td>
                   <td>{m.owner}</td>
                   <td>{m.part_no}</td>
-                  <td>{m.location || '—'}</td>
+                  <td>
+                    {m.lent_partner_name
+                      ? <span style={{color:'var(--primary)',fontWeight:600}}>{m.lent_partner_name} <span style={{fontWeight:400,fontSize:11,color:'var(--text-sm)'}}>(대여중)</span></span>
+                      : (m.location || '—')}
+                  </td>
                   <td>{m.total_shots?.toLocaleString()}</td>
                   <td><span className={`badge ${m.status === '정상' ? 'badge-green' : m.status === '수리중' ? 'badge-amber' : 'badge-gray'}`}>{m.status}</span></td>
+                  <td><button className="btn btn-sm btn-outline" onClick={() => setLendMold(m)}>대여 설정</button></td>
                 </tr>
               ))}
             </tbody>
@@ -688,6 +741,7 @@ export default function Production() {
 
       {showPord && <PordModal onClose={() => setShowPord(false)} onSaved={() => { setShowPord(false); load() }} />}
       {showMold && <MoldModal onClose={() => setShowMold(false)} onSaved={() => { setShowMold(false); load() }} />}
+      {lendMold && <LendMoldModal mold={lendMold} onClose={() => setLendMold(null)} onSaved={() => { setLendMold(null); load() }} />}
       {resultPord && <ResultModal pord={resultPord} onClose={() => setResultPord(null)} onSaved={() => { setResultPord(null); load() }} />}
     </div>
   )
