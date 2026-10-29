@@ -7,7 +7,7 @@ from app.models.purchase import PurchaseOrder, PurchaseOrderGroup, Receipt, Rece
 from app.models.sales import SalesOrder, Shipment, SOStatus, ShipmentStatus, SalesTarget
 from app.models.ledger import StockLedger
 from app.models.master import Item, Partner
-from app.models.quality import Inspection, NonConformance, NcrStatus
+from app.models.quality import Inspection, NonConformance, NcrStatus, ProcessOutgoingDefect, InspectType
 from sqlalchemy import text as _text
 from app.services.ledger_service import get_stock, get_avg_price, get_stock_bulk, get_avg_price_bulk
 
@@ -869,6 +869,18 @@ def quality_summary(year: int | None = None, month: int | None = None, db: Sessi
     except Exception:
         defect_cost, prod_cost, loss_rate = 0.0, 0.0, None
 
+    # ── 공정/출하 불량 현황 (이번 달, ProcessOutgoingDefect) ────────
+    pod_rows = db.query(ProcessOutgoingDefect).filter(
+        ProcessOutgoingDefect.defect_date >= first_day,
+        ProcessOutgoingDefect.defect_date <= last_day,
+    ).all()
+    pod_total = len(pod_rows)
+    pod_process_cnt = sum(1 for r in pod_rows if r.inspect_type == InspectType.process)
+    pod_outgoing_cnt = sum(1 for r in pod_rows if r.inspect_type == InspectType.outgoing)
+    pod_defect_qty = sum(r.defect_qty for r in pod_rows)
+    pod_inspect_qty = sum(r.inspect_qty for r in pod_rows)
+    pod_defect_rate = round(pod_defect_qty / pod_inspect_qty * 100, 2) if pod_inspect_qty > 0 else None
+
     # ── 불량유형별 상위 5 (이번 달) ─────────────────────────────────
     try:
         top_defects = db.execute(_text("""
@@ -905,5 +917,13 @@ def quality_summary(year: int | None = None, month: int | None = None, db: Sessi
             "total_production_cost": round(prod_cost, 0),
             "loss_rate": loss_rate,
             "top_defects": top_defect_list,
+        },
+        "process_outgoing": {
+            "total_count": pod_total,
+            "process_count": pod_process_cnt,
+            "outgoing_count": pod_outgoing_cnt,
+            "total_defect_qty": pod_defect_qty,
+            "total_inspect_qty": pod_inspect_qty,
+            "defect_rate": pod_defect_rate,
         },
     }

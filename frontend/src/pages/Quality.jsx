@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import api from '../api'
 import { getRole } from '../auth'
 
@@ -786,6 +786,9 @@ export default function Quality() {
   const [defRegList, setDefRegList] = useState([])
   const [showDefRegModal, setShowDefRegModal] = useState(false)
   const [defRegForm, setDefRegForm] = useState({ defect_date: new Date().toISOString().slice(0,10), inspect_type:'공정검사', part_no:'', part_name:'', defect_type:'', defect_qty:0, inspect_qty:0, line_no:'', cause:'', action_taken:'', note:'' })
+  const [itemMaster, setItemMaster] = useState([])
+  const [partAcList, setPartAcList] = useState([])
+  const [partAcOpen, setPartAcOpen] = useState(false)
 
   const load = useCallback(() => {
     api.get('/quality/claims').then(r => setClaims(r.data)).catch(() => {})
@@ -797,6 +800,9 @@ export default function Quality() {
   }, [])
 
   useEffect(() => { load() }, [load])
+  useEffect(() => {
+    api.get('/master/items').then(r => setItemMaster(Array.isArray(r.data) ? r.data : [])).catch(() => {})
+  }, [])
 
   const updateStatus = async (claim_no, status) => {
     await api.patch(`/quality/claims/${claim_no}`, { status })
@@ -1093,7 +1099,31 @@ export default function Quality() {
                   <option>공정검사</option><option>출하검사</option>
                 </select>
               </label>
-              <label>품번<input className="form-control" value={defRegForm.part_no} onChange={e=>setDefRegForm(p=>({...p,part_no:e.target.value}))} /></label>
+              <label>품번
+                <div style={{position:'relative'}}>
+                  <input className="form-control" value={defRegForm.part_no} autoComplete="off"
+                    onChange={e=>{
+                      const q = e.target.value
+                      setDefRegForm(p=>({...p,part_no:q}))
+                      const ql = q.toLowerCase()
+                      setPartAcList(ql ? itemMaster.filter(it=>it.part_no.toLowerCase().includes(ql)||it.item_name.toLowerCase().includes(ql)).slice(0,15) : [])
+                      setPartAcOpen(!!ql)
+                    }}
+                    onBlur={()=>setTimeout(()=>setPartAcOpen(false),160)}
+                  />
+                  {partAcOpen && partAcList.length > 0 && (
+                    <div style={{position:'absolute',top:'100%',left:0,right:0,background:'white',border:'1px solid var(--border)',borderRadius:6,boxShadow:'0 4px 16px rgba(0,0,0,0.12)',zIndex:300,maxHeight:200,overflowY:'auto'}}>
+                      {partAcList.map(it=>(
+                        <div key={it.part_no} style={{padding:'7px 12px',cursor:'pointer',borderBottom:'1px solid var(--border)',fontSize:13}}
+                          onMouseDown={()=>{setDefRegForm(p=>({...p,part_no:it.part_no,part_name:it.item_name}));setPartAcOpen(false);setPartAcList([])}}>
+                          <div style={{fontWeight:600}}>{it.part_no}</div>
+                          <div style={{fontSize:11,color:'var(--text-sm)'}}>{it.item_name}</div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </label>
               <label>품명<input className="form-control" value={defRegForm.part_name} onChange={e=>setDefRegForm(p=>({...p,part_name:e.target.value}))} /></label>
               <label>불량유형<input className="form-control" value={defRegForm.defect_type} onChange={e=>setDefRegForm(p=>({...p,defect_type:e.target.value}))} /></label>
               <label>라인/공정<input className="form-control" value={defRegForm.line_no} onChange={e=>setDefRegForm(p=>({...p,line_no:e.target.value}))} /></label>

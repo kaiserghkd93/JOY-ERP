@@ -109,6 +109,7 @@ export default function Dashboard() {
     const insp = qualityKpi.inspection
     const ncr = qualityKpi.ncr
     const loss = qualityKpi.loss
+    const po = qualityKpi.process_outgoing || {}
     const fmtW = (n) => n > 0 ? `₩${Math.round(n).toLocaleString()}` : '—'
     return (
       <div>
@@ -135,6 +136,13 @@ export default function Dashboard() {
             accent={loss.loss_rate == null ? 'var(--border)' : loss.loss_rate <= 2 ? 'var(--success)' : loss.loss_rate <= 5 ? 'var(--warn)' : 'var(--danger)'}
             trend={loss.loss_rate == null ? 'MES 업로드 필요' : loss.loss_rate <= 2 ? '양호' : '관리 필요'}
             trendDir={loss.loss_rate == null ? null : loss.loss_rate <= 2 ? 'up' : 'down'}
+          />
+          <KpiCard icon="🔧" label="공정/출하 불량율"
+            value={po.defect_rate != null ? po.defect_rate.toFixed(2) : null} unit=" %"
+            sub={`공정 ${po.process_count ?? 0}건 · 출하 ${po.outgoing_count ?? 0}건 · 불량 ${(po.total_defect_qty ?? 0).toLocaleString()}개`}
+            accent={po.defect_rate == null ? 'var(--border)' : po.defect_rate <= 2 ? 'var(--success)' : po.defect_rate <= 5 ? 'var(--warn)' : 'var(--danger)'}
+            trend={po.defect_rate == null ? '데이터 없음' : po.defect_rate <= 2 ? '양호' : '관리 필요'}
+            trendDir={po.defect_rate == null ? null : po.defect_rate <= 2 ? 'up' : 'down'}
           />
         </div>
         {/* 불량유형 상위 5 */}

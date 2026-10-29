@@ -3,110 +3,434 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>조이산업 협력사 포털</title>
+<title>JOY INDUSTRY — 협력사 포털</title>
 <style>
-* { box-sizing: border-box; margin: 0; padding: 0; }
-body { font-family: 'Malgun Gothic', sans-serif; background: #f0f2f5; min-height: 100vh; }
+/* ── Design tokens ── */
+:root {
+  --navy:      #0d1f3c;
+  --navy-lt:   #1a3660;
+  --blue:      #1e56c8;
+  --blue-lt:   #eef3fd;
+  --bg:        #f0f3f8;
+  --surface:   #ffffff;
+  --border:    #dde3ec;
+  --border-md: #c4cedc;
+  --text:      #1a2033;
+  --text-sm:   #5a6780;
+  --text-xs:   #8c9ab0;
+  --danger:    #c0392b;
+  --success:   #1a7a4a;
+  --warn:      #b05e00;
+  --radius:    3px;
+  --radius-lg: 6px;
+}
 
-#login-page { display: flex; align-items: center; justify-content: center; min-height: 100vh; }
-.login-box { background: white; padding: 40px; border-radius: 12px; box-shadow: 0 4px 24px rgba(0,0,0,0.1); width: 360px; }
-.login-box h1 { text-align: center; color: #1a1a2e; font-size: 22px; margin-bottom: 8px; }
-.login-box p { text-align: center; color: #666; font-size: 13px; margin-bottom: 28px; }
-.logo { text-align: center; font-size: 36px; margin-bottom: 16px; }
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: 'Malgun Gothic', 'Apple SD Gothic Neo', -apple-system, sans-serif;
+  font-size: 13px;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  line-height: 1.5;
+}
 
-#main-page { display: none; }
-header { background: #1a1a2e; color: white; padding: 14px 24px; display: flex; justify-content: space-between; align-items: center; }
-header h1 { font-size: 18px; }
-.logout-btn { background: rgba(255,255,255,0.15); border: none; color: white; padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 13px; }
+/* ── Login ── */
+#login-page {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  background: linear-gradient(160deg, #0d1f3c 0%, #1a3660 100%);
+}
+.login-card {
+  width: 400px;
+  background: var(--surface);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.35);
+}
+.login-brand {
+  background: var(--navy);
+  padding: 30px 32px 26px;
+  border-bottom: 3px solid var(--blue);
+}
+.login-brand-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 2.5px;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.45);
+  margin-bottom: 10px;
+}
+.login-brand h1 {
+  font-size: 19px;
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: 0.2px;
+  margin-bottom: 3px;
+}
+.login-brand p {
+  font-size: 11px;
+  color: rgba(255,255,255,0.4);
+  letter-spacing: 0.5px;
+}
+.login-form {
+  padding: 28px 32px 32px;
+}
+.form-group { margin-bottom: 16px; }
+label {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  color: var(--text-sm);
+  margin-bottom: 6px;
+}
+input[type=text], input[type=password], input[type=number], input[type=date], select, textarea {
+  width: 100%;
+  padding: 9px 11px;
+  border: 1px solid var(--border-md);
+  border-radius: var(--radius);
+  font-size: 13px;
+  font-family: inherit;
+  color: var(--text);
+  background: #fff;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+input:focus, select:focus, textarea:focus {
+  outline: none;
+  border-color: var(--blue);
+  box-shadow: 0 0 0 3px rgba(30,86,200,0.1);
+}
 
-.tabs { background: white; border-bottom: 1px solid #e0e0e0; padding: 0 24px; display: flex; }
-.tab { padding: 14px 20px; cursor: pointer; font-size: 14px; color: #666; border-bottom: 3px solid transparent; transition: all 0.2s; }
-.tab.active { color: #1a1a2e; border-bottom-color: #1a1a2e; font-weight: 600; }
+/* ── Buttons ── */
+.btn {
+  padding: 8px 18px;
+  border: none;
+  border-radius: var(--radius);
+  cursor: pointer;
+  font-size: 12px;
+  font-family: inherit;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  transition: background 0.15s, opacity 0.15s;
+}
+.btn-primary { background: var(--blue); color: #fff; }
+.btn-primary:hover { background: #1848b0; }
+.btn-full { width: 100%; padding: 11px; font-size: 13px; }
+.btn-print { background: var(--navy); color: #fff; }
+.btn-print:hover { background: var(--navy-lt); }
+.btn-light { background: var(--bg); color: var(--text-sm); border: 1px solid var(--border-md); }
+.btn-light:hover { background: var(--border); }
+.btn-danger { background: var(--danger); color: #fff; }
 
-.content { padding: 24px; max-width: 1100px; margin: 0 auto; }
+/* ── Alert ── */
+.alert { padding: 9px 14px; border-radius: var(--radius); font-size: 12px; margin-bottom: 14px; }
+.alert-error { background: #fdf2f1; color: var(--danger); border: 1px solid #f0c4c0; border-left: 3px solid var(--danger); }
+
+/* ── Main layout ── */
+#main-page { display: none; min-height: 100vh; }
+
+/* Header */
+header {
+  background: var(--navy);
+  height: 52px;
+  display: flex;
+  align-items: center;
+  padding: 0 28px;
+  border-bottom: 2px solid var(--blue);
+}
+.header-logo {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.header-logo-mark {
+  width: 28px;
+  height: 28px;
+  background: var(--blue);
+  border-radius: 3px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 900;
+  color: #fff;
+  letter-spacing: -0.5px;
+  flex-shrink: 0;
+}
+.header-org {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.35);
+}
+.header-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #fff;
+  margin-top: 1px;
+}
+.header-right { margin-left: auto; display: flex; align-items: center; gap: 18px; }
+.header-user { font-size: 12px; color: rgba(255,255,255,0.55); }
+.header-user strong { color: rgba(255,255,255,0.9); }
+.logout-btn {
+  background: transparent;
+  border: 1px solid rgba(255,255,255,0.25);
+  color: rgba(255,255,255,0.65);
+  padding: 4px 14px;
+  border-radius: var(--radius);
+  cursor: pointer;
+  font-size: 11px;
+  font-family: inherit;
+  font-weight: 600;
+  transition: all 0.15s;
+}
+.logout-btn:hover { border-color: rgba(255,255,255,0.5); color: #fff; }
+
+/* Tab nav */
+.tabs {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  padding: 0 28px;
+  display: flex;
+}
+.tab {
+  padding: 13px 16px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-sm);
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  transition: all 0.15s;
+  letter-spacing: 0.2px;
+  white-space: nowrap;
+}
+.tab:hover { color: var(--navy); }
+.tab.active { color: var(--navy); border-bottom-color: var(--blue); }
+
+/* Content */
+.content { padding: 24px 28px; max-width: 1200px; margin: 0 auto; }
 .section { display: none; }
 .section.active { display: block; }
 
-label { display: block; font-size: 13px; color: #555; margin-bottom: 6px; font-weight: 500; }
-input[type=text], input[type=password], input[type=number], input[type=date] {
-  width: 100%; padding: 10px 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px; font-family: inherit;
+/* ── Cards ── */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  margin-bottom: 18px;
 }
-input:focus { outline: none; border-color: #1a1a2e; }
-.form-group { margin-bottom: 18px; }
+.card-header {
+  padding: 12px 18px;
+  border-bottom: 1px solid var(--border);
+  font-weight: 700;
+  font-size: 12px;
+  color: var(--text);
+  letter-spacing: 0.3px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: #fafbfd;
+}
+.card-header .count-pill {
+  background: var(--border);
+  border-radius: 20px;
+  padding: 1px 9px;
+  font-size: 11px;
+  color: var(--text-sm);
+  margin-left: auto;
+}
 
-.btn { padding: 10px 20px; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; font-family: inherit; font-weight: 600; }
-.btn-primary { background: #1a1a2e; color: white; width: 100%; padding: 12px; font-size: 15px; }
-.btn-print { background: #3b82f6; color: white; padding: 12px 24px; font-size: 15px; }
-
-.alert { padding: 10px 14px; border-radius: 8px; font-size: 13px; margin-bottom: 16px; }
-.alert-error { background: #fee2e2; color: #dc2626; }
-
-.card { background: white; border-radius: 12px; box-shadow: 0 1px 6px rgba(0,0,0,0.08); overflow: hidden; margin-bottom: 20px; }
-.card-header { padding: 16px 20px; border-bottom: 1px solid #f0f0f0; font-weight: 600; font-size: 15px; color: #1a1a2e; display: flex; align-items: center; gap: 12px; }
+/* ── Tables ── */
 table { width: 100%; border-collapse: collapse; }
-th { background: #f8f9fa; padding: 11px 14px; text-align: left; font-size: 12px; color: #666; font-weight: 600; }
-td { padding: 12px 14px; font-size: 14px; border-bottom: 1px solid #f0f0f0; }
+th {
+  background: #f5f7fb;
+  padding: 9px 13px;
+  text-align: left;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-sm);
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  border-bottom: 1px solid var(--border);
+}
+td {
+  padding: 10px 13px;
+  font-size: 12px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+}
 tr:last-child td { border-bottom: none; }
-.badge { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 12px; font-weight: 600; }
-.badge-blue { background: #dbeafe; color: #1d4ed8; }
-.badge-yellow { background: #fef3c7; color: #d97706; }
+tbody tr:hover { background: #f8fafc; }
 
-/* 관리자 전용 요약 */
-.admin-summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 24px; }
-.summary-card { background: white; border-radius: 12px; padding: 20px; box-shadow: 0 1px 6px rgba(0,0,0,0.08); border-left: 4px solid #1a1a2e; }
-.summary-card .label { font-size: 12px; color: #888; margin-bottom: 8px; }
-.summary-card .value { font-size: 24px; font-weight: 700; color: #1a1a2e; }
+/* ── Badges ── */
+.badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 2px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+}
+.badge-blue   { background: #eef3fd; color: #1e56c8; }
+.badge-yellow { background: #fef8ec; color: #a05a00; }
+.badge-red    { background: #fdf2f1; color: #c0392b; }
+.badge-green  { background: #edf9f0; color: #1a7a4a; }
 
-/* 월 선택 바 */
-.month-bar { display: flex; align-items: center; gap: 12px; background: white; padding: 16px 20px; border-radius: 12px; box-shadow: 0 1px 6px rgba(0,0,0,0.08); margin-bottom: 20px; }
-.month-bar label { margin: 0; white-space: nowrap; }
-.month-nav { display: flex; gap: 6px; }
-.month-btn { background: #f1f5f9; border: none; border-radius: 6px; padding: 6px 14px; cursor: pointer; font-size: 13px; font-family: inherit; }
-.month-btn:hover { background: #e2e8f0; }
-.month-select { padding: 8px 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px; font-family: inherit; cursor: pointer; }
-.month-count { font-size: 13px; color: #888; margin-left: auto; }
+/* ── Admin summary ── */
+.admin-summary {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+  margin-bottom: 20px;
+}
+.summary-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--blue);
+  border-radius: var(--radius-lg);
+  padding: 16px 18px;
+}
+.summary-card .label {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-sm);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+  display: block;
+}
+.summary-card .value {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--navy);
+  font-variant-numeric: tabular-nums;
+}
 
-/* 납품 입력 */
-.deliver-form { background: white; border-radius: 12px; padding: 24px; box-shadow: 0 1px 6px rgba(0,0,0,0.08); }
-.po-list { border: 1px solid #e0e0e0; border-radius: 8px; max-height: 280px; overflow-y: auto; margin-bottom: 16px; }
-.po-item { padding: 12px 16px; border-bottom: 1px solid #f0f0f0; cursor: pointer; transition: background 0.15s; }
+/* ── Month bar ── */
+.month-bar {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 10px 16px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+.month-bar label {
+  margin: 0;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--text-sm);
+  white-space: nowrap;
+}
+.month-nav { display: flex; gap: 3px; }
+.month-btn {
+  background: var(--bg);
+  border: 1px solid var(--border-md);
+  border-radius: var(--radius);
+  padding: 4px 12px;
+  cursor: pointer;
+  font-size: 13px;
+  font-family: inherit;
+  color: var(--text-sm);
+  transition: background 0.1s;
+}
+.month-btn:hover { background: var(--border); }
+.month-select {
+  padding: 4px 9px;
+  border: 1px solid var(--border-md);
+  border-radius: var(--radius);
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+  color: var(--text);
+  background: var(--surface);
+}
+.month-count { font-size: 11px; color: var(--text-xs); margin-left: auto; }
+
+/* ── Deliver form ── */
+.deliver-form {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+.deliver-form-header {
+  background: var(--navy);
+  border-bottom: 2px solid var(--blue);
+  padding: 13px 20px;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+}
+.deliver-form-body { padding: 20px 22px; }
+.section-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-sm);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 7px;
+}
+.po-list {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  max-height: 250px;
+  overflow-y: auto;
+  margin-bottom: 14px;
+  background: #fafbfd;
+}
+.po-item {
+  padding: 9px 14px;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  transition: background 0.1s;
+}
 .po-item:last-child { border-bottom: none; }
-.po-item:hover { background: #f8f9fa; }
-.po-item.selected { background: #eff6ff; border-left: 3px solid #3b82f6; }
-.po-item-name { font-weight: 600; font-size: 14px; }
-.po-item-info { font-size: 12px; color: #888; margin-top: 3px; }
+.po-item:hover { background: #f1f4fa; }
+.po-item.selected { background: var(--blue-lt); border-left: 3px solid var(--blue); }
+.po-item-name { font-weight: 600; font-size: 12px; color: var(--text); }
+.po-item-info { font-size: 11px; color: var(--text-sm); margin-top: 2px; }
 
-.qty-table { width: 100%; border-collapse: collapse; margin-top: 12px; }
-.qty-table th { background: #f1f5f9; padding: 10px 12px; text-align: left; font-size: 13px; }
-.qty-table td { padding: 8px 12px; border-bottom: 1px solid #f0f0f0; font-size: 13px; }
-.qty-input { width: 100px; padding: 6px 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 13px; text-align: right; }
-.remove-btn { background: #fee2e2; color: #dc2626; border: none; border-radius: 6px; padding: 4px 10px; cursor: pointer; font-size: 12px; }
+.qty-table { width: 100%; border-collapse: collapse; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+.qty-table th { background: #f5f7fb; padding: 8px 11px; text-align: left; font-size: 10px; font-weight: 700; color: var(--text-sm); letter-spacing: 0.5px; text-transform: uppercase; border-bottom: 1px solid var(--border); }
+.qty-table td { padding: 7px 11px; border-bottom: 1px solid var(--border); font-size: 12px; }
+.qty-table tr:last-child td { border-bottom: none; }
+.qty-input { width: 100px; padding: 4px 8px; border: 1px solid var(--border-md); border-radius: var(--radius); font-size: 12px; text-align: right; font-family: inherit; }
+.remove-btn { background: #fdf2f1; color: var(--danger); border: none; border-radius: var(--radius); padding: 3px 9px; cursor: pointer; font-size: 11px; font-weight: 700; }
 
-/* 자동완성 */
+/* ── Autocomplete ── */
 .ac-wrap { position: relative; display: inline-block; }
-.ac-dropdown { position: absolute; top: 100%; left: 0; width: 280px; background: white; border: 1px solid #ddd; border-radius: 8px; box-shadow: 0 4px 16px rgba(0,0,0,0.12); z-index: 200; max-height: 220px; overflow-y: auto; display: none; }
-.ac-item { padding: 9px 14px; cursor: pointer; font-size: 13px; border-bottom: 1px solid #f0f0f0; }
+.ac-dropdown { position: absolute; top: 100%; left: 0; width: 300px; background: white; border: 1px solid var(--border-md); border-radius: var(--radius-lg); box-shadow: 0 6px 24px rgba(0,0,0,0.12); z-index: 200; max-height: 200px; overflow-y: auto; display: none; }
+.ac-item { padding: 8px 13px; cursor: pointer; font-size: 12px; border-bottom: 1px solid var(--border); }
 .ac-item:last-child { border-bottom: none; }
-.ac-item:hover { background: #eff6ff; }
-.ac-item .ac-name { font-weight: 600; color: #111; }
-.ac-item .ac-sub { font-size: 11px; color: #888; margin-top: 2px; }
+.ac-item:hover { background: var(--blue-lt); }
+.ac-item .ac-name { font-weight: 700; color: var(--text); }
+.ac-item .ac-sub { font-size: 11px; color: var(--text-sm); margin-top: 2px; }
 
-/* 거래명세서 */
-#invoice-modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); z-index: 1000; overflow-y: auto; }
-.invoice-wrap { background: white; max-width: 860px; margin: 24px auto; padding: 0; border-radius: 4px; box-shadow: 0 8px 40px rgba(0,0,0,0.25); }
-.inv-screen-btns { display: flex; gap: 10px; justify-content: center; padding: 16px; background: #f1f5f9; border-radius: 0 0 4px 4px; }
+/* ── Invoice modal ── */
+#invoice-modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.65); z-index: 1000; overflow-y: auto; }
+.invoice-wrap { background: white; max-width: 860px; margin: 24px auto; border-radius: 3px; box-shadow: 0 12px 48px rgba(0,0,0,0.3); }
+.inv-screen-btns { display: flex; gap: 10px; justify-content: center; padding: 14px; background: #f5f7fb; border-top: 1px solid var(--border); }
 
-/* 인쇄 영역 */
 .inv-doc { padding: 32px 36px 28px; font-family: 'Malgun Gothic', '맑은 고딕', sans-serif; }
-
-/* 제목 */
 .inv-header-row { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 18px; }
 .inv-title-block { text-align: center; flex: 1; }
 .inv-title-block h1 { font-size: 28px; font-weight: 900; letter-spacing: 12px; color: #111; margin-bottom: 4px; }
 .inv-title-block .inv-docno { font-size: 12px; color: #666; letter-spacing: 0; }
 .inv-stamp-area { width: 72px; height: 72px; border: 2px solid #ccc; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; color: #aaa; flex-shrink: 0; }
 
-/* 공급자/공급받는자 2단 */
 .inv-parties { display: grid; grid-template-columns: 1fr 1fr; gap: 0; border: 2px solid #222; margin-bottom: 0; }
 .inv-party { padding: 0; }
 .inv-party-title { background: #222; color: white; font-size: 13px; font-weight: 700; padding: 6px 12px; text-align: center; letter-spacing: 2px; }
@@ -117,13 +441,11 @@ tr:last-child td { border-bottom: none; }
 .inv-party-field .f-val { font-size: 13px; font-weight: 600; color: #111; }
 .inv-party-divider { border-right: 2px solid #222; }
 
-/* 합계금액 띠 */
 .inv-total-bar { border: 2px solid #222; border-top: none; display: flex; align-items: center; padding: 8px 16px; gap: 24px; margin-bottom: 16px; }
 .inv-total-bar .tl { font-size: 13px; font-weight: 700; }
 .inv-total-bar .tv { font-size: 18px; font-weight: 900; color: #111; margin-left: 8px; }
 .inv-total-bar .th { font-size: 12px; color: #666; margin-left: auto; }
 
-/* 품목 테이블 */
 .inv-items { width: 100%; border-collapse: collapse; border: 2px solid #222; margin-bottom: 16px; font-size: 13px; }
 .inv-items th { background: #222; color: white; padding: 7px 10px; text-align: center; font-size: 12px; font-weight: 700; border-right: 1px solid #555; }
 .inv-items th:last-child { border-right: none; }
@@ -133,14 +455,12 @@ tr:last-child td { border-bottom: none; }
 .inv-items tr:last-child td { border-bottom: none; }
 .inv-items .empty-row td { color: #ddd; }
 
-/* 하단 서명란 */
 .inv-footer { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 8px; }
 .inv-sign-box { border: 1px solid #aaa; }
 .inv-sign-box .s-title { background: #f0f0f0; font-size: 12px; font-weight: 700; padding: 5px 12px; border-bottom: 1px solid #aaa; text-align: center; letter-spacing: 2px; }
 .inv-sign-box .s-body { display: flex; align-items: center; justify-content: space-between; padding: 10px 16px; min-height: 56px; }
 .inv-sign-box .s-name { font-size: 15px; font-weight: 700; }
 .inv-sign-box .s-seal { width: 48px; height: 48px; border: 1.5px solid #bbb; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 10px; color: #aaa; }
-
 .inv-note { font-size: 11px; color: #888; margin-top: 10px; text-align: right; }
 
 @media print {
@@ -157,54 +477,61 @@ tr:last-child td { border-bottom: none; }
 
 <!-- 로그인 -->
 <div id="login-page">
-  <div class="login-box">
-    <div class="logo">🏭</div>
-    <h1>조이산업 협력사 포털</h1>
-    <p>납품 관리 시스템</p>
-    <div id="login-error" class="alert alert-error" style="display:none"></div>
-    <div class="form-group">
-      <label>아이디</label>
-      <input type="text" id="username" placeholder="아이디" />
+  <div class="login-card">
+    <div class="login-brand">
+      <div class="login-brand-label">JOY INDUSTRY CO., LTD.</div>
+      <h1>협력사 포털</h1>
+      <p>Supplier Management Portal</p>
     </div>
-    <div class="form-group">
-      <label>비밀번호</label>
-      <input type="password" id="password" placeholder="비밀번호" onkeydown="if(event.key==='Enter')login()" />
+    <div class="login-form">
+      <div id="login-error" class="alert alert-error" style="display:none"></div>
+      <div class="form-group">
+        <label>아이디</label>
+        <input type="text" id="username" placeholder="아이디" autocomplete="username" />
+      </div>
+      <div class="form-group">
+        <label>비밀번호</label>
+        <input type="password" id="password" placeholder="비밀번호" autocomplete="current-password" onkeydown="if(event.key==='Enter')login()" />
+      </div>
+      <button class="btn btn-primary btn-full" onclick="login()">로그인</button>
     </div>
-    <button class="btn btn-primary" onclick="login()">로그인</button>
   </div>
 </div>
 
 <!-- 메인 -->
 <div id="main-page">
   <header>
-    <h1>🏭 조이산업 협력사 포털</h1>
-    <div style="display:flex;align-items:center;gap:12px">
-      <span id="user-name" style="font-size:13px;opacity:0.8"></span>
+    <div class="header-logo">
+      <div class="header-logo-mark">JI</div>
+      <div>
+        <div class="header-org">Joy Industry</div>
+        <div class="header-title">협력사 포털</div>
+      </div>
+    </div>
+    <div class="header-right">
+      <div class="header-user"><strong id="user-name"></strong> 님</div>
       <button class="logout-btn" onclick="logout()">로그아웃</button>
     </div>
   </header>
 
   <div class="tabs">
-    <div class="tab active" onclick="showTab('orders')">📋 발주 현황</div>
-    <div class="tab" onclick="showTab('deliver')">📦 납품 입력</div>
-    <div class="tab" onclick="showTab('monthly')">📊 월별 집계</div>
-    <div class="tab" onclick="showTab('ncr')">⚠️ 부적합 통보</div>
+    <div class="tab active" onclick="showTab('orders')">발주 현황</div>
+    <div class="tab" onclick="showTab('deliver')">납품 입력</div>
+    <div class="tab" onclick="showTab('monthly')">월별 집계</div>
+    <div class="tab" onclick="showTab('ncr')">부적합 통보</div>
   </div>
 
   <div class="content">
 
     <!-- 발주 현황 -->
     <div id="tab-orders" class="section active">
-
-      <!-- 관리자 전용 요약 -->
       <div id="admin-summary" class="admin-summary" style="display:none"></div>
 
-      <!-- 월 선택 바 -->
       <div class="month-bar">
-        <label>📅 발주 월</label>
+        <label>발주 월</label>
         <div class="month-nav">
-          <button class="month-btn" onclick="changeMonth(-1)">◀</button>
-          <button class="month-btn" onclick="changeMonth(1)">▶</button>
+          <button class="month-btn" onclick="changeMonth(-1)">&#8249;</button>
+          <button class="month-btn" onclick="changeMonth(1)">&#8250;</button>
         </div>
         <select id="month-select" class="month-select" onchange="renderOrders()"></select>
         <span id="month-count" class="month-count"></span>
@@ -212,88 +539,91 @@ tr:last-child td { border-bottom: none; }
 
       <div class="card">
         <div class="card-header" id="orders-card-header">발주 목록</div>
-        <div id="orders-body"><div style="padding:40px;text-align:center;color:#888">로딩 중...</div></div>
+        <div id="orders-body"><div style="padding:40px;text-align:center;color:var(--text-sm)">데이터를 불러오는 중...</div></div>
       </div>
     </div>
 
     <!-- 납품 입력 -->
     <div id="tab-deliver" class="section">
       <div class="deliver-form">
-        <h3 style="margin-bottom:20px;color:#1a1a2e">납품 입력 → 거래명세서 출력</h3>
-        <div id="deliver-alert"></div>
+        <div class="deliver-form-header">납품 입력 / 거래명세서 발행</div>
+        <div class="deliver-form-body">
+          <div id="deliver-alert"></div>
 
-        <div class="form-group">
-          <label>납품일</label>
-          <input type="date" id="deliver-date" />
-        </div>
-
-        <div class="form-group">
-          <label>발주 선택 (복수 선택 가능)</label>
-          <input type="text" id="po-search" placeholder="🔍 품목명 또는 발주번호 검색..." oninput="filterPoList()" style="margin-bottom:8px" />
-          <div id="po-list" class="po-list"><div style="padding:20px;text-align:center;color:#888">로딩 중...</div></div>
-        </div>
-
-        <div id="qty-section" style="display:none;margin-bottom:16px">
-          <label style="margin-bottom:10px">납품 수량 / 단가 입력</label>
-          <table class="qty-table">
-            <thead><tr><th>품목</th><th>발주번호</th><th>잔여수량</th><th>납품수량</th><th>단가(원)</th><th></th></tr></thead>
-            <tbody id="qty-tbody"></tbody>
-          </table>
-        </div>
-
-        <!-- 발주 없는 품목 직접 추가 -->
-        <div style="margin-bottom:16px">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-            <label style="margin:0">발주 없는 품목 추가 (직접 입력)</label>
-            <button class="btn" style="background:#f0fdf4;color:#166534;border:1px solid #86efac;padding:6px 14px;font-size:13px" onclick="addManualRow()">+ 품목 추가</button>
+          <div class="form-group" style="max-width:220px">
+            <label>납품일</label>
+            <input type="date" id="deliver-date" />
           </div>
-          <table class="qty-table" id="manual-table" style="display:none">
-            <thead><tr><th>품목명</th><th>규격/단위</th><th>수량</th><th>단가(원)</th><th></th></tr></thead>
-            <tbody id="manual-tbody"></tbody>
-          </table>
-        </div>
 
-        <div class="form-group">
-          <label>비고</label>
-          <input type="text" id="deliver-note" placeholder="비고 (선택)" />
-        </div>
+          <div class="form-group">
+            <p class="section-label">발주 선택 <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--text-xs)">(복수 선택 가능)</span></p>
+            <input type="text" id="po-search" placeholder="품목명 또는 발주번호 검색" oninput="filterPoList()" style="max-width:380px;margin-bottom:8px" />
+            <div id="po-list" class="po-list"><div style="padding:20px;text-align:center;color:var(--text-sm)">로딩 중...</div></div>
+          </div>
 
-        <button class="btn btn-print" style="width:100%" onclick="submitAndPrint()">📄 거래명세서 출력</button>
+          <div id="qty-section" style="display:none;margin-bottom:16px">
+            <p class="section-label">납품 수량 / 단가</p>
+            <table class="qty-table">
+              <thead><tr><th>품목</th><th>발주번호</th><th>잔여수량</th><th>납품수량</th><th>단가(원)</th><th></th></tr></thead>
+              <tbody id="qty-tbody"></tbody>
+            </table>
+          </div>
+
+          <div style="margin-bottom:16px">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+              <p class="section-label" style="margin:0">발주 없는 품목 직접 입력</p>
+              <button class="btn btn-light" style="font-size:11px;padding:4px 13px" onclick="addManualRow()">+ 품목 추가</button>
+            </div>
+            <table class="qty-table" id="manual-table" style="display:none">
+              <thead><tr><th>품목명</th><th>규격/단위</th><th>수량</th><th>단가(원)</th><th></th></tr></thead>
+              <tbody id="manual-tbody"></tbody>
+            </table>
+          </div>
+
+          <div class="form-group" style="max-width:480px">
+            <label>비고</label>
+            <input type="text" id="deliver-note" placeholder="비고 (선택 입력)" />
+          </div>
+
+          <button class="btn btn-print" style="width:100%;padding:11px;font-size:13px" onclick="submitAndPrint()">거래명세서 출력</button>
+        </div>
       </div>
     </div>
 
     <!-- 월별 집계 -->
     <div id="tab-monthly" class="section">
-      <div id="monthly-body"><div style="padding:40px;text-align:center;color:#888">로딩 중...</div></div>
+      <div id="monthly-body"><div style="padding:40px;text-align:center;color:var(--text-sm)">로딩 중...</div></div>
     </div>
 
     <!-- 부적합 통보 -->
     <div id="tab-ncr" class="section">
       <div class="card">
-        <div class="card-header">⚠️ 부적합 통보(NCR) 목록</div>
-        <div id="ncr-body"><div style="padding:40px;text-align:center;color:#888">로딩 중...</div></div>
+        <div class="card-header">부적합 통보 (NCR)</div>
+        <div id="ncr-body"><div style="padding:40px;text-align:center;color:var(--text-sm)">로딩 중...</div></div>
       </div>
     </div>
   </div>
 </div>
 
 <!-- 이의신청 모달 -->
-<div id="appeal-modal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:1000;overflow-y:auto">
-  <div style="background:white;max-width:500px;margin:60px auto;border-radius:12px;padding:32px;box-shadow:0 8px 40px rgba(0,0,0,0.2)">
-    <h3 style="margin-bottom:20px;color:#1a1a2e">이의신청</h3>
-    <div id="appeal-ncr-info" style="background:#fef3c7;border:1px solid #fcd34d;border-radius:8px;padding:12px 16px;margin-bottom:16px;font-size:13px"></div>
-    <div class="form-group">
-      <label>이의신청 사유 *</label>
-      <textarea id="appeal-reason" rows="4" style="width:100%;padding:10px 12px;border:1px solid #ddd;border-radius:8px;font-size:14px;font-family:inherit;resize:vertical" placeholder="이의신청 사유를 상세히 입력하세요"></textarea>
-    </div>
-    <div class="form-group">
-      <label>근거 자료 (텍스트)</label>
-      <textarea id="appeal-evidence" rows="3" style="width:100%;padding:10px 12px;border:1px solid #ddd;border-radius:8px;font-size:14px;font-family:inherit;resize:vertical" placeholder="측정값, 검사성적서 내용 등 근거 입력"></textarea>
-    </div>
-    <div id="appeal-error" class="alert alert-error" style="display:none"></div>
-    <div style="display:flex;gap:12px;margin-top:20px">
-      <button class="btn" style="flex:1;background:#f1f5f9;color:#374151" onclick="closeAppealModal()">취소</button>
-      <button class="btn btn-primary" style="flex:1" onclick="submitAppeal()">이의신청 제출</button>
+<div id="appeal-modal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.6);z-index:1000;overflow-y:auto">
+  <div style="background:white;max-width:520px;margin:60px auto;border-radius:var(--radius-lg);overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,0.25)">
+    <div style="background:var(--navy);border-bottom:2px solid var(--blue);padding:14px 22px;color:white;font-size:13px;font-weight:700;letter-spacing:0.3px">이의신청서</div>
+    <div style="padding:22px 24px">
+      <div id="appeal-ncr-info" style="background:#fef8ec;border:1px solid #e8d5a0;border-radius:var(--radius);padding:10px 13px;margin-bottom:16px;font-size:12px;color:#7a5500"></div>
+      <div class="form-group">
+        <label>이의신청 사유 *</label>
+        <textarea id="appeal-reason" rows="4" placeholder="이의신청 사유를 상세히 입력하세요" style="resize:vertical"></textarea>
+      </div>
+      <div class="form-group">
+        <label>근거 자료</label>
+        <textarea id="appeal-evidence" rows="3" placeholder="측정값, 검사성적서 내용 등 근거 입력" style="resize:vertical"></textarea>
+      </div>
+      <div id="appeal-error" class="alert alert-error" style="display:none"></div>
+      <div style="display:flex;gap:10px;margin-top:4px">
+        <button class="btn btn-light" style="flex:1" onclick="closeAppealModal()">취소</button>
+        <button class="btn btn-primary" style="flex:1" onclick="submitAppeal()">이의신청 제출</button>
+      </div>
     </div>
   </div>
 </div>
@@ -391,8 +721,8 @@ tr:last-child td { border-bottom: none; }
 
     <!-- 화면 전용 버튼 -->
     <div class="inv-screen-btns">
-      <button class="btn btn-print" onclick="window.print()">🖨️ 인쇄</button>
-      <button class="btn" style="background:#e5e7eb;color:#333" onclick="closeInvoice()">닫기</button>
+      <button class="btn btn-print" onclick="window.print()">인쇄</button>
+      <button class="btn btn-light" onclick="closeInvoice()">닫기</button>
     </div>
   </div>
 </div>
@@ -520,7 +850,7 @@ function renderOrders() {
   document.getElementById('month-count').textContent = `${filtered.length}건`;
 
   if (!filtered.length) {
-    document.getElementById('orders-body').innerHTML = '<div style="padding:40px;text-align:center;color:#aaa">해당 월 발주가 없습니다</div>';
+    document.getElementById('orders-body').innerHTML = '<div style="padding:40px;text-align:center;color:var(--text-sm)">해당 월 발주가 없습니다</div>';
     return;
   }
   document.getElementById('orders-body').innerHTML = `
@@ -528,12 +858,12 @@ function renderOrders() {
       <th>발주번호</th><th>품목</th><th>발주수량</th><th>납품완료</th><th>잔여수량</th><th>납기일</th><th>상태</th>
     </tr></thead><tbody>
     ${filtered.map(o=>`<tr>
-      <td style="font-size:13px;color:#555">${o.po_no}</td>
-      <td><strong>${o.item_name}</strong><br><small style="color:#888">${o.part_no}</small></td>
+      <td style="font-family:monospace;font-size:11px;color:var(--text-sm)">${o.po_no}</td>
+      <td><strong style="font-size:12px">${o.item_name}</strong><br><small style="color:var(--text-sm);font-size:11px">${o.part_no}</small></td>
       <td>${o.qty.toLocaleString()} ${o.item_unit}</td>
       <td>${o.delivered_qty.toLocaleString()} ${o.item_unit}</td>
-      <td><strong style="color:#dc2626">${o.remaining_qty.toLocaleString()} ${o.item_unit}</strong></td>
-      <td>${o.due_date}</td>
+      <td><strong style="color:var(--danger)">${o.remaining_qty.toLocaleString()} ${o.item_unit}</strong></td>
+      <td style="font-size:12px">${o.due_date}</td>
       <td><span class="badge ${o.status==='partial'?'badge-yellow':'badge-blue'}">${o.status==='open'?'미납':'부분납품'}</span></td>
     </tr>`).join('')}</tbody></table>
   `;
@@ -549,12 +879,12 @@ function filterPoList() {
     !q || o.item_name.toLowerCase().includes(q) || o.po_no.toLowerCase().includes(q)
   );
   if (!filtered.length) {
-    document.getElementById('po-list').innerHTML = '<div style="padding:20px;text-align:center;color:#aaa">' + (q ? '검색 결과 없음' : '발주 없음') + '</div>';
+    document.getElementById('po-list').innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-sm)">' + (q ? '검색 결과 없음' : '발주 없음') + '</div>';
     return;
   }
   document.getElementById('po-list').innerHTML = filtered.map(o=>`
     <div class="po-item${selectedPOs[o.po_no] ? ' selected' : ''}" id="po-${o.po_no.replace(/[^a-z0-9]/gi,'-')}" onclick="togglePO('${o.po_no}')">
-      <div class="po-item-name">${o.item_name} <span style="color:#888;font-size:12px;font-weight:400">${o.po_no}</span></div>
+      <div class="po-item-name">${o.item_name} <span style="color:var(--text-sm);font-size:11px;font-weight:400">${o.po_no}</span></div>
       <div class="po-item-info">잔여: ${o.remaining_qty.toLocaleString()} ${o.item_unit} | 납기: ${o.due_date}</div>
     </div>
   `).join('');
@@ -575,7 +905,7 @@ async function loadNcr() {
   const data = await api('GET', '/portal/ncr');
   const body = document.getElementById('ncr-body');
   if (!data || !data.length) {
-    body.innerHTML = '<div style="padding:40px;text-align:center;color:#aaa">부적합 통보 내역이 없습니다</div>';
+    body.innerHTML = '<div style="padding:40px;text-align:center;color:var(--text-sm)">부적합 통보 내역이 없습니다</div>';
     return;
   }
   const statusBadge = { '접수': '#fef3c7;color:#d97706', '처리중': '#dbeafe;color:#1d4ed8', '완료': '#dcfce7;color:#15803d' };
@@ -588,15 +918,15 @@ async function loadNcr() {
     const ap = n.latest_appeal_status ? (appealBadge[n.latest_appeal_status]||'#f1f5f9;color:#374151') : null;
     const canAppeal = n.status !== '완료' && (!n.latest_appeal_status || n.latest_appeal_status === '기각');
     return `<tr>
-      <td style="font-family:monospace;font-size:12px">${n.ncr_no}</td>
-      <td style="font-size:13px">${n.part_no}<br><small style="color:#888">${n.item_name}</small></td>
-      <td style="font-size:13px;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${n.defect_type}</td>
+      <td style="font-family:monospace;font-size:11px">${n.ncr_no}</td>
+      <td style="font-size:12px">${n.part_no}<br><small style="color:var(--text-sm)">${n.item_name}</small></td>
+      <td style="font-size:12px;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${n.defect_type}</td>
       <td style="text-align:right">${n.defect_qty.toLocaleString()}</td>
-      <td style="font-size:12px">${n.disposal}</td>
+      <td style="font-size:11px">${n.disposal}</td>
       <td><span class="badge" style="background:${st.split(';')[0]};${st.split(';')[1]}">${n.status}</span></td>
-      <td>${ap ? `<span class="badge" style="background:${ap.split(';')[0]};${ap.split(';')[1]}">${n.latest_appeal_status}</span>` : '<span style="color:#aaa;font-size:12px">없음</span>'}</td>
-      <td style="font-size:12px;color:#888">${(n.notified_at||n.created_at||'').slice(0,10)}</td>
-      <td>${canAppeal ? `<button class="btn" style="background:#fef3c7;color:#92400e;border:1px solid #fcd34d;padding:5px 12px;font-size:12px" onclick="openAppealModal('${n.ncr_no}','${n.part_no} — ${n.defect_type.replace(/'/g,"\\'")}')">이의신청</button>` : ''}</td>
+      <td>${ap ? `<span class="badge" style="background:${ap.split(';')[0]};${ap.split(';')[1]}">${n.latest_appeal_status}</span>` : '<span style="color:var(--text-xs);font-size:11px">없음</span>'}</td>
+      <td style="font-size:11px;color:var(--text-sm)">${(n.notified_at||n.created_at||'').slice(0,10)}</td>
+      <td>${canAppeal ? `<button class="btn btn-light" style="font-size:11px;padding:4px 10px" onclick="openAppealModal('${n.ncr_no}','${n.part_no} — ${n.defect_type.replace(/'/g,"\\'")}')">이의신청</button>` : ''}</td>
     </tr>`;
   }).join('')}</tbody></table>`;
 }
@@ -714,10 +1044,10 @@ function hideAc(id) {
 
 // ── 월별 집계 ──
 async function loadMonthly() {
-  document.getElementById('monthly-body').innerHTML = '<div style="padding:40px;text-align:center;color:#888">로딩 중...</div>';
+  document.getElementById('monthly-body').innerHTML = '<div style="padding:40px;text-align:center;color:var(--text-sm)">로딩 중...</div>';
   const data = await api('GET', '/portal/monthly-summary') || [];
   if (!data.length) {
-    document.getElementById('monthly-body').innerHTML = '<div style="padding:40px;text-align:center;color:#aaa">납품 이력이 없습니다</div>';
+    document.getElementById('monthly-body').innerHTML = '<div style="padding:40px;text-align:center;color:var(--text-sm)">납품 이력이 없습니다</div>';
     return;
   }
   document.getElementById('monthly-body').innerHTML = data.map(m => {
@@ -725,7 +1055,7 @@ async function loadMonthly() {
     return `<div class="card" style="margin-bottom:16px">
       <div class="card-header" style="justify-content:space-between">
         <span>${y}년 ${parseInt(mo)}월</span>
-        <span style="font-size:13px;color:#888">${m.count}건 납품 &nbsp;|&nbsp; 합계: <strong style="color:#1a1a2e">￦${Math.round(m.total_amount).toLocaleString()}</strong></span>
+        <span style="font-size:11px;color:var(--text-sm)">${m.count}건 납품 &nbsp;|&nbsp; 합계: <strong style="color:var(--navy)">￦${Math.round(m.total_amount).toLocaleString()}</strong></span>
       </div>
       <table>
         <thead><tr><th>품목명</th><th style="text-align:right">납품수량</th><th style="text-align:right">금액(원)</th></tr></thead>
@@ -735,10 +1065,10 @@ async function loadMonthly() {
             <td style="text-align:right">${it.qty.toLocaleString()}</td>
             <td style="text-align:right;font-weight:600">${Math.round(it.amount).toLocaleString()}</td>
           </tr>`).join('')}
-          <tr style="background:#f8f9fa;font-weight:700">
+          <tr style="background:#f5f7fb;font-weight:700">
             <td>합 계</td>
             <td style="text-align:right">${m.total_qty.toLocaleString()}</td>
-            <td style="text-align:right;color:#1a1a2e">￦${Math.round(m.total_amount).toLocaleString()}</td>
+            <td style="text-align:right;color:var(--navy)">￦${Math.round(m.total_amount).toLocaleString()}</td>
           </tr>
         </tbody>
       </table>
@@ -769,7 +1099,7 @@ function renderQtyTable() {
     const p = selectedPOs[k];
     return `<tr>
       <td><strong>${p.item_name}</strong></td>
-      <td style="color:#888;font-size:12px">${p.po_no}</td>
+      <td style="color:var(--text-sm);font-size:11px">${p.po_no}</td>
       <td>${p.remaining_qty.toLocaleString()} ${p.item_unit}</td>
       <td><input class="qty-input" type="number" value="${p.qty}" min="1" onchange="selectedPOs['${k}'].qty=parseInt(this.value)||0" /></td>
       <td><input class="qty-input" type="number" value="${Math.round(p.unit_price)}" min="0" onchange="selectedPOs['${k}'].unit_price=parseFloat(this.value)||0" /></td>
