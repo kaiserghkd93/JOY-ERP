@@ -5,6 +5,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import api from '../api'
 import { getRole } from '../auth'
+import { printControlPlan, printPfmea, printCalibrationCert, printAuditReport, printPpap, printMsaReport, printSpcReport } from './QualityPrint'
 
 const isManager = () => ['admin', 'quality_manager', 'owner'].includes(getRole())
 const today = () => new Date().toISOString().slice(0, 10)
@@ -117,7 +118,10 @@ export function SpcPanel() {
             <div className="erp-panel">
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
                 <span className="section-title">{selected.characteristic} 측정값</span>
-                <button className="btn btn-sm btn-primary" onClick={() => setShowMeasModal(true)}>＋ 측정 입력</button>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <button className="btn btn-sm btn-outline" onClick={() => printSpcReport(selected, measurements, analysis)}>🖨 보고서</button>
+                  <button className="btn btn-sm btn-primary" onClick={() => setShowMeasModal(true)}>＋ 측정 입력</button>
+                </div>
               </div>
               <div className="table-wrap" style={{ maxHeight: 320 }}>
                 <table>
@@ -314,6 +318,7 @@ export function ControlPlanPanel() {
                 {isManager() && selected.status !== '승인완료' && (
                   <button className="btn btn-sm btn-success" onClick={() => approvePlan(selected.id)}>승인</button>
                 )}
+                <button className="btn btn-sm btn-outline" onClick={() => printControlPlan(selected)}>🖨 PDF 출력</button>
                 <button className="btn btn-sm btn-primary" onClick={() => { setEditItem(null); setShowItemModal(true) }}>＋ 항목 추가</button>
               </div>
             </div>
@@ -537,7 +542,10 @@ export function PfmeaPanel() {
                 <span style={{ fontWeight: 700 }}>{selected.pfmea_no}</span>
                 <span style={{ marginLeft: 8, fontSize: 12, color: 'var(--text-sm)' }}>{selected.part_no} — {selected.part_name}</span>
               </div>
-              <button className="btn btn-sm btn-primary" onClick={() => { setEditItem(null); setShowItemModal(true) }}>＋ 항목 추가</button>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <button className="btn btn-sm btn-outline" onClick={() => printPfmea(selected)}>🖨 PDF 출력</button>
+                <button className="btn btn-sm btn-primary" onClick={() => { setEditItem(null); setShowItemModal(true) }}>＋ 항목 추가</button>
+              </div>
             </div>
             <div className="table-wrap" style={{ maxHeight: 440 }}>
               <table>
@@ -748,7 +756,10 @@ export function CalibrationPanel() {
         {/* 교정 이력 */}
         {selected && (
           <div className="erp-panel">
-            <div className="section-title" style={{ marginBottom: 8 }}>{selected.name} 교정이력</div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+              <span className="section-title">{selected.name} 교정이력</span>
+              <button className="btn btn-sm btn-outline" onClick={() => printCalibrationCert(selected, history)}>🖨 성적서</button>
+            </div>
             {history.length === 0 ? <div style={{ color: 'var(--text-sm)', fontSize: 12 }}>교정 이력 없음</div> : history.map(h => (
               <div key={h.id} style={{ borderBottom: '1px solid var(--border)', padding: '8px 0' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
@@ -907,7 +918,10 @@ export function AuditPanel() {
                 <span style={{ fontWeight: 700 }}>{selected.audit_no}</span>
                 <span style={{ marginLeft: 8, fontSize: 12, color: 'var(--text-sm)' }}>{selected.audit_date} | {selected.standard} | 감사원: {selected.auditor}</span>
               </div>
-              <button className="btn btn-sm btn-primary" onClick={() => setShowFindModal(true)}>＋ 지적사항</button>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <button className="btn btn-sm btn-outline" onClick={() => printAuditReport(selected, findings)}>🖨 보고서</button>
+                <button className="btn btn-sm btn-primary" onClick={() => setShowFindModal(true)}>＋ 지적사항</button>
+              </div>
             </div>
             <div className="table-wrap" style={{ maxHeight: 440 }}>
               <table>
@@ -1105,6 +1119,7 @@ export function PpapPanel() {
               </div>
               <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                 <span style={{ fontSize: 12, color: 'var(--text-sm)' }}>{completedCount}/{totalActive} 완료</span>
+                <button className="btn btn-sm btn-outline" onClick={() => printPpap(selected)}>🖨 체크리스트</button>
                 {selected.status === '준비중' && (
                   <button className="btn btn-sm btn-primary" onClick={submitPpap}>제출</button>
                 )}
@@ -1296,6 +1311,7 @@ export function MsaPanel() {
                 {selected.measurements?.length > 0 && (
                   <button className="btn btn-sm btn-primary" onClick={calculate}>Gage R&R 계산</button>
                 )}
+                <button className="btn btn-sm btn-outline" onClick={() => printMsaReport(selected)}>🖨 보고서</button>
               </div>
             </div>
 
