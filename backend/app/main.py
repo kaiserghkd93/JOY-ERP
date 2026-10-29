@@ -51,6 +51,26 @@ with engine.connect().execution_options(isolation_level="AUTOCOMMIT") as _ddl:
     except Exception:
         pass
 
+# ── 환경변수 기반 계정 초기화 ─────────────────────────────────────────
+import hashlib as _hl
+_JWT_SECRET = os.environ.get("JWT_SECRET", "joy-erp-secret-2026")
+def _pw(raw: str) -> str:
+    return _hl.sha256((raw + _JWT_SECRET).encode()).hexdigest()
+
+with SessionLocal() as _s:
+    from app.models.auth import User as _User
+    _ou = os.environ.get("INIT_OWNER_USER", "")
+    _op = os.environ.get("INIT_OWNER_PASS", "")
+    _ap = os.environ.get("INIT_ADMIN_PASS", "")
+    if _ou and _op:
+        if not _s.query(_User).filter(_User.username == _ou).first():
+            _s.add(_User(username=_ou, password_hash=_pw(_op), name="오너", role="owner"))
+    if _ap:
+        _adm = _s.query(_User).filter(_User.username == "admin").first()
+        if _adm:
+            _adm.password_hash = _pw(_ap)
+    _s.commit()
+
 app = FastAPI(title="조이산업 ERP", version="0.2.0")
 
 FRONTEND_ORIGIN = os.environ.get("FRONTEND_URL", "http://localhost:5173")
