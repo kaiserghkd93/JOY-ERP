@@ -12,7 +12,13 @@ class LedgerType(str, enum.Enum):
     consumption = "생산소모"
     adjustment = "재고조정"
     cancel = "취소"
-    issue = "issue"  # 외주처 출고 (손익보고서용)
+    issue = "issue"           # 외주처 출고 (손익보고서용)
+    loss_purge    = "퍼지손실"
+    loss_startup  = "시동로스"
+    loss_runner   = "러너폐기"
+    regrind_in    = "재분쇄재입고"
+    regrind_out   = "재분쇄재소모"
+    raw_disposal  = "원재료폐기"
 
 
 class StockLedger(Base):

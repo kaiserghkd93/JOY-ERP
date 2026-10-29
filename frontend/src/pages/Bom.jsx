@@ -115,7 +115,12 @@ export default function Bom() {
   const [selectedProd, setSelectedProd] = useState(null)
   const [bomLines, setBomLines] = useState([])
   const [prodSearch, setProdSearch] = useState('')
-  const [form, setForm] = useState({ component_part_no: '', qty_per: '', unit: 'kg', note: '' })
+  const [form, setForm] = useState({
+    component_part_no: '', qty_per: '', unit: 'kg', note: '',
+    net_weight_g: '', runner_weight_g: '', std_defect_rate: '',
+    std_purge_loss_kg: '', std_startup_loss_kg: '', regrind_ratio: '',
+  })
+  const [showInjection, setShowInjection] = useState(false)
   const [editId, setEditId] = useState(null)
   const [saving, setSaving] = useState(false)
 
@@ -138,7 +143,11 @@ export default function Bom() {
   const selectProd = (item) => {
     setSelectedProd(item)
     loadBom(item.part_no)
-    setForm({ component_part_no: '', qty_per: '', unit: 'kg', note: '' })
+    setForm({
+      component_part_no: '', qty_per: '', unit: 'kg', note: '',
+      net_weight_g: '', runner_weight_g: '', std_defect_rate: '',
+      std_purge_loss_kg: '', std_startup_loss_kg: '', regrind_ratio: '',
+    })
     setEditId(null)
   }
 
@@ -146,14 +155,27 @@ export default function Bom() {
     if (!form.component_part_no || !form.qty_per) return
     setSaving(true)
     try {
-      const payload = { ...form, qty_per: parseFloat(form.qty_per) }
+      const payload = {
+        ...form,
+        qty_per: parseFloat(form.qty_per),
+        net_weight_g: form.net_weight_g ? parseFloat(form.net_weight_g) : 0,
+        runner_weight_g: form.runner_weight_g ? parseFloat(form.runner_weight_g) : 0,
+        std_defect_rate: form.std_defect_rate ? parseFloat(form.std_defect_rate) : 0,
+        std_purge_loss_kg: form.std_purge_loss_kg ? parseFloat(form.std_purge_loss_kg) : 0,
+        std_startup_loss_kg: form.std_startup_loss_kg ? parseFloat(form.std_startup_loss_kg) : 0,
+        regrind_ratio: form.regrind_ratio ? parseFloat(form.regrind_ratio) : 0,
+      }
       if (editId) {
         await api.put(`/bom/line/${editId}`, payload)
       } else {
         await api.post(`/bom/${selectedProd.part_no}`, payload)
       }
       loadBom(selectedProd.part_no)
-      setForm({ component_part_no: '', qty_per: '', unit: 'kg', note: '' })
+      setForm({
+        component_part_no: '', qty_per: '', unit: 'kg', note: '',
+        net_weight_g: '', runner_weight_g: '', std_defect_rate: '',
+        std_purge_loss_kg: '', std_startup_loss_kg: '', regrind_ratio: '',
+      })
       setEditId(null)
     } finally {
       setSaving(false)
@@ -173,7 +195,15 @@ export default function Bom() {
       qty_per: String(line.qty_per),
       unit: line.unit,
       note: line.note || '',
+      net_weight_g: line.net_weight_g > 0 ? String(line.net_weight_g) : '',
+      runner_weight_g: line.runner_weight_g > 0 ? String(line.runner_weight_g) : '',
+      std_defect_rate: line.std_defect_rate > 0 ? String(line.std_defect_rate) : '',
+      std_purge_loss_kg: line.std_purge_loss_kg > 0 ? String(line.std_purge_loss_kg) : '',
+      std_startup_loss_kg: line.std_startup_loss_kg > 0 ? String(line.std_startup_loss_kg) : '',
+      regrind_ratio: line.regrind_ratio > 0 ? String(line.regrind_ratio) : '',
     })
+    const hasInjection = line.net_weight_g > 0 || line.runner_weight_g > 0 || line.std_defect_rate > 0
+    setShowInjection(hasInjection)
   }
 
   const runMrp = async () => {
@@ -256,11 +286,18 @@ export default function Bom() {
                 <div className="table-wrap" style={{ marginBottom: 16 }}>
                   <table>
                     <thead>
-                      <tr><th>구성품 품번</th><th>품명</th><th style={{textAlign:'right'}}>소요량</th><th>단위</th><th>비고</th><th>수정</th><th>삭제</th></tr>
+                      <tr>
+                        <th>구성품 품번</th><th>품명</th>
+                        <th style={{textAlign:'right'}}>소요량</th><th>단위</th>
+                        <th style={{textAlign:'right',fontSize:10}}>순중량(g)</th>
+                        <th style={{textAlign:'right',fontSize:10}}>러너(g)</th>
+                        <th style={{textAlign:'right',fontSize:10}}>불량률%</th>
+                        <th>비고</th><th>수정</th><th>삭제</th>
+                      </tr>
                     </thead>
                     <tbody>
                       {bomLines.length === 0 && (
-                        <tr><td colSpan={7} className="empty">BOM 구성 없음 — 아래에서 추가하세요</td></tr>
+                        <tr><td colSpan={10} className="empty">BOM 구성 없음 — 아래에서 추가하세요</td></tr>
                       )}
                       {bomLines.map(l => (
                         <tr key={l.id}>
@@ -268,6 +305,15 @@ export default function Bom() {
                           <td>{l.component_name || <span style={{ color: '#ef4444' }}>미등록 품목</span>}</td>
                           <td style={{ textAlign: 'right', fontWeight: 600 }}>{Number(l.qty_per).toLocaleString()}</td>
                           <td>{l.unit}</td>
+                          <td style={{ textAlign: 'right', fontSize: 11, color: 'var(--text-sm)' }}>
+                            {l.net_weight_g > 0 ? l.net_weight_g : '—'}
+                          </td>
+                          <td style={{ textAlign: 'right', fontSize: 11, color: 'var(--text-sm)' }}>
+                            {l.runner_weight_g > 0 ? l.runner_weight_g : '—'}
+                          </td>
+                          <td style={{ textAlign: 'right', fontSize: 11, color: 'var(--text-sm)' }}>
+                            {l.std_defect_rate > 0 ? `${l.std_defect_rate}%` : '—'}
+                          </td>
                           <td style={{ fontSize: 12, color: '#64748b' }}>{l.note}</td>
                           <td><button className="btn btn-sm btn-outline" onClick={() => startEdit(l)}>수정</button></td>
                           <td><button className="btn btn-sm" style={{ background: '#fee2e2', color: '#dc2626', border: 'none' }} onClick={() => deleteLine(l.id)}>삭제</button></td>
@@ -324,9 +370,50 @@ export default function Bom() {
                       {saving ? '저장 중...' : editId ? '수정' : '추가'}
                     </button>
                     {editId && (
-                      <button className="btn btn-outline" onClick={() => { setEditId(null); setForm({ component_part_no: '', qty_per: '', unit: 'kg', note: '' }) }} style={{ height: 36 }}>
+                      <button className="btn btn-outline" onClick={() => {
+                        setEditId(null)
+                        setForm({ component_part_no: '', qty_per: '', unit: 'kg', note: '',
+                          net_weight_g: '', runner_weight_g: '', std_defect_rate: '',
+                          std_purge_loss_kg: '', std_startup_loss_kg: '', regrind_ratio: '' })
+                        setShowInjection(false)
+                      }} style={{ height: 36 }}>
                         취소
                       </button>
+                    )}
+                  </div>
+
+                  {/* 사출 특화 설정 (토글) */}
+                  <div style={{ marginTop: 10 }}>
+                    <button
+                      className="btn btn-outline btn-sm"
+                      onClick={() => setShowInjection(v => !v)}
+                      style={{ fontSize: 11, padding: '3px 10px' }}
+                    >
+                      {showInjection ? '▲ 사출 특화 설정 접기' : '▼ 사출 특화 설정 펼치기'}
+                    </button>
+                    {showInjection && (
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginTop: 10,
+                        padding: '10px 12px', background: '#f0f9ff', borderRadius: 6, border: '1px solid #bae6fd' }}>
+                        {[
+                          { key: 'net_weight_g',      label: '순중량 (g)',       step: '0.01' },
+                          { key: 'runner_weight_g',   label: '러너 중량 (g)',    step: '0.01' },
+                          { key: 'std_defect_rate',   label: '표준 불량률 (%)',  step: '0.01', max: 100 },
+                          { key: 'std_purge_loss_kg', label: '퍼지 손실 (kg/교체)', step: '0.001' },
+                          { key: 'std_startup_loss_kg', label: '시동 손실 (kg/일)', step: '0.001' },
+                          { key: 'regrind_ratio',     label: '재분쇄 혼입률 (%)' , step: '0.1', max: 100 },
+                        ].map(({ key, label, step, max }) => (
+                          <div key={key} className="form-group" style={{ margin: 0 }}>
+                            <label style={{ fontSize: 10 }}>{label}</label>
+                            <input
+                              type="number" step={step} min="0" max={max}
+                              value={form[key]}
+                              onChange={e => setForm(f => ({ ...f, [key]: e.target.value }))}
+                              placeholder="0"
+                              style={{ fontSize: 12 }}
+                            />
+                          </div>
+                        ))}
+                      </div>
                     )}
                   </div>
                 </div>

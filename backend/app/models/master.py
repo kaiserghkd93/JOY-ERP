@@ -1,5 +1,5 @@
-from datetime import datetime
-from sqlalchemy import String, Integer, Numeric, Boolean, DateTime, Enum as SAEnum, Float
+from datetime import date, datetime
+from sqlalchemy import String, Integer, Numeric, Boolean, DateTime, Date, Enum as SAEnum, Float
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database import Base
 import enum
@@ -52,9 +52,35 @@ class BomLine(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     product_part_no: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
     component_part_no: Mapped[str] = mapped_column(String(50), nullable=False)
-    qty_per: Mapped[float] = mapped_column(Numeric(15, 4), default=1)  # 제품 1EA당 소요량
+    qty_per: Mapped[float] = mapped_column(Numeric(15, 4), default=1)  # 제품 1EA당 소요량 (g)
     unit: Mapped[str] = mapped_column(String(20), default="g")
     note: Mapped[str | None] = mapped_column(String(200))
+    # ── 사출 특화 표준값 ──
+    net_weight_g: Mapped[float] = mapped_column(Numeric(12, 4), default=0)       # 순중량(g)
+    runner_weight_g: Mapped[float] = mapped_column(Numeric(12, 4), default=0)    # 러너/스프루(g)
+    std_defect_rate: Mapped[float] = mapped_column(Numeric(6, 3), default=0)     # 표준불량률(%)
+    std_purge_loss_kg: Mapped[float] = mapped_column(Numeric(10, 4), default=0)  # 퍼지손실(kg/교체)
+    std_startup_loss_kg: Mapped[float] = mapped_column(Numeric(10, 4), default=0)# 시동로스(kg)
+    regrind_ratio: Mapped[float] = mapped_column(Numeric(6, 3), default=0)       # 회수재비율(%)
+    plan_std_qty: Mapped[float | None] = mapped_column(Numeric(15, 4))           # MRP용 계획표준소요량
+    actual_deduct_base: Mapped[float | None] = mapped_column(Numeric(15, 4))     # 실적차감기준
+
+
+class BomHistory(Base):
+    """BOM 변경 이력"""
+    __tablename__ = "bom_history"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    bom_line_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    product_part_no: Mapped[str] = mapped_column(String(50), nullable=False)
+    component_part_no: Mapped[str] = mapped_column(String(50), nullable=False)
+    field_name: Mapped[str] = mapped_column(String(50), nullable=False)
+    old_value: Mapped[str | None] = mapped_column(String(200))
+    new_value: Mapped[str | None] = mapped_column(String(200))
+    change_reason: Mapped[str | None] = mapped_column(String(500))
+    effective_date: Mapped[date | None] = mapped_column(Date)
+    changed_by: Mapped[str] = mapped_column(String(50), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
 
 
 class Partner(Base):

@@ -8,6 +8,8 @@ from app.routers import master, purchase, ledger, sales, quality, production, da
 from app.routers import purchase_group, invoice, auto_order, import_ls, bom, reports, cost, mold, mes_sync
 from app.routers import auth, portal, admin_import, monthly_sales, monthly_purchase, sales_target
 from app.routers import material, mrp, cost_actual
+from app.routers import inventory_adj
+from app.models import inventory_adj as _inv_adj_models  # noqa: ensure tables registered
 
 Base.metadata.create_all(bind=engine)
 
@@ -32,6 +34,15 @@ with engine.connect() as _conn:
         "ALTER TABLE inspection ADD COLUMN IF NOT EXISTS re INTEGER",
         "ALTER TABLE mold ADD COLUMN IF NOT EXISTS lent_to_partner_id VARCHAR(50)",
         "ALTER TABLE mold ADD COLUMN IF NOT EXISTS lent_date DATE",
+        # BOM 사출 특화 확장
+        "ALTER TABLE bom_line ADD COLUMN IF NOT EXISTS net_weight_g NUMERIC(12,4) DEFAULT 0",
+        "ALTER TABLE bom_line ADD COLUMN IF NOT EXISTS runner_weight_g NUMERIC(12,4) DEFAULT 0",
+        "ALTER TABLE bom_line ADD COLUMN IF NOT EXISTS std_defect_rate NUMERIC(6,3) DEFAULT 0",
+        "ALTER TABLE bom_line ADD COLUMN IF NOT EXISTS std_purge_loss_kg NUMERIC(10,4) DEFAULT 0",
+        "ALTER TABLE bom_line ADD COLUMN IF NOT EXISTS std_startup_loss_kg NUMERIC(10,4) DEFAULT 0",
+        "ALTER TABLE bom_line ADD COLUMN IF NOT EXISTS regrind_ratio NUMERIC(6,3) DEFAULT 0",
+        "ALTER TABLE bom_line ADD COLUMN IF NOT EXISTS plan_std_qty NUMERIC(15,4)",
+        "ALTER TABLE bom_line ADD COLUMN IF NOT EXISTS actual_deduct_base NUMERIC(15,4)",
         # NCR / 이의신청 (Base.metadata.create_all로 테이블 자동 생성)
     ]:
         try:
@@ -46,6 +57,11 @@ with engine.connect().execution_options(isolation_level="AUTOCOMMIT") as _ddl:
                   'shipping','quality','quality_manager','production','material','manufacturing','supplier','owner']:
         try:
             _ddl.execute(_text(f"ALTER TYPE userrole ADD VALUE IF NOT EXISTS '{_role}'"))
+        except Exception:
+            pass
+    for _lt in ['퍼지손실','시동로스','러너폐기','재분쇄재입고','재분쇄재소모','원재료폐기']:
+        try:
+            _ddl.execute(_text(f"ALTER TYPE ledgertype ADD VALUE IF NOT EXISTS '{_lt}'"))
         except Exception:
             pass
     try:
@@ -102,6 +118,7 @@ app.include_router(invoice.router)
 app.include_router(auto_order.router)
 app.include_router(import_ls.router)
 app.include_router(bom.router)
+app.include_router(inventory_adj.router)
 app.include_router(reports.router)
 app.include_router(cost.router)
 app.include_router(mold.router)

@@ -3,8 +3,10 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text
 from pydantic import BaseModel
 from app.database import get_db
-from app.models.master import BomLine, Item
+from app.models.master import BomLine, BomHistory, Item
 from app.services.ledger_service import get_stock
+from app.routers.auth import get_current_user
+from app.models.auth import User
 
 router = APIRouter(prefix="/bom", tags=["BOM"])
 
@@ -14,6 +16,14 @@ class BomLineIn(BaseModel):
     qty_per: float
     unit: str = "g"
     note: str | None = None
+    net_weight_g: float = 0
+    runner_weight_g: float = 0
+    std_defect_rate: float = 0
+    std_purge_loss_kg: float = 0
+    std_startup_loss_kg: float = 0
+    regrind_ratio: float = 0
+    plan_std_qty: float | None = None
+    actual_deduct_base: float | None = None
 
 
 class BomLineOut(BaseModel):
@@ -24,25 +34,39 @@ class BomLineOut(BaseModel):
     qty_per: float
     unit: str
     note: str | None = None
+    net_weight_g: float = 0
+    runner_weight_g: float = 0
+    std_defect_rate: float = 0
+    std_purge_loss_kg: float = 0
+    std_startup_loss_kg: float = 0
+    regrind_ratio: float = 0
+    plan_std_qty: float | None = None
+    actual_deduct_base: float | None = None
     model_config = {"from_attributes": True}
+
+
+def _line_out(l: BomLine, db: Session) -> BomLineOut:
+    item = db.get(Item, l.component_part_no)
+    return BomLineOut(
+        id=l.id, product_part_no=l.product_part_no,
+        component_part_no=l.component_part_no,
+        component_name=item.name if item else None,
+        qty_per=float(l.qty_per), unit=l.unit, note=l.note,
+        net_weight_g=float(l.net_weight_g or 0),
+        runner_weight_g=float(l.runner_weight_g or 0),
+        std_defect_rate=float(l.std_defect_rate or 0),
+        std_purge_loss_kg=float(l.std_purge_loss_kg or 0),
+        std_startup_loss_kg=float(l.std_startup_loss_kg or 0),
+        regrind_ratio=float(l.regrind_ratio or 0),
+        plan_std_qty=float(l.plan_std_qty) if l.plan_std_qty is not None else None,
+        actual_deduct_base=float(l.actual_deduct_base) if l.actual_deduct_base is not None else None,
+    )
 
 
 @router.get("/{product_part_no}", response_model=list[BomLineOut])
 def get_bom(product_part_no: str, db: Session = Depends(get_db)):
     lines = db.query(BomLine).filter(BomLine.product_part_no == product_part_no).all()
-    result = []
-    for l in lines:
-        item = db.get(Item, l.component_part_no)
-        result.append(BomLineOut(
-            id=l.id,
-            product_part_no=l.product_part_no,
-            component_part_no=l.component_part_no,
-            component_name=item.name if item else None,
-            qty_per=float(l.qty_per),
-            unit=l.unit,
-            note=l.note,
-        ))
-    return result
+    return [_line_out(l, db) for l in lines]
 
 
 @router.post("/{product_part_no}", response_model=BomLineOut)
@@ -51,37 +75,44 @@ def add_bom_line(product_part_no: str, body: BomLineIn, db: Session = Depends(ge
     db.add(line)
     db.commit()
     db.refresh(line)
-    item = db.get(Item, line.component_part_no)
-    return BomLineOut(
-        id=line.id,
-        product_part_no=line.product_part_no,
-        component_part_no=line.component_part_no,
-        component_name=item.name if item else None,
-        qty_per=float(line.qty_per),
-        unit=line.unit,
-        note=line.note,
-    )
+    return _line_out(line, db)
 
 
 @router.put("/line/{line_id}", response_model=BomLineOut)
-def update_bom_line(line_id: int, body: BomLineIn, db: Session = Depends(get_db)):
+def update_bom_line(line_id: int, body: BomLineIn, db: Session = Depends(get_db),
+                    user: User = Depends(get_current_user)):
     line = db.get(BomLine, line_id)
     if not line:
         raise HTTPException(404)
+    # BOM 변경 이력 저장 (qty_per, net_weight_g 변경 시)
+    tracked = ["qty_per", "net_weight_g", "runner_weight_g", "std_defect_rate",
+               "std_purge_loss_kg", "std_startup_loss_kg", "regrind_ratio"]
+    for field in tracked:
+        old_val = getattr(line, field)
+        new_val = getattr(body, field, None)
+        if new_val is not None and float(old_val or 0) != float(new_val):
+            hist = BomHistory(
+                bom_line_id=line.id,
+                product_part_no=line.product_part_no,
+                component_part_no=line.component_part_no,
+                field_name=field,
+                old_value=str(old_val),
+                new_value=str(new_val),
+                changed_by=user.name,
+            )
+            db.add(hist)
     for k, v in body.model_dump(exclude_none=True).items():
         setattr(line, k, v)
     db.commit()
     db.refresh(line)
-    item = db.get(Item, line.component_part_no)
-    return BomLineOut(
-        id=line.id,
-        product_part_no=line.product_part_no,
-        component_part_no=line.component_part_no,
-        component_name=item.name if item else None,
-        qty_per=float(line.qty_per),
-        unit=line.unit,
-        note=line.note,
-    )
+    return _line_out(line, db)
+
+
+@router.get("/line/{line_id}/history")
+def get_bom_history(line_id: int, db: Session = Depends(get_db)):
+    rows = db.query(BomHistory).filter(BomHistory.bom_line_id == line_id).order_by(BomHistory.created_at.desc()).all()
+    return [{"id": r.id, "field": r.field_name, "old": r.old_value, "new": r.new_value,
+             "changed_by": r.changed_by, "created_at": r.created_at} for r in rows]
 
 
 @router.delete("/line/{line_id}")
