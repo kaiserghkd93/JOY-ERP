@@ -3,7 +3,7 @@
  * ISO 9001 / IATF 16949 / AIAG 양식 기반
  */
 
-const COMPANY = '조이산업(주)'
+const COMPANY = '(주)넥스젬'
 const today = () => new Date().toLocaleDateString('ko-KR')
 
 function openPrint(html) {

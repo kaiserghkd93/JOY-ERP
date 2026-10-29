@@ -33,8 +33,8 @@ export default function Login({ onLogin }) {
             width: 64, height: 64, background: '#c8102e',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             margin: '0 auto 16px', fontSize: 32, fontWeight: 900, color: '#fff',
-          }}>K</div>
-          <div style={{ fontSize: 24, fontWeight: 900, color: '#fff', letterSpacing: 4 }}>KAISER ERP</div>
+          }}>N</div>
+          <div style={{ fontSize: 24, fontWeight: 900, color: '#fff', letterSpacing: 4 }}>NEXGEM ERP</div>
           <div style={{ fontSize: 11, color: '#4a5568', letterSpacing: 3, marginTop: 4 }}>ENTERPRISE RESOURCE PLANNING</div>
         </div>
 
@@ -100,7 +100,7 @@ export default function Login({ onLogin }) {
         </form>
 
         <div style={{ textAlign: 'center', marginTop: 20, fontSize: 11, color: '#2d3748' }}>
-          © 2026 KAISER · Powered by NEXGEM
+          © 2026 (주)넥스젬 · NEXGEM ERP
         </div>
       </div>
     </div>

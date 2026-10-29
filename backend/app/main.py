@@ -91,7 +91,7 @@ with SessionLocal() as _s:
             _adm.password_hash = _pw(_ap)
     _s.commit()
 
-app = FastAPI(title="조이산업 ERP", version="0.2.0")
+app = FastAPI(title="넥스젬 ERP", version="0.2.0")
 
 FRONTEND_ORIGIN = os.environ.get("FRONTEND_URL", "http://localhost:5173")
 

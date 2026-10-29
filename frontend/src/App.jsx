@@ -154,7 +154,7 @@ export default function App() {
       <div className="gnb">
         <div className="gnb-logo">
           <span className="gnb-logo-mark">K</span>
-          <span className="gnb-logo-name">KAISER ERP</span>
+          <span className="gnb-logo-name">NEXGEM ERP</span>
         </div>
 
         <div className="gnb-tabs">

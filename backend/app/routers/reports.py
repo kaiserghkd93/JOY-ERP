@@ -986,7 +986,7 @@ def delivery_report(
 
     ws.merge_cells('A2:I2')
     s = ws['A2']
-    s.value = f'조이산업(주)  |  출력일: {today.strftime("%Y년 %m월 %d일")}  |  기준기간: {year}년 {month}월 출하'
+    s.value = f'(주)넥스젬  |  출력일: {today.strftime("%Y년 %m월 %d일")}  |  기준기간: {year}년 {month}월 출하'
     s.font  = Font(name='Arial', size=9, color=C_LGRAY)
     s.fill  = PatternFill('solid', fgColor='F2F2F2')
     s.alignment = Alignment(horizontal='left', vertical='center')
@@ -1650,7 +1650,7 @@ def outsource_pl(
 
     mc(3, 1, 3, NCOLS)
     c = ws['A3']
-    c.value     = (f'조이산업(주)  |  출력일: {today.strftime("%Y년 %m월 %d일")}  |  '
+    c.value     = (f'(주)넥스젬  |  출력일: {today.strftime("%Y년 %m월 %d일")}  |  '
                    f'기준기간: {year}년 {month}월 입고·출하')
     c.font      = _font(size=9, color=C_LGRAY)
     c.fill      = _f(C_DKGRAY)
@@ -1885,7 +1885,7 @@ def outsource_pl(
     h = ws2['A1']; h.value = f'고객사별 매출 분석  —  {year}년 {month}월'; h.font = _font(bold=True, size=14, color='FFFFFF'); h.fill = _f(C_BLACK); h.alignment = _al('left')
     ws2.row_dimensions[1].height = 32
     mc2s(2, 1, 2, 7)
-    s = ws2['A2']; s.value = f'조이산업(주)  |  기준: {year}년 {month}월 출하 확정'; s.font = _font(size=9, color=C_LGRAY); s.fill = _f(C_DKGRAY); s.alignment = _al('left')
+    s = ws2['A2']; s.value = f'(주)넥스젬  |  기준: {year}년 {month}월 출하 확정'; s.font = _font(size=9, color=C_LGRAY); s.fill = _f(C_DKGRAY); s.alignment = _al('left')
     ws2.row_dimensions[2].height = 16
     ws2.row_dimensions[3].height = 8
 

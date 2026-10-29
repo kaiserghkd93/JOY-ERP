@@ -326,7 +326,7 @@ export default function DeliveryReport() {
         }}>
           <div>
             <div style={{ fontSize: 11, color: '#6b7280', letterSpacing: 1, fontWeight: 600, marginBottom: 4 }}>
-              조이산업(주) · 품질경영부
+              (주)넥스젬 · 품질경영부
             </div>
             <div style={{ fontSize: 22, fontWeight: 900, letterSpacing: -0.5 }}>
               납기준수율 종합 보고서
@@ -336,7 +336,7 @@ export default function DeliveryReport() {
             </div>
           </div>
           <div style={{ textAlign: 'right' }}>
-            <div style={{ fontSize: 11, color: '#9ca3af' }}>KAISER ERP</div>
+            <div style={{ fontSize: 11, color: '#9ca3af' }}>NEXGEM ERP</div>
           </div>
         </div>
 
