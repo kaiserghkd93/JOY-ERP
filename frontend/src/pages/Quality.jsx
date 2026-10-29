@@ -1089,58 +1089,115 @@ export default function Quality() {
       )}
 
       {showDefRegModal && (
-        <div className="modal-overlay" onClick={()=>setShowDefRegModal(false)}>
-          <div className="modal-box" style={{minWidth:520}} onClick={e=>e.stopPropagation()}>
-            <div className="modal-header"><span>공정/출하 불량 등록</span><button className="modal-close" onClick={()=>setShowDefRegModal(false)}>✕</button></div>
-            <div className="modal-body" style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'10px 16px'}}>
-              <label>발생일<input type="date" className="form-control" value={defRegForm.defect_date} onChange={e=>setDefRegForm(p=>({...p,defect_date:e.target.value}))} /></label>
-              <label>검사유형
-                <select className="form-control" value={defRegForm.inspect_type} onChange={e=>setDefRegForm(p=>({...p,inspect_type:e.target.value}))}>
+        <div className="modal-overlay">
+          <div className="modal" style={{maxWidth:560}}>
+            <h3>공정/출하 불량 등록</h3>
+            <div className="grid-2">
+              <div className="form-group">
+                <label>발생일 *</label>
+                <input type="date" value={defRegForm.defect_date}
+                  onChange={e=>setDefRegForm(p=>({...p,defect_date:e.target.value}))} />
+              </div>
+              <div className="form-group">
+                <label>검사유형</label>
+                <select value={defRegForm.inspect_type}
+                  onChange={e=>setDefRegForm(p=>({...p,inspect_type:e.target.value}))}>
                   <option>공정검사</option><option>출하검사</option>
                 </select>
-              </label>
-              <label>품번
+              </div>
+            </div>
+            <div className="grid-2">
+              <div className="form-group">
+                <label>품번 *</label>
                 <div style={{position:'relative'}}>
-                  <input className="form-control" value={defRegForm.part_no} autoComplete="off"
+                  <input value={defRegForm.part_no} autoComplete="off" placeholder="품번/품명 입력 후 선택"
                     onChange={e=>{
                       const q = e.target.value
-                      setDefRegForm(p=>({...p,part_no:q}))
+                      setDefRegForm(p=>({...p,part_no:q,part_name:''}))
                       const ql = q.toLowerCase()
-                      setPartAcList(ql ? itemMaster.filter(it=>it.part_no.toLowerCase().includes(ql)||it.item_name.toLowerCase().includes(ql)).slice(0,15) : [])
-                      setPartAcOpen(!!ql)
+                      setPartAcList(ql.length >= 1
+                        ? itemMaster.filter(it=>
+                            it.part_no.toLowerCase().includes(ql) ||
+                            (it.name||'').toLowerCase().includes(ql)
+                          ).slice(0,15)
+                        : [])
+                      setPartAcOpen(ql.length >= 1)
                     }}
                     onBlur={()=>setTimeout(()=>setPartAcOpen(false),160)}
                   />
                   {partAcOpen && partAcList.length > 0 && (
-                    <div style={{position:'absolute',top:'100%',left:0,right:0,background:'white',border:'1px solid var(--border)',borderRadius:6,boxShadow:'0 4px 16px rgba(0,0,0,0.12)',zIndex:300,maxHeight:200,overflowY:'auto'}}>
+                    <div style={{position:'absolute',top:'100%',left:0,right:0,background:'var(--card)',border:'1px solid var(--border)',borderRadius:6,boxShadow:'0 4px 16px rgba(0,0,0,0.12)',zIndex:300,maxHeight:200,overflowY:'auto'}}>
                       {partAcList.map(it=>(
-                        <div key={it.part_no} style={{padding:'7px 12px',cursor:'pointer',borderBottom:'1px solid var(--border)',fontSize:13}}
-                          onMouseDown={()=>{setDefRegForm(p=>({...p,part_no:it.part_no,part_name:it.item_name}));setPartAcOpen(false);setPartAcList([])}}>
-                          <div style={{fontWeight:600}}>{it.part_no}</div>
-                          <div style={{fontSize:11,color:'var(--text-sm)'}}>{it.item_name}</div>
+                        <div key={it.part_no}
+                          style={{padding:'7px 12px',cursor:'pointer',borderBottom:'1px solid var(--border)',fontSize:13}}
+                          onMouseDown={()=>{
+                            setDefRegForm(p=>({...p,part_no:it.part_no,part_name:it.name||''}))
+                            setPartAcOpen(false)
+                            setPartAcList([])
+                          }}>
+                          <span style={{fontFamily:'monospace',fontSize:11,color:'var(--primary)',marginRight:8}}>{it.part_no}</span>
+                          <span style={{fontSize:12}}>{it.name}</span>
                         </div>
                       ))}
                     </div>
                   )}
                 </div>
-              </label>
-              <label>품명<input className="form-control" value={defRegForm.part_name} onChange={e=>setDefRegForm(p=>({...p,part_name:e.target.value}))} /></label>
-              <label>불량유형<input className="form-control" value={defRegForm.defect_type} onChange={e=>setDefRegForm(p=>({...p,defect_type:e.target.value}))} /></label>
-              <label>라인/공정<input className="form-control" value={defRegForm.line_no} onChange={e=>setDefRegForm(p=>({...p,line_no:e.target.value}))} /></label>
-              <label>검사수량<input type="number" className="form-control" value={defRegForm.inspect_qty} onChange={e=>setDefRegForm(p=>({...p,inspect_qty:+e.target.value}))} /></label>
-              <label>불량수량<input type="number" className="form-control" value={defRegForm.defect_qty} onChange={e=>setDefRegForm(p=>({...p,defect_qty:+e.target.value}))} /></label>
-              <label style={{gridColumn:'1/-1'}}>불량원인<input className="form-control" value={defRegForm.cause} onChange={e=>setDefRegForm(p=>({...p,cause:e.target.value}))} /></label>
-              <label style={{gridColumn:'1/-1'}}>처리조치<input className="form-control" value={defRegForm.action_taken} onChange={e=>setDefRegForm(p=>({...p,action_taken:e.target.value}))} /></label>
-              <label style={{gridColumn:'1/-1'}}>비고<input className="form-control" value={defRegForm.note} onChange={e=>setDefRegForm(p=>({...p,note:e.target.value}))} /></label>
+              </div>
+              <div className="form-group">
+                <label>품명</label>
+                <input value={defRegForm.part_name} placeholder="품번 선택 시 자동입력"
+                  onChange={e=>setDefRegForm(p=>({...p,part_name:e.target.value}))} />
+              </div>
+            </div>
+            <div className="grid-2">
+              <div className="form-group">
+                <label>불량유형 *</label>
+                <input value={defRegForm.defect_type} placeholder="치수불량, 외관불량..."
+                  onChange={e=>setDefRegForm(p=>({...p,defect_type:e.target.value}))} />
+              </div>
+              <div className="form-group">
+                <label>라인/공정</label>
+                <input value={defRegForm.line_no} placeholder="예: IMM-01, 2공정"
+                  onChange={e=>setDefRegForm(p=>({...p,line_no:e.target.value}))} />
+              </div>
+            </div>
+            <div className="grid-2">
+              <div className="form-group">
+                <label>검사수량</label>
+                <input type="number" value={defRegForm.inspect_qty}
+                  onChange={e=>setDefRegForm(p=>({...p,inspect_qty:+e.target.value}))} />
+              </div>
+              <div className="form-group">
+                <label>불량수량</label>
+                <input type="number" value={defRegForm.defect_qty}
+                  onChange={e=>setDefRegForm(p=>({...p,defect_qty:+e.target.value}))} />
+              </div>
+            </div>
+            <div className="form-group">
+              <label>불량원인</label>
+              <input value={defRegForm.cause} placeholder="원재료 이물, 금형마모..."
+                onChange={e=>setDefRegForm(p=>({...p,cause:e.target.value}))} />
+            </div>
+            <div className="form-group">
+              <label>처리조치</label>
+              <input value={defRegForm.action_taken} placeholder="전수선별, 반품, 재작업..."
+                onChange={e=>setDefRegForm(p=>({...p,action_taken:e.target.value}))} />
+            </div>
+            <div className="form-group">
+              <label>비고</label>
+              <input value={defRegForm.note}
+                onChange={e=>setDefRegForm(p=>({...p,note:e.target.value}))} />
             </div>
             <div className="modal-footer">
-              <button className="btn btn-secondary" onClick={()=>setShowDefRegModal(false)}>취소</button>
+              <button className="btn btn-outline" onClick={()=>setShowDefRegModal(false)}>취소</button>
               <button className="btn btn-primary" onClick={async()=>{
                 if(!defRegForm.part_no||!defRegForm.defect_type) return alert('품번과 불량유형은 필수입니다')
-                await api.post('/quality/defect-reg', defRegForm).catch(e=>alert(e.response?.data?.detail||'오류'))
-                setShowDefRegModal(false)
-                setDefRegForm({defect_date:new Date().toISOString().slice(0,10),inspect_type:'공정검사',part_no:'',part_name:'',defect_type:'',defect_qty:0,inspect_qty:0,line_no:'',cause:'',action_taken:'',note:''})
-                load()
+                try {
+                  await api.post('/quality/defect-reg', defRegForm)
+                  setShowDefRegModal(false)
+                  setDefRegForm({defect_date:new Date().toISOString().slice(0,10),inspect_type:'공정검사',part_no:'',part_name:'',defect_type:'',defect_qty:0,inspect_qty:0,line_no:'',cause:'',action_taken:'',note:''})
+                  load()
+                } catch(e) { alert(e.response?.data?.detail||'저장 실패') }
               }}>저장</button>
             </div>
           </div>
