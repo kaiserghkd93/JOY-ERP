@@ -47,9 +47,12 @@ class ReceiptOut(BaseModel):
     po_no: str
     part_no: str
     qty: int
+    delivered_qty: int = 0
     receipt_date: date
     unit_price: float
     status: ReceiptStatus
     note: str | None
     partner_id: str | None = None
     outsource_price: float | None = None
+    return_qty: int = 0
+    return_reason: str | None = None

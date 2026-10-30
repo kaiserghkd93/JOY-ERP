@@ -157,6 +157,62 @@ def list_receipts(
     return q.order_by(Receipt.receipt_date.desc()).all()
 
 
+@router.patch("/receipts/{gr_no}/delivered-qty")
+def set_delivered_qty(gr_no: str, body: dict, db: Session = Depends(get_db)):
+    """거래명세표 납품수량 기록 (외주처 발행 기준)"""
+    r = db.get(Receipt, gr_no)
+    if not r:
+        raise HTTPException(404, "입고 없음")
+    qty = int(body.get("delivered_qty", 0))
+    if qty < r.qty:
+        raise HTTPException(400, f"납품수량({qty})이 합격수량({r.qty})보다 작을 수 없습니다")
+    r.delivered_qty = qty
+    db.commit()
+    return {"gr_no": gr_no, "delivered_qty": r.delivered_qty, "qty": r.qty}
+
+
+@router.get("/receipts/{gr_no}/return-slip")
+def get_return_slip(gr_no: str, db: Session = Depends(get_db)):
+    """반품명세서 데이터 조회 (불합격 반품 처리용)"""
+    from app.models.quality import Inspection, DisposalType
+    from app.models.master import Partner, Item
+
+    r = db.get(Receipt, gr_no)
+    if not r:
+        raise HTTPException(404, "입고 없음")
+
+    insp = db.query(Inspection).filter(Inspection.gr_no == gr_no).first()
+    partner = db.get(Partner, r.partner_id) if r.partner_id else None
+    item = db.get(Item, r.part_no)
+
+    delivered = getattr(r, 'delivered_qty', 0) or r.qty
+    return_qty = 0
+    disposal = None
+    defect_note = None
+
+    if insp:
+        return_qty = insp.fail_qty if insp.disposal == DisposalType.return_ else 0
+        disposal = insp.disposal
+        defect_note = insp.defect_note
+
+    return {
+        "gr_no": gr_no,
+        "po_no": r.po_no,
+        "receipt_date": str(r.receipt_date),
+        "part_no": r.part_no,
+        "part_name": item.name if item else r.part_no,
+        "partner_id": r.partner_id,
+        "partner_name": partner.name if partner else r.partner_id,
+        "delivered_qty": delivered,
+        "accepted_qty": r.qty,
+        "return_qty": return_qty,
+        "disposal": disposal,
+        "defect_note": defect_note,
+        "unit_price": float(r.unit_price or 0),
+        "settlement_amt": r.qty * float(r.unit_price or 0),
+    }
+
+
 @router.post("/receipts/direct")
 def post_direct_receipt(body: dict, db: Session = Depends(get_db)):
     """발주 없이 자체생산품 창고 직접입고 — GR 자동 생성 후 즉시 확정"""

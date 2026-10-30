@@ -80,6 +80,7 @@ class Receipt(Base):
     carryover_qty: Mapped[int] = mapped_column(Integer, default=0, nullable=False, server_default="0")
     carryover_reason: Mapped[str | None] = mapped_column(String(200), nullable=True)
     carryover_to_month: Mapped[str | None] = mapped_column(String(7), nullable=True)
+    delivered_qty: Mapped[int] = mapped_column(Integer, default=0, nullable=False, server_default="0")  # 거래명세표 수량
     return_qty: Mapped[int] = mapped_column(Integer, default=0, nullable=False, server_default="0")
     return_reason: Mapped[str | None] = mapped_column(String(200), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)

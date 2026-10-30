@@ -76,6 +76,17 @@ def post_inspection(body: InspectionCreate, db: Session = Depends(get_db), user:
     insp.sample_size = sample_size
     insp.ac = ac
     insp.re = re
+
+    # 입고전표에 납품수량(delivered_qty) 자동 기록 및 반품수량 설정
+    from app.models.purchase import Receipt
+    receipt = db.get(Receipt, insp.gr_no)
+    if receipt:
+        if not getattr(receipt, 'delivered_qty', 0):
+            receipt.delivered_qty = insp.inspect_qty
+        if insp.fail_qty > 0 and insp.disposal and insp.disposal.value == "반품":
+            receipt.return_qty = insp.fail_qty
+            receipt.return_reason = insp.defect_note or "수입검사 불합격 반품"
+
     db.commit()
     db.refresh(insp)
     return insp
@@ -387,6 +398,16 @@ def update_ncr(ncr_no: str, body: NcrUpdate, db: Session = Depends(get_db), user
         setattr(ncr, k, v)
     if body.status == NcrStatus.closed and not ncr.closed_at:
         ncr.closed_at = datetime.now()
+
+    # disposal=반품 설정 시 입고전표 return_qty 자동 업데이트
+    from app.models.purchase import Receipt
+    from app.models.quality import NcrDisposal
+    if body.disposal == NcrDisposal.return_ and ncr.gr_no:
+        receipt = db.get(Receipt, ncr.gr_no)
+        if receipt and ncr.defect_qty:
+            receipt.return_qty = ncr.defect_qty
+            receipt.return_reason = ncr.d2_desc or "NCR 반품처리"
+
     db.commit()
     db.refresh(ncr)
     return ncr

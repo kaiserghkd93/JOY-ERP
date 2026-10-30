@@ -45,6 +45,8 @@ with engine.connect() as _conn:
         "ALTER TABLE bom_line ADD COLUMN IF NOT EXISTS regrind_ratio NUMERIC(6,3) DEFAULT 0",
         "ALTER TABLE bom_line ADD COLUMN IF NOT EXISTS plan_std_qty NUMERIC(15,4)",
         "ALTER TABLE bom_line ADD COLUMN IF NOT EXISTS actual_deduct_base NUMERIC(15,4)",
+        # 외주 납품수량 추적 (거래명세표 기준)
+        "ALTER TABLE receipt ADD COLUMN IF NOT EXISTS delivered_qty INTEGER DEFAULT 0",
         # NCR / 이의신청 (Base.metadata.create_all로 테이블 자동 생성)
     ]:
         try:

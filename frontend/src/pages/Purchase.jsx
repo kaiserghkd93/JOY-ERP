@@ -1037,6 +1037,78 @@ export default function Purchase() {
     })
   }
 
+  const printReturnSlip = async (gr_no, ln) => {
+    try {
+      const r = await api.get(`/purchase/receipts/${gr_no}/return-slip`)
+      const d = r.data
+      const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
+<title>반품명세서</title>
+<style>
+  body{font-family:'맑은 고딕',sans-serif;font-size:12px;margin:20px}
+  h2{text-align:center;font-size:18px;margin-bottom:4px}
+  .sub{text-align:center;color:#555;margin-bottom:20px;font-size:12px}
+  table{width:100%;border-collapse:collapse;margin-bottom:16px}
+  th,td{border:1px solid #333;padding:6px 10px}
+  th{background:#f0f0f0;font-weight:700}
+  .right{text-align:right} .center{text-align:center}
+  .red{color:#dc2626;font-weight:700}
+  .info{display:grid;grid-template-columns:1fr 1fr;gap:0;margin-bottom:16px}
+  .info-cell{border:1px solid #999;padding:6px 10px;font-size:12px}
+  .info-label{font-weight:700;color:#555;font-size:10px;display:block;margin-bottom:2px}
+  .sig{display:grid;grid-template-columns:repeat(3,1fr);gap:0;margin-top:24px}
+  .sig-cell{border:1px solid #999;padding:8px 10px;text-align:center;min-height:50px}
+  @media print{body{margin:0}button{display:none}}
+</style></head><body>
+<h2>(주)넥스젬 — 반품명세서</h2>
+<div class="sub">Return Delivery Note | 반품 처리 확인서</div>
+<div class="info">
+  <div class="info-cell"><span class="info-label">GR번호</span>${d.gr_no}</div>
+  <div class="info-cell"><span class="info-label">발주번호</span>${d.po_no}</div>
+  <div class="info-cell"><span class="info-label">외주처</span>${d.partner_name}</div>
+  <div class="info-cell"><span class="info-label">입고일</span>${d.receipt_date}</div>
+</div>
+<table>
+  <thead><tr>
+    <th>품번</th><th>품명</th>
+    <th class="center">납품수량<br>(거래명세표)</th>
+    <th class="center">합격수량<br>(실입고)</th>
+    <th class="center red">반품수량</th>
+    <th class="right">단가</th>
+    <th class="right">정산금액<br>(합격분)</th>
+  </tr></thead>
+  <tbody><tr>
+    <td>${d.part_no}</td>
+    <td>${d.part_name}</td>
+    <td class="center">${d.delivered_qty.toLocaleString()}</td>
+    <td class="center">${d.accepted_qty.toLocaleString()}</td>
+    <td class="center red">${d.return_qty.toLocaleString()}</td>
+    <td class="right">₩${d.unit_price.toLocaleString()}</td>
+    <td class="right">₩${d.settlement_amt.toLocaleString()}</td>
+  </tr></tbody>
+</table>
+<div style="margin-bottom:8px;padding:10px;background:#fef2f2;border:1px solid #fca5a5;border-radius:4px">
+  <strong class="red">반품사유:</strong> ${d.defect_note || '수입검사 불합격'}
+</div>
+<div style="margin-bottom:16px;padding:10px;background:#f0fdf4;border:1px solid #86efac;border-radius:4px;font-size:11px">
+  ※ 본 명세서는 수입검사 결과에 따른 불합격품 반품 확인서입니다.<br>
+  ※ 정산금액은 합격 수량 기준이며, 반품 수량(${d.return_qty.toLocaleString()}개)은 대금 청구 대상에서 제외됩니다.
+</div>
+<div class="sig">
+  <div class="sig-cell"><div style="font-size:10px;color:#555">작성자</div><div style="margin-top:24px"></div></div>
+  <div class="sig-cell"><div style="font-size:10px;color:#555">품질부서 확인</div><div style="margin-top:24px"></div></div>
+  <div class="sig-cell"><div style="font-size:10px;color:#555">외주처 수령 확인</div><div style="margin-top:24px"></div></div>
+</div>
+<div style="text-align:right;margin-top:20px;font-size:11px;color:#888">발행일: ${new Date().toLocaleDateString('ko-KR')} | (주)넥스젬 구매팀</div>
+<button onclick="window.print()" style="display:block;margin:20px auto;padding:8px 24px;background:#7c3aed;color:#fff;border:none;border-radius:6px;font-size:14px;cursor:pointer">🖨 반품명세서 인쇄/PDF</button>
+</body></html>`
+      const w = window.open('', '_blank', 'width=900,height=700')
+      w.document.write(html)
+      w.document.close()
+    } catch(e) {
+      alert('반품명세서 조회 실패: ' + (e.response?.data?.detail || e.message))
+    }
+  }
+
   const toggleReceiptCarryover = (gr_no, currentVal, reason, qty, part_name, carryover_to_month) => {
     if (currentVal) {
       // 이월 해제는 바로 처리
@@ -1506,20 +1578,37 @@ export default function Purchase() {
                             </div>
                             {/* 입고 건별 행 */}
                             {(ln.receipts||[]).map(r => (
-                              <div key={r.gr_no} style={{ display:'flex', alignItems:'center', gap:8, padding:'5px 16px 5px 32px', background: r.is_carryover ? '#fff7ed' : r.return_qty>0 ? '#fef2f2' : '#fafafa', borderBottom:'1px solid #f1f5f9', fontSize:11 }}>
+                              <div key={r.gr_no} style={{ display:'flex', alignItems:'center', gap:8, padding:'5px 16px 5px 32px', background: r.is_carryover ? '#fff7ed' : r.return_qty>0 ? '#fef2f2' : '#fafafa', borderBottom:'1px solid #f1f5f9', fontSize:11, flexWrap:'wrap' }}>
                                 <span style={{ fontFamily:'monospace', color:'#94a3b8', minWidth:160 }}>{r.gr_no}</span>
                                 <span style={{ color:'#64748b' }}>{r.receipt_date}</span>
-                                <span style={{ color:'#334155' }}>{r.qty.toLocaleString()}개 @₩{r.unit_price.toLocaleString()}</span>
+                                {/* 납품/합격/반품 수량 3단 표시 */}
+                                {(r.delivered_qty > 0 && r.delivered_qty !== r.qty) ? (
+                                  <span style={{ display:'flex', gap:6, alignItems:'center' }}>
+                                    <span style={{ color:'#64748b' }}>납품 <strong>{r.delivered_qty.toLocaleString()}</strong></span>
+                                    <span style={{ color:'#888' }}>→</span>
+                                    <span style={{ color:'#166534' }}>합격 <strong>{r.qty.toLocaleString()}</strong></span>
+                                    {r.return_qty > 0 && <span style={{ color:'#dc2626' }}>반품 <strong>{r.return_qty.toLocaleString()}</strong></span>}
+                                  </span>
+                                ) : (
+                                  <span style={{ color:'#334155' }}>{r.qty.toLocaleString()}개 @₩{r.unit_price.toLocaleString()}</span>
+                                )}
                                 <span style={{ color:'#334155', fontWeight:600 }}>₩{(r.qty*r.unit_price).toLocaleString()}</span>
                                 {r.is_carryover ? (
                                   <span style={{ color:'#c2410c', fontWeight:700 }}>
                                     ↗이월중 {r.carryover_to_month ? `→ ${r.carryover_to_month}` : ''} ({r.carryover_reason})
                                   </span>
                                 ) : null}
-                                {r.return_qty > 0 ? (
+                                {r.return_qty > 0 && !(r.delivered_qty > 0 && r.delivered_qty !== r.qty) ? (
                                   <span style={{ color:'#dc2626', fontWeight:700 }}>↩반품 {r.return_qty}개 ({r.return_reason})</span>
                                 ) : null}
                                 <span style={{ marginLeft:'auto', display:'flex', gap:6 }}>
+                                  {r.return_qty > 0 && (
+                                    <button
+                                      style={{ fontSize:10, padding:'2px 8px', borderRadius:4, border:'1px solid #7c3aed', background:'#f5f3ff', color:'#7c3aed', cursor:'pointer' }}
+                                      onClick={e => { e.stopPropagation(); printReturnSlip(r.gr_no, ln) }}>
+                                      반품명세서
+                                    </button>
+                                  )}
                                   <button
                                     style={{ fontSize:10, padding:'2px 8px', borderRadius:4, border:'1px solid #fb923c', background: r.is_carryover ? '#c2410c' : '#fff7ed', color: r.is_carryover ? '#fff' : '#c2410c', cursor:'pointer' }}
                                     onClick={e => { e.stopPropagation(); toggleReceiptCarryover(r.gr_no, r.is_carryover, r.carryover_reason, r.qty, ln.part_name || ln.part_no, r.carryover_to_month) }}>
