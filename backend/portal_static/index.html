@@ -663,7 +663,7 @@ tbody tr:hover { background: #f8fafc; }
           </div>
 
           <div class="panel-footer">
-            <button class="btn btn-print" style="width:100%;padding:11px;font-size:13px" onclick="submitAndPrint()">
+            <button class="btn btn-print" style="width:100%;padding:11px;font-size:13px" onclick="confirmAndDeliver()">
               거래명세서 출력
             </button>
           </div>
@@ -1303,6 +1303,61 @@ function recalcTotal() {
   manualRows.forEach(r => total += (r.qty||0)*(r.unit_price||0));
   const el = document.getElementById('total-amt');
   if (el) el.textContent = '￦' + Math.round(total).toLocaleString();
+}
+
+function confirmAndDeliver() {
+  const lines = Object.values(selectedPOs);
+  const manualLines = manualRows
+    .filter(r => r.item_name && r.item_name.trim() && r.qty > 0);
+
+  if (!lines.length && !manualLines.length) {
+    const alertEl = document.getElementById('deliver-alert');
+    alertEl.className = 'alert alert-error';
+    alertEl.textContent = '납품할 품목을 선택하거나 직접 입력하세요';
+    alertEl.style.display = 'block';
+    return;
+  }
+
+  const date = document.getElementById('deliver-date').value || new Date().toISOString().slice(0,10);
+  const allItems = [...lines, ...manualLines];
+  let listHtml = allItems.map(l =>
+    `<tr>
+      <td style="padding:4px 8px;border-bottom:1px solid #eee">${l.item_name || l.po_no}</td>
+      <td style="padding:4px 8px;border-bottom:1px solid #eee;text-align:right">${(l.qty||0).toLocaleString()}</td>
+      <td style="padding:4px 8px;border-bottom:1px solid #eee;color:#888">${l.item_unit||'EA'}</td>
+    </tr>`
+  ).join('');
+
+  const modal = document.createElement('div');
+  modal.id = 'confirm-modal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center';
+  modal.innerHTML = `
+    <div style="background:#fff;border-radius:8px;padding:28px;min-width:360px;max-width:480px;box-shadow:0 8px 40px rgba(0,0,0,.25)">
+      <div style="font-size:15px;font-weight:700;color:#0d1f3c;margin-bottom:6px">납품 확정 확인</div>
+      <div style="font-size:12px;color:#666;margin-bottom:16px">
+        납품일 <strong>${date}</strong> — 아래 품목을 납품 확정하시겠습니까?<br>
+        <span style="color:#c0392b;font-size:11px">* 확정 후에는 수입검사 대기 상태로 등록되며 취소가 불가합니다.</span>
+      </div>
+      <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:16px">
+        <thead><tr style="background:#f5f7fb">
+          <th style="padding:5px 8px;text-align:left">품목</th>
+          <th style="padding:5px 8px;text-align:right">수량</th>
+          <th style="padding:5px 8px">단위</th>
+        </tr></thead>
+        <tbody>${listHtml}</tbody>
+      </table>
+      <div style="display:flex;gap:8px;justify-content:flex-end">
+        <button onclick="document.getElementById('confirm-modal').remove()"
+          style="padding:8px 20px;border:1px solid #ddd;border-radius:4px;background:#fff;cursor:pointer;font-size:13px">
+          취소
+        </button>
+        <button onclick="document.getElementById('confirm-modal').remove();submitAndPrint();"
+          style="padding:8px 20px;border:none;border-radius:4px;background:#0d1f3c;color:#fff;cursor:pointer;font-size:13px;font-weight:600">
+          납품 확정 및 출력
+        </button>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
 }
 
 async function submitAndPrint() {
