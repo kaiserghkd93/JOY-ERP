@@ -130,9 +130,17 @@ function PartnerModal({ partner, onClose, onSaved }) {
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
 
   const submit = async () => {
-    if (editing) await api.put(`/master/partners/${form.partner_id}`, form)
-    else await api.post('/master/partners', form)
-    onSaved()
+    try {
+      if (editing) await api.patch(`/master/partners/${form.partner_id}`, form)
+      else await api.post('/master/partners', form)
+      onSaved()
+    } catch (err) {
+      const detail = err.response?.data?.detail
+      const msg = Array.isArray(detail)
+        ? detail.map(e => e.msg || JSON.stringify(e)).join('\n')
+        : (detail || err.message)
+      alert('저장 실패: ' + msg)
+    }
   }
 
   return (
