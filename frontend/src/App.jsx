@@ -144,10 +144,15 @@ export default function App() {
   ) ?? allMenus[0]
 
   // 역할에 따라 접근 가능한 메뉴만 표시
-  const visibleMenus = allMenus.map(g => ({
-    ...g,
-    items: g.items.filter(m => hasPermission(m.to)),
-  })).filter(g => g.items.length > 0)
+  // executive(대표/전무): 현황판 그룹 제외 — 대신 경영관리로 대체
+  const HIDE_GROUPS_FOR_ROLE = { executive: ['dashboard'] }
+  const hiddenGroups = HIDE_GROUPS_FOR_ROLE[getRole()] ?? []
+  const visibleMenus = allMenus
+    .filter(g => !hiddenGroups.includes(g.id))
+    .map(g => ({
+      ...g,
+      items: g.items.filter(m => hasPermission(m.to)),
+    })).filter(g => g.items.length > 0)
 
   const handleLogout = () => { logout(); setUser(null) }
 
@@ -213,7 +218,9 @@ export default function App() {
           </div>
         }>
           <Routes>
-            <Route path="/" element={<Dashboard />} />
+            <Route path="/" element={
+              getRole() === 'executive' ? <Navigate to="/management" replace /> : <Dashboard />
+            } />
             <Route path="/inventory" element={<Inventory />} />
             <Route path="/receipt" element={<Receipt />} />
             <Route path="/invoice" element={<Invoice />} />
