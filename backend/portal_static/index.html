@@ -1131,11 +1131,11 @@ function filterAc(id, q) {
   const matches = ql.length === 0
     ? src.slice(0, 30)
     : src.filter(it =>
-        it.item_name.toLowerCase().includes(ql) || it.part_no.toLowerCase().includes(ql)
+        it.item_name.toLowerCase().includes(ql) || (it.part_no || '').toLowerCase().includes(ql)
       ).slice(0, 30);
   if (!matches.length) { dd.style.display = 'none'; return; }
   dd.innerHTML = matches.map(it => `
-    <div class="ac-item" onmousedown="selectAc(${id},'${it.item_name.replace(/'/g,"\\'")}','${it.part_no.replace(/'/g,"\\'")}','${it.item_unit}',${it.unit_price})">
+    <div class="ac-item" onmousedown="selectAc(${id},'${it.item_name.replace(/'/g,"\\'")}','${(it.part_no||'').replace(/'/g,"\\'")}','${it.item_unit}',${it.unit_price})">
       <div class="ac-name">${it.item_name}</div>
       <div class="ac-sub">${it.part_no} | ${it.item_unit}${it.unit_price > 0 ? ' | ₩' + Math.round(it.unit_price).toLocaleString() : ''}</div>
     </div>`).join('');
@@ -1306,81 +1306,90 @@ function recalcTotal() {
 }
 
 async function submitAndPrint() {
+  const alertEl = document.getElementById('deliver-alert');
+  alertEl.style.display = 'none';
+
   const lines = Object.values(selectedPOs);
-  if (!lines.length) { alert('납품할 발주를 선택하세요'); return; }
-  const date = document.getElementById('deliver-date').value;
-  if (!date) { alert('납품일을 선택하세요'); return; }
-
-  // 발주 연결 라인 + 수동 추가 라인 합치기
   const manualLines = manualRows
-    .filter(r => r.item_name.trim() && r.qty > 0)
-    .map(r => ({ item_name: r.item_name, item_unit: r.item_unit, qty: r.qty, unit_price: r.unit_price }));
+    .filter(r => r.item_name && r.item_name.trim() && r.qty > 0)
+    .map(r => ({ item_name: r.item_name, part_no: r.part_no || null, item_unit: r.item_unit, qty: r.qty, unit_price: r.unit_price || 0 }));
 
-  if (!lines.length && !manualLines.length) { alert('납품할 품목을 선택하거나 직접 입력하세요'); return; }
+  if (!lines.length && !manualLines.length) {
+    alertEl.className = 'alert alert-error';
+    alertEl.textContent = '납품할 품목을 선택하거나 직접 입력하세요';
+    alertEl.style.display = 'block';
+    return;
+  }
+
+  const date = document.getElementById('deliver-date').value || new Date().toISOString().slice(0,10);
 
   const allLines = [
-    ...lines.map(l => ({ po_no: l.po_no, item_name: l.item_name, item_unit: l.item_unit, qty: l.qty, unit_price: l.unit_price })),
+    ...lines.map(l => ({ po_no: l.po_no, item_name: l.item_name, item_unit: l.item_unit, qty: l.qty || 0, unit_price: l.unit_price || 0 })),
     ...manualLines
   ];
 
   const body = {
     delivery_date: date,
-    note: document.getElementById('deliver-note').value,
+    note: document.getElementById('deliver-note').value || '',
     lines: allLines
   };
 
-  const r = await api('POST', '/portal/deliver', body);
-  if (!r || !r.ok) {
-    const alertEl = document.getElementById('deliver-alert');
-    alertEl.className = 'alert alert-error';
-    alertEl.textContent = r?.detail || '오류가 발생했습니다';
-    return;
-  }
-
-  const grNos = r.receipts.map(x=>x.gr_no).join(', ');
-  document.getElementById('inv-supplier').textContent = currentUser.name;
-  document.getElementById('inv-sign-supplier').textContent = currentUser.name;
-  document.getElementById('inv-contact').textContent = currentUser.name;
-  document.getElementById('inv-date').textContent = date;
-  document.getElementById('inv-date2').textContent = date;
-  document.getElementById('inv-grno').textContent = grNos;
-
-  let total = 0;
-  const allInvoiceLines = r.receipts.map((rc, i) => {
-    const orig = allLines[i] || {};
-    return { ...orig, gr_no: rc.gr_no };
-  });
-  // 최소 10행 표시 (빈 행 포함)
-  const minRows = Math.max(allLines.length, 10);
-  let rows = '';
-  for (let i = 0; i < minRows; i++) {
-    const l = allLines[i];
-    if (l) {
-      const amt = l.qty * l.unit_price;
-      total += amt;
-      rows += `<tr>
-        <td>${i+1}</td>
-        <td style="text-align:left">${l.item_name}</td>
-        <td style="font-size:11px;color:#555">${l.po_no}</td>
-        <td>${l.qty.toLocaleString()}</td>
-        <td>${l.item_unit||'EA'}</td>
-        <td style="text-align:right">${Math.round(l.unit_price).toLocaleString()}</td>
-        <td style="text-align:right;font-weight:700">${Math.round(amt).toLocaleString()}</td>
-        <td></td>
-      </tr>`;
-    } else {
-      rows += `<tr class="empty-row"><td>&nbsp;</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>`;
+  try {
+    const r = await api('POST', '/portal/deliver', body);
+    if (!r || !r.ok) {
+      alertEl.className = 'alert alert-error';
+      alertEl.textContent = r?.detail || '오류가 발생했습니다. 잠시 후 다시 시도해 주세요.';
+      alertEl.style.display = 'block';
+      return;
     }
-  }
-  document.getElementById('inv-tbody').innerHTML = rows;
-  document.getElementById('inv-total-amt').textContent = `￦ ${Math.round(total).toLocaleString()} 원`;
-  document.getElementById('invoice-modal').style.display = 'block';
 
-  selectedPOs = {};
-  manualRows = [];
-  document.getElementById('manual-tbody').innerHTML = '';
-  document.getElementById('manual-table').style.display = 'none';
-  loadOrders();
+    const grNos = r.receipts.map(x=>x.gr_no).join(', ');
+    document.getElementById('inv-supplier').textContent = currentUser?.name || '';
+    document.getElementById('inv-sign-supplier').textContent = currentUser?.name || '';
+    document.getElementById('inv-contact').textContent = currentUser?.name || '';
+    document.getElementById('inv-date').textContent = date;
+    document.getElementById('inv-date2').textContent = date;
+    document.getElementById('inv-grno').textContent = grNos;
+
+    let total = 0;
+    const minRows = Math.max(allLines.length, 10);
+    let rows = '';
+    for (let i = 0; i < minRows; i++) {
+      const l = allLines[i];
+      if (l) {
+        const amt = (l.qty || 0) * (l.unit_price || 0);
+        total += amt;
+        rows += `<tr>
+          <td>${i+1}</td>
+          <td style="text-align:left">${l.item_name}</td>
+          <td style="font-size:11px;color:#555">${l.po_no || ''}</td>
+          <td>${(l.qty||0).toLocaleString()}</td>
+          <td>${l.item_unit||'EA'}</td>
+          <td style="text-align:right">${Math.round(l.unit_price||0).toLocaleString()}</td>
+          <td style="text-align:right;font-weight:700">${Math.round(amt).toLocaleString()}</td>
+          <td></td>
+        </tr>`;
+      } else {
+        rows += `<tr class="empty-row"><td>&nbsp;</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>`;
+      }
+    }
+    document.getElementById('inv-tbody').innerHTML = rows;
+    document.getElementById('inv-total-amt').textContent = `￦ ${Math.round(total).toLocaleString()} 원`;
+    document.getElementById('invoice-modal').style.display = 'block';
+
+    // 초기화
+    selectedPOs = {};
+    manualRows = [];
+    document.getElementById('manual-tbody').innerHTML = '';
+    document.getElementById('manual-table').style.display = 'none';
+    renderQtyTable();
+    loadOrders();
+
+  } catch(err) {
+    alertEl.className = 'alert alert-error';
+    alertEl.textContent = '네트워크 오류: ' + (err.message || '서버에 연결할 수 없습니다');
+    alertEl.style.display = 'block';
+  }
 }
 
 function closeInvoice() {

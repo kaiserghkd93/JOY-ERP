@@ -225,6 +225,7 @@ export function ControlPlanPanel() {
   const [editItem, setEditItem] = useState(null)
   const [form, setForm] = useState({ part_no: '', customer: '', revision: 'A', plan_type: '양산', effective_date: '', note: '' })
   const [itemForm, setItemForm] = useState({ process_no: '', process_name: '', operation: '', machine: '', characteristic_name: '', char_type: '일반', spec_nominal: '', spec_upper: '', spec_lower: '', unit: 'mm', sample_size: '5ea', sample_freq: '2시간마다', control_method: 'SPC(관리도)', reaction_plan: '', sort_order: 0 })
+  const [detailTab, setDetailTab] = useState('master')
 
   const load = useCallback(() => {
     api.get('/quality-adv/control-plan').then(r => setPlans(r.data)).catch(() => {})
@@ -232,7 +233,7 @@ export function ControlPlanPanel() {
   }, [])
   useEffect(() => { load() }, [load])
 
-  const selectPlan = (p) => api.get(`/quality-adv/control-plan/${p.id}`).then(r => setSelected(r.data)).catch(() => {})
+  const selectPlan = (p) => { setDetailTab('master'); api.get(`/quality-adv/control-plan/${p.id}`).then(r => setSelected(r.data)).catch(() => {}) }
 
   const savePlan = async () => {
     await api.post('/quality-adv/control-plan', form).catch(e => alert(e.response?.data?.detail || '오류'))
@@ -317,63 +318,137 @@ export function ControlPlanPanel() {
 
       <div>
         {!selected ? (
-          <div className="erp-panel" style={{ textAlign: 'center', padding: 60, color: 'var(--text-sm)' }}>좌측에서 관리계획서를 선택하세요</div>
+          <div className="erp-panel" style={{ textAlign: 'center', padding: 60, color: 'var(--text-sm)' }}>
+            <div style={{ fontSize: 32, marginBottom: 8, opacity: 0.3 }}>📋</div>
+            좌측에서 관리계획서를 선택하세요
+          </div>
         ) : (
-          <div className="erp-panel">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-              <div>
-                <span style={{ fontWeight: 700 }}>{selected.cp_no}</span>
-                <span style={{ marginLeft: 8, fontSize: 12, color: 'var(--text-sm)' }}>{selected.part_no} — {selected.part_name} Rev.{selected.revision}</span>
-                <span className={`badge ${selected.status === '승인완료' ? 'badge-green' : 'badge-gray'}`} style={{ marginLeft: 8, fontSize: 10 }}>{selected.status}</span>
-              </div>
-              <div style={{ display: 'flex', gap: 6 }}>
+          <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 6, overflow: 'hidden' }}>
+            {/* SAP-style title bar */}
+            <div style={{ background: '#0d1f3c', color: '#fff', padding: '10px 16px', display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span style={{ fontSize: 11, opacity: 0.5, letterSpacing: 1 }}>관리계획서</span>
+              <span style={{ fontWeight: 700, fontSize: 14 }}>{selected.cp_no}</span>
+              <span style={{ fontSize: 12, opacity: 0.7 }}>{selected.part_no} — {selected.part_name} Rev.{selected.revision}</span>
+              <span className={`badge ${selected.status === '승인완료' ? 'badge-green' : 'badge-gray'}`} style={{ fontSize: 10 }}>{selected.status}</span>
+              <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
                 {isManager() && selected.status !== '승인완료' && (
                   <button className="btn btn-sm btn-success" onClick={() => approvePlan(selected.id)}>승인</button>
                 )}
-                <button className="btn btn-sm btn-outline" onClick={() => printControlPlan(selected)}>🖨 PDF 출력</button>
-                <button className="btn btn-sm btn-primary" onClick={() => { setEditItem(null); setShowItemModal(true) }}>＋ 항목 추가</button>
+                <button className="btn btn-sm" style={{ background: 'rgba(255,255,255,0.15)', color: '#fff', border: '1px solid rgba(255,255,255,0.25)', borderRadius: 4, padding: '3px 10px', cursor: 'pointer', fontSize: 11 }} onClick={() => printControlPlan(selected)}>🖨 PDF 출력</button>
               </div>
             </div>
-            <div className="table-wrap" style={{ maxHeight: 420 }}>
-              <table>
-                <thead><tr>
-                  <th>공정No</th><th>공정명</th><th>설비</th><th>관리특성</th>
-                  <th>특성유형</th><th>규격</th><th>샘플</th><th>주기</th>
-                  <th>관리방법</th><th>반응계획</th><th>관리</th>
-                </tr></thead>
-                <tbody>
-                  {(selected.items || []).length === 0 && <tr><td colSpan={11} className="empty">항목 없음</td></tr>}
-                  {(selected.items || []).map(it => (
-                    <tr key={it.id}>
-                      <td style={{ fontSize: 11 }}>{it.process_no || '—'}</td>
-                      <td style={{ fontWeight: 500 }}>{it.process_name}</td>
-                      <td style={{ fontSize: 11 }}>{it.machine || '—'}</td>
-                      <td style={{ fontWeight: 600 }}>{it.characteristic_name}</td>
-                      <td>
-                        <span className={`badge ${it.char_type === 'KPC' ? 'badge-red' : it.char_type === 'KCC' ? 'badge-amber' : it.char_type === '특별특성' ? 'badge-purple' : 'badge-gray'}`} style={{ fontSize: 10 }}>
-                          {it.char_type}
-                        </span>
-                      </td>
-                      <td style={{ fontSize: 11 }}>
-                        {it.spec_nominal != null ? `${it.spec_nominal}` : ''}
-                        {it.spec_upper != null ? ` +${it.spec_upper}` : ''}
-                        {it.spec_lower != null ? ` ${it.spec_lower}` : ''}
-                        {it.unit ? ` ${it.unit}` : ''}
-                      </td>
-                      <td style={{ fontSize: 11 }}>{it.sample_size}</td>
-                      <td style={{ fontSize: 11 }}>{it.sample_freq}</td>
-                      <td style={{ fontSize: 11 }}>{it.control_method}</td>
-                      <td style={{ fontSize: 11, maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis' }}>{it.reaction_plan}</td>
-                      <td>
-                        <div style={{ display: 'flex', gap: 3 }}>
-                          <button className="btn btn-sm btn-outline" style={{ fontSize: 10 }} onClick={() => startEditItem(it)}>수정</button>
-                          <button className="btn btn-sm" style={{ fontSize: 10, background: '#fee2e2', color: '#dc2626', border: 'none' }} onClick={() => deleteItem(it.id)}>삭제</button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+
+            {/* SAP-style tab navigation */}
+            <div style={{ display: 'flex', borderBottom: '2px solid #0d1f3c', background: '#f0f3f8' }}>
+              {[
+                { id: 'master', label: '기본정보' },
+                { id: 'items', label: `측정항목 (${(selected.items || []).length})` },
+                { id: 'attachments', label: '첨부파일' },
+                { id: 'history', label: '승인이력' },
+              ].map(t => (
+                <button key={t.id} onClick={() => setDetailTab(t.id)} style={{
+                  padding: '9px 20px', fontSize: 12, fontWeight: detailTab === t.id ? 700 : 400,
+                  background: detailTab === t.id ? '#fff' : 'transparent',
+                  border: 'none', borderBottom: detailTab === t.id ? '2px solid #0d1f3c' : '2px solid transparent',
+                  cursor: 'pointer', color: detailTab === t.id ? '#0d1f3c' : 'var(--text-sm)',
+                  marginBottom: '-2px', transition: 'all 0.1s',
+                }}>{t.label}</button>
+              ))}
+            </div>
+
+            {/* Tab content */}
+            <div style={{ padding: 20 }}>
+              {detailTab === 'master' && (
+                <div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 40px', marginBottom: 20 }}>
+                    {[
+                      { label: '관리계획서 번호', value: selected.cp_no },
+                      { label: '품번', value: selected.part_no },
+                      { label: '품명', value: selected.part_name || '—' },
+                      { label: '고객사', value: selected.customer || '—' },
+                      { label: '계획 유형', value: selected.plan_type },
+                      { label: 'Revision', value: selected.revision },
+                      { label: '적용일', value: selected.effective_date || '—' },
+                      { label: '상태', value: selected.status },
+                    ].map(f => (
+                      <div key={f.label} style={{ display: 'flex', alignItems: 'center', borderBottom: '1px solid var(--border)', padding: '9px 0', gap: 0 }}>
+                        <span style={{ fontSize: 11, color: 'var(--text-sm)', width: 130, flexShrink: 0 }}>{f.label}</span>
+                        <span style={{ fontWeight: 500, fontSize: 12 }}>{f.value}</span>
+                      </div>
+                    ))}
+                  </div>
+                  {selected.note && (
+                    <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 4, padding: '8px 12px', fontSize: 12 }}>
+                      <span style={{ fontWeight: 600, marginRight: 6, color: '#92400e' }}>비고:</span>{selected.note}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {detailTab === 'items' && (
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 10 }}>
+                    <button className="btn btn-sm btn-primary" onClick={() => { setEditItem(null); setShowItemModal(true) }}>＋ 항목 추가</button>
+                  </div>
+                  <div className="table-wrap" style={{ maxHeight: 420 }}>
+                    <table>
+                      <thead><tr>
+                        <th>공정No</th><th>공정명</th><th>설비</th><th>관리특성</th>
+                        <th>특성유형</th><th>규격</th><th>샘플</th><th>주기</th>
+                        <th>관리방법</th><th>반응계획</th><th>관리</th>
+                      </tr></thead>
+                      <tbody>
+                        {(selected.items || []).length === 0 && <tr><td colSpan={11} className="empty">항목 없음 — 위 버튼으로 추가하세요</td></tr>}
+                        {(selected.items || []).map(it => (
+                          <tr key={it.id}>
+                            <td style={{ fontSize: 11 }}>{it.process_no || '—'}</td>
+                            <td style={{ fontWeight: 500 }}>{it.process_name}</td>
+                            <td style={{ fontSize: 11 }}>{it.machine || '—'}</td>
+                            <td style={{ fontWeight: 600 }}>{it.characteristic_name}</td>
+                            <td>
+                              <span className={`badge ${it.char_type === 'KPC' ? 'badge-red' : it.char_type === 'KCC' ? 'badge-amber' : it.char_type === '특별특성' ? 'badge-purple' : 'badge-gray'}`} style={{ fontSize: 10 }}>
+                                {it.char_type}
+                              </span>
+                            </td>
+                            <td style={{ fontSize: 11 }}>
+                              {it.spec_nominal != null ? `${it.spec_nominal}` : ''}
+                              {it.spec_upper != null ? ` +${it.spec_upper}` : ''}
+                              {it.spec_lower != null ? ` ${it.spec_lower}` : ''}
+                              {it.unit ? ` ${it.unit}` : ''}
+                            </td>
+                            <td style={{ fontSize: 11 }}>{it.sample_size}</td>
+                            <td style={{ fontSize: 11 }}>{it.sample_freq}</td>
+                            <td style={{ fontSize: 11 }}>{it.control_method}</td>
+                            <td style={{ fontSize: 11, maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis' }}>{it.reaction_plan}</td>
+                            <td>
+                              <div style={{ display: 'flex', gap: 3 }}>
+                                <button className="btn btn-sm btn-outline" style={{ fontSize: 10 }} onClick={() => startEditItem(it)}>수정</button>
+                                <button className="btn btn-sm" style={{ fontSize: 10, background: '#fee2e2', color: '#dc2626', border: 'none' }} onClick={() => deleteItem(it.id)}>삭제</button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {detailTab === 'attachments' && (
+                <div style={{ textAlign: 'center', padding: '48px 0', color: 'var(--text-sm)' }}>
+                  <div style={{ fontSize: 40, marginBottom: 12, opacity: 0.3 }}>📎</div>
+                  <div style={{ marginBottom: 4 }}>첨부파일</div>
+                  <div style={{ fontSize: 11 }}>관리계획서 원본, 도면 등을 여기에 첨부할 수 있습니다 (개발 중)</div>
+                </div>
+              )}
+
+              {detailTab === 'history' && (
+                <div style={{ textAlign: 'center', padding: '48px 0', color: 'var(--text-sm)' }}>
+                  <div style={{ fontSize: 40, marginBottom: 12, opacity: 0.3 }}>📋</div>
+                  <div style={{ marginBottom: 4 }}>승인이력</div>
+                  <div style={{ fontSize: 11 }}>개정 이력 및 승인 기록이 표시됩니다 (개발 중)</div>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -472,6 +547,7 @@ export function PfmeaPanel() {
     action_taken: '', new_severity: '', new_occurrence: '', new_detection: '',
     sort_order: 0,
   })
+  const [detailTab, setDetailTab] = useState('master')
 
   const load = useCallback(() => {
     api.get('/quality-adv/pfmea').then(r => setList(r.data)).catch(() => {})
@@ -479,7 +555,7 @@ export function PfmeaPanel() {
   }, [])
   useEffect(() => { load() }, [load])
 
-  const selectPfmea = (p) => api.get(`/quality-adv/pfmea/${p.id}`).then(r => setSelected(r.data)).catch(() => {})
+  const selectPfmea = (p) => { setDetailTab('master'); api.get(`/quality-adv/pfmea/${p.id}`).then(r => setSelected(r.data)).catch(() => {}) }
 
   const savePfmea = async () => {
     await api.post('/quality-adv/pfmea', form).catch(e => alert(e.response?.data?.detail || '오류'))
@@ -560,57 +636,150 @@ export function PfmeaPanel() {
 
       <div>
         {!selected ? (
-          <div className="erp-panel" style={{ textAlign: 'center', padding: 60, color: 'var(--text-sm)' }}>좌측에서 PFMEA를 선택하세요</div>
+          <div className="erp-panel" style={{ textAlign: 'center', padding: 60, color: 'var(--text-sm)' }}>
+            <div style={{ fontSize: 32, marginBottom: 8, opacity: 0.3 }}>⚙️</div>
+            좌측에서 PFMEA를 선택하세요
+          </div>
         ) : (
-          <div className="erp-panel">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-              <div>
-                <span style={{ fontWeight: 700 }}>{selected.pfmea_no}</span>
-                <span style={{ marginLeft: 8, fontSize: 12, color: 'var(--text-sm)' }}>{selected.part_no} — {selected.part_name}</span>
-              </div>
-              <div style={{ display: 'flex', gap: 6 }}>
-                <button className="btn btn-sm btn-outline" onClick={() => printPfmea(selected)}>🖨 PDF 출력</button>
-                <button className="btn btn-sm btn-primary" onClick={() => { setEditItem(null); setShowItemModal(true) }}>＋ 항목 추가</button>
+          <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 6, overflow: 'hidden' }}>
+            {/* SAP-style title bar */}
+            <div style={{ background: '#0d1f3c', color: '#fff', padding: '10px 16px', display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span style={{ fontSize: 11, opacity: 0.5, letterSpacing: 1 }}>PFMEA</span>
+              <span style={{ fontWeight: 700, fontSize: 14 }}>{selected.pfmea_no}</span>
+              <span style={{ fontSize: 12, opacity: 0.7 }}>{selected.part_no} — {selected.part_name} Rev.{selected.revision}</span>
+              <span className={`badge ${selected.status === '승인완료' ? 'badge-green' : selected.status === '검토완료' ? 'badge-blue' : 'badge-gray'}`} style={{ fontSize: 10 }}>{selected.status}</span>
+              <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
+                <button className="btn btn-sm" style={{ background: 'rgba(255,255,255,0.15)', color: '#fff', border: '1px solid rgba(255,255,255,0.25)', borderRadius: 4, padding: '3px 10px', cursor: 'pointer', fontSize: 11 }} onClick={() => printPfmea(selected)}>🖨 PDF 출력</button>
               </div>
             </div>
-            <div className="table-wrap" style={{ maxHeight: 440 }}>
-              <table>
-                <thead><tr>
-                  <th>공정단계</th><th>잠재적 고장형태</th><th>고장영향</th>
-                  <th style={{ textAlign: 'center' }}>S</th><th>고장원인</th>
-                  <th style={{ textAlign: 'center' }}>O</th><th>현 관리방법</th>
-                  <th style={{ textAlign: 'center' }}>D</th><th style={{ textAlign: 'center' }}>RPN</th>
-                  <th>개선조치</th><th style={{ textAlign: 'center' }}>개선 RPN</th><th>관리</th>
-                </tr></thead>
-                <tbody>
-                  {(selected.items || []).length === 0 && <tr><td colSpan={12} className="empty">항목 없음</td></tr>}
-                  {(selected.items || []).map(it => (
-                    <tr key={it.id} style={{ background: it.rpn >= 200 ? '#fef2f2' : it.rpn >= 100 ? '#fffbeb' : undefined }}>
-                      <td style={{ fontWeight: 500 }}>{it.process_step}</td>
-                      <td>{it.failure_mode}</td>
-                      <td style={{ fontSize: 11 }}>{it.failure_effect}</td>
-                      <td style={{ textAlign: 'center', fontWeight: 700, color: SOD_COLORS[it.severity] }}>{it.severity}</td>
-                      <td style={{ fontSize: 11 }}>{it.failure_cause}</td>
-                      <td style={{ textAlign: 'center', fontWeight: 700, color: SOD_COLORS[it.occurrence] }}>{it.occurrence}</td>
-                      <td style={{ fontSize: 11 }}>{it.current_control}</td>
-                      <td style={{ textAlign: 'center', fontWeight: 700, color: SOD_COLORS[it.detection] }}>{it.detection}</td>
-                      <td style={{ textAlign: 'center' }}>
-                        <span style={{ fontWeight: 700, fontSize: 13, color: rpnColor(it.rpn) }}>{it.rpn}</span>
-                      </td>
-                      <td style={{ fontSize: 11 }}>{it.action_taken || it.action_required || '—'}</td>
-                      <td style={{ textAlign: 'center' }}>
-                        {it.new_rpn ? <span style={{ fontWeight: 700, color: rpnColor(it.new_rpn) }}>{it.new_rpn}</span> : '—'}
-                      </td>
-                      <td>
-                        <div style={{ display: 'flex', gap: 3 }}>
-                          <button className="btn btn-sm btn-outline" style={{ fontSize: 10 }} onClick={() => startEditItem(it)}>수정</button>
-                          <button className="btn btn-sm" style={{ fontSize: 10, background: '#fee2e2', color: '#dc2626', border: 'none' }} onClick={() => deleteItem(it.id)}>삭제</button>
-                        </div>
-                      </td>
-                    </tr>
+
+            {/* SAP-style tab navigation */}
+            <div style={{ display: 'flex', borderBottom: '2px solid #0d1f3c', background: '#f0f3f8' }}>
+              {[
+                { id: 'master', label: '기본정보' },
+                { id: 'items', label: `고장분석 항목 (${(selected.items || []).length})` },
+                { id: 'risk', label: 'RPN 요약' },
+                { id: 'history', label: '이력' },
+              ].map(t => (
+                <button key={t.id} onClick={() => setDetailTab(t.id)} style={{
+                  padding: '9px 20px', fontSize: 12, fontWeight: detailTab === t.id ? 700 : 400,
+                  background: detailTab === t.id ? '#fff' : 'transparent',
+                  border: 'none', borderBottom: detailTab === t.id ? '2px solid #0d1f3c' : '2px solid transparent',
+                  cursor: 'pointer', color: detailTab === t.id ? '#0d1f3c' : 'var(--text-sm)',
+                  marginBottom: '-2px', transition: 'all 0.1s',
+                }}>{t.label}</button>
+              ))}
+            </div>
+
+            {/* Tab content */}
+            <div style={{ padding: 20 }}>
+              {detailTab === 'master' && (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 40px' }}>
+                  {[
+                    { label: 'PFMEA 번호', value: selected.pfmea_no },
+                    { label: '품번', value: selected.part_no },
+                    { label: '품명', value: selected.part_name || '—' },
+                    { label: 'Revision', value: selected.revision },
+                    { label: '상태', value: selected.status },
+                    { label: '총 항목 수', value: `${(selected.items || []).length}건` },
+                    { label: '고위험 (RPN≥200)', value: `${(selected.items || []).filter(i => i.rpn >= 200).length}건`, color: '#dc2626' },
+                    { label: '중위험 (RPN≥100)', value: `${(selected.items || []).filter(i => i.rpn >= 100 && i.rpn < 200).length}건`, color: '#d97706' },
+                  ].map(f => (
+                    <div key={f.label} style={{ display: 'flex', alignItems: 'center', borderBottom: '1px solid var(--border)', padding: '9px 0' }}>
+                      <span style={{ fontSize: 11, color: 'var(--text-sm)', width: 130, flexShrink: 0 }}>{f.label}</span>
+                      <span style={{ fontWeight: 500, fontSize: 12, color: f.color || 'var(--text)' }}>{f.value}</span>
+                    </div>
                   ))}
-                </tbody>
-              </table>
+                </div>
+              )}
+
+              {detailTab === 'items' && (
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 10 }}>
+                    <button className="btn btn-sm btn-primary" onClick={() => { setEditItem(null); setShowItemModal(true) }}>＋ 항목 추가</button>
+                  </div>
+                  <div className="table-wrap" style={{ maxHeight: 440 }}>
+                    <table>
+                      <thead><tr>
+                        <th>공정단계</th><th>잠재적 고장형태</th><th>고장영향</th>
+                        <th style={{ textAlign: 'center' }}>S</th><th>고장원인</th>
+                        <th style={{ textAlign: 'center' }}>O</th><th>현 관리방법</th>
+                        <th style={{ textAlign: 'center' }}>D</th><th style={{ textAlign: 'center' }}>RPN</th>
+                        <th>개선조치</th><th style={{ textAlign: 'center' }}>개선 RPN</th><th>관리</th>
+                      </tr></thead>
+                      <tbody>
+                        {(selected.items || []).length === 0 && <tr><td colSpan={12} className="empty">항목 없음 — 위 버튼으로 추가하세요</td></tr>}
+                        {(selected.items || []).map(it => (
+                          <tr key={it.id} style={{ background: it.rpn >= 200 ? '#fef2f2' : it.rpn >= 100 ? '#fffbeb' : undefined }}>
+                            <td style={{ fontWeight: 500 }}>{it.process_step}</td>
+                            <td>{it.failure_mode}</td>
+                            <td style={{ fontSize: 11 }}>{it.failure_effect}</td>
+                            <td style={{ textAlign: 'center', fontWeight: 700, color: SOD_COLORS[it.severity] }}>{it.severity}</td>
+                            <td style={{ fontSize: 11 }}>{it.failure_cause}</td>
+                            <td style={{ textAlign: 'center', fontWeight: 700, color: SOD_COLORS[it.occurrence] }}>{it.occurrence}</td>
+                            <td style={{ fontSize: 11 }}>{it.current_control}</td>
+                            <td style={{ textAlign: 'center', fontWeight: 700, color: SOD_COLORS[it.detection] }}>{it.detection}</td>
+                            <td style={{ textAlign: 'center' }}>
+                              <span style={{ fontWeight: 700, fontSize: 13, color: rpnColor(it.rpn) }}>{it.rpn}</span>
+                            </td>
+                            <td style={{ fontSize: 11 }}>{it.action_taken || it.action_required || '—'}</td>
+                            <td style={{ textAlign: 'center' }}>
+                              {it.new_rpn ? <span style={{ fontWeight: 700, color: rpnColor(it.new_rpn) }}>{it.new_rpn}</span> : '—'}
+                            </td>
+                            <td>
+                              <div style={{ display: 'flex', gap: 3 }}>
+                                <button className="btn btn-sm btn-outline" style={{ fontSize: 10 }} onClick={() => startEditItem(it)}>수정</button>
+                                <button className="btn btn-sm" style={{ fontSize: 10, background: '#fee2e2', color: '#dc2626', border: 'none' }} onClick={() => deleteItem(it.id)}>삭제</button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {detailTab === 'risk' && (
+                <div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12, marginBottom: 20 }}>
+                    {[
+                      { label: '고위험 (RPN ≥ 200)', count: (selected.items||[]).filter(i=>i.rpn>=200).length, color: '#dc2626', bg: '#fef2f2' },
+                      { label: '중위험 (100 ≤ RPN < 200)', count: (selected.items||[]).filter(i=>i.rpn>=100&&i.rpn<200).length, color: '#d97706', bg: '#fffbeb' },
+                      { label: '저위험 (RPN < 100)', count: (selected.items||[]).filter(i=>i.rpn<100).length, color: '#16a34a', bg: '#f0fdf4' },
+                    ].map(k => (
+                      <div key={k.label} style={{ background: k.bg, border: `1px solid ${k.color}30`, borderRadius: 8, padding: '16px 20px', textAlign: 'center' }}>
+                        <div style={{ fontSize: 11, color: 'var(--text-sm)', marginBottom: 4 }}>{k.label}</div>
+                        <div style={{ fontSize: 28, fontWeight: 700, color: k.color }}>{k.count}</div>
+                      </div>
+                    ))}
+                  </div>
+                  {(selected.items||[]).filter(i=>i.rpn>=100).length > 0 && (
+                    <div className="table-wrap">
+                      <table>
+                        <thead><tr><th>공정단계</th><th>고장형태</th><th style={{ textAlign: 'center' }}>RPN</th><th>개선조치</th></tr></thead>
+                        <tbody>
+                          {(selected.items||[]).filter(i=>i.rpn>=100).sort((a,b)=>b.rpn-a.rpn).map(it=>(
+                            <tr key={it.id} style={{ background: it.rpn>=200?'#fef2f2':'#fffbeb' }}>
+                              <td style={{ fontWeight: 500 }}>{it.process_step}</td>
+                              <td>{it.failure_mode}</td>
+                              <td style={{ textAlign: 'center', fontWeight: 700, fontSize: 14, color: rpnColor(it.rpn) }}>{it.rpn}</td>
+                              <td style={{ fontSize: 11 }}>{it.action_required || '개선조치 미등록'}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {detailTab === 'history' && (
+                <div style={{ textAlign: 'center', padding: '48px 0', color: 'var(--text-sm)' }}>
+                  <div style={{ fontSize: 40, marginBottom: 12, opacity: 0.3 }}>📋</div>
+                  <div>개정 이력 및 검토/승인 기록 (개발 중)</div>
+                </div>
+              )}
             </div>
           </div>
         )}

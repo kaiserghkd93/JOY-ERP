@@ -103,15 +103,23 @@ def all_items(user: User = Depends(get_current_user), db: Session = Depends(get_
     for po in pos:
         if po.unit_price:
             price_map[po.part_no] = float(po.unit_price)
-    return [
-        {
-            "part_no": it.part_no,
-            "item_name": it.name,
-            "item_unit": it.unit or "EA",
-            "unit_price": price_map.get(it.part_no, 0.0),
-        }
-        for it in items
-    ]
+    # 이 업체의 품목만 우선 표시 (발주 이력 기준), 없으면 전체 마스터
+    partner_parts = set(price_map.keys())
+    def _sort_key(it):
+        return (0 if it.part_no in partner_parts else 1, it.name)
+    return sorted(
+        [
+            {
+                "part_no": it.part_no,
+                "item_name": it.name,
+                "item_unit": it.unit or "EA",
+                # 발주단가 → 기준구매단가 순으로 fallback
+                "unit_price": price_map.get(it.part_no) or float(it.std_buy_price or 0),
+            }
+            for it in items
+        ],
+        key=lambda x: (0 if x["part_no"] in partner_parts else 1, x["item_name"])
+    )
 
 
 # ── 납품명세서 발행 ──────────────────────────────────────────────
