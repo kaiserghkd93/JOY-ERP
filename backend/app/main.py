@@ -74,7 +74,8 @@ with engine.connect().execution_options(isolation_level="AUTOCOMMIT") as _ddl:
             _ddl.execute(_text(f"ALTER TYPE defectsourcetype ADD VALUE IF NOT EXISTS '{_dst}'"))
         except Exception:
             pass
-    for _ir in ['검사대기','합격','불합격','부분합격']:
+    # inspectionresult: SQLAlchemy가 str enum name(키)으로 저장 → 키 이름으로 ADD VALUE
+    for _ir in ['pending_insp', 'pass_', 'fail', 'partial', '검사대기', '합격', '불합격', '부분합격']:
         try:
             _ddl.execute(_text(f"ALTER TYPE inspectionresult ADD VALUE IF NOT EXISTS '{_ir}'"))
         except Exception:
