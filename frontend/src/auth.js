@@ -4,7 +4,7 @@ const API = import.meta.env.VITE_API_URL || ''
 // null = 전체 접근 (admin)
 const ROLE_PERMISSIONS = {
   admin:      null,  // 나만 (외주구매·계정관리 포함 전체)
-  executive:  ['/', '/report', '/dashboard', '/monthly-sales', '/monthly-purchase', '/sales-target', '/inventory', '/cost', '/cost-actual', '/mrp'],
+  executive:  ['/', '/report', '/dashboard', '/monthly-sales', '/monthly-purchase', '/sales-target', '/inventory', '/cost', '/cost-actual', '/mrp', '/management'],
   manager:    ['/', '/sales-target', '/cost-actual'],
   accounting: ['/', '/invoice', '/monthly-sales', '/monthly-purchase', '/sales-target', '/report', '/inventory', '/cost-actual'],
   sales:      ['/', '/sales', '/invoice', '/monthly-sales', '/sales-target', '/inventory'],
@@ -21,7 +21,7 @@ const ROLE_PERMISSIONS = {
   owner:      ['/', '/inventory', '/inv-adjust', '/invoice', '/sales', '/monthly-sales', '/sales-target',
                 '/quality', '/production', '/production-plan', '/production-mrp',
                 '/cost', '/cost-actual', '/mold', '/master', '/bom',
-                '/purchase', '/mrp', '/monthly-purchase'],
+                '/purchase', '/mrp', '/monthly-purchase', '/management'],
   supplier:   ['/'],
 }
 

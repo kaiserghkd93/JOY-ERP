@@ -794,17 +794,19 @@ def cancel_receipt(gr_no: str, db: Session = Depends(get_db)):
 
 @router.delete("/receipts/{gr_no}/purge")
 def purge_receipt(gr_no: str, db: Session = Depends(get_db)):
-    """관리자 전용: 입고전표 + 검사결과 + NCR 완전 삭제 (테스트 데이터 정리용)
-    pending 상태인 입고전표만 삭제 가능. confirmed는 /reverse 사용.
-    """
-    from app.routers.auth import get_current_user
+    """관리자 전용: 입고전표 + 검사결과 + NCR + 재고원장 완전 삭제 (테스트 데이터 정리용)"""
     from app.models.quality import Inspection, NonConformance
+    from app.models.ledger import StockLedger
 
     r = db.get(Receipt, gr_no)
     if not r:
         raise HTTPException(404, f"입고 없음: {gr_no}")
+
+    # 확정 입고인 경우 — 재고원장 항목도 함께 삭제
     if r.status == ReceiptStatus.confirmed:
-        raise HTTPException(400, "확정된 입고전표는 purge 불가 — /receipts/{gr_no}/reverse 사용")
+        ledger_rows = db.query(StockLedger).filter(StockLedger.ref_no == gr_no).all()
+        for row in ledger_rows:
+            db.delete(row)
 
     # NCR 삭제 (이의신청 포함 cascade)
     ncrs = db.query(NonConformance).filter(NonConformance.gr_no == gr_no).all()

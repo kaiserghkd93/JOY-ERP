@@ -25,6 +25,7 @@ const UserAdmin      = lazy(() => import('./pages/UserAdmin'))
 const Mrp            = lazy(() => import('./pages/Mrp'))
 const CostActual     = lazy(() => import('./pages/CostActual'))
 const InvAdjust      = lazy(() => import('./pages/InvAdjust'))
+const Management     = lazy(() => import('./pages/Management'))
 
 // GNB: 대분류 / LNB: 소분류
 const allMenus = [
@@ -62,6 +63,9 @@ const allMenus = [
   ]},
   { id: 'mold', label: '금형', items: [
     { to: '/mold', label: '금형 수주관리' },
+  ]},
+  { id: 'management', label: '경영관리', items: [
+    { to: '/management', label: '경영 코크핏' },
   ]},
   { id: 'master', label: '기준정보', items: [
     { to: '/master',     label: '품목·거래처' },
@@ -265,6 +269,9 @@ export default function App() {
             } />
             <Route path="/inv-adjust" element={
               <ProtectedRoute path="/inv-adjust"><InvAdjust /></ProtectedRoute>
+            } />
+            <Route path="/management" element={
+              <ProtectedRoute path="/management"><Management /></ProtectedRoute>
             } />
           </Routes>
         </Suspense>
