@@ -285,6 +285,14 @@ def run_mrp(
         )
 
         buy_amt = sum(r["estimated_amount"] for r in purchase_requirements if r["need_order"])
+        # 디버그: 수요 품목별 BOM 라인 정보
+        debug_bom = {
+            pno: [
+                {"comp": b.component_part_no, "qty_per": float(b.qty_per), "unit": b.unit}
+                for b in all_bom_map.get(pno, [])
+            ]
+            for pno in demand
+        }
         return {
             "year": year,
             "month": month,
@@ -296,6 +304,8 @@ def run_mrp(
                 "estimated_purchase_amount": round(buy_amt, 0),
                 "need_production_count": sum(1 for r in production_requirements if r["need_order"]),
             },
+            "_debug_bom": debug_bom,
+            "_debug_purchase_demand": {k: round(v, 4) for k, v in purchase_demand.items()},
         }
 
     except Exception as e:
