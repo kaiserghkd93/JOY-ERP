@@ -7,35 +7,36 @@ import { getRole } from '../auth'
 // ── 역할별 노출 섹션 정의 ─────────────────────────────────────────
 // true = 보임 / false = 숨김
 // 역할별 노출 섹션. 없는 역할은 admin과 동일하게 처리됨.
-// supplier_scorecard = 외주처 스코어카드 (총입고금액 포함) → 구매 담당만 표시
+// supplier_scorecard  = 외주처 스코어카드 (외주구매 전용 — 제조외주 품질·납기)
+// material_scorecard  = 자재 공급업체 스코어카드 (자재구매 전용 — 원자재 입고현황)
 const ROLE_SECTIONS = {
   // ── 관리·경영 ──────────────────────────────────────────────────
   admin: {
     summary: true, kpi_delivery: true, kpi_quality: true, kpi_inventory: true, kpi_profit: true,
     target: true, closing: true, stock_chart: true, monthly_trend: true,
     sales_table: true, purchase_table: true, customer_scorecard: true,
-    quality_dashboard: true, supplier_scorecard: true,
+    quality_dashboard: true, supplier_scorecard: true, material_scorecard: false,
   },
   executive: {
     // 대표/전무: 매출·이익·품질 요약. 구매·재고 세부 제외
     summary: true, kpi_delivery: true, kpi_quality: true, kpi_inventory: false, kpi_profit: true,
     target: true, closing: true, stock_chart: false, monthly_trend: true,
     sales_table: false, purchase_table: false, customer_scorecard: false,
-    quality_dashboard: true, supplier_scorecard: false,
+    quality_dashboard: true, supplier_scorecard: false, material_scorecard: false,
   },
   manager: {
-    // 상무: 전체에 준하되 외주처 세부 포함
+    // 상무: 전체에 준하되 외주처·자재 스코어카드 모두 포함
     summary: true, kpi_delivery: true, kpi_quality: true, kpi_inventory: true, kpi_profit: true,
     target: true, closing: true, stock_chart: false, monthly_trend: true,
     sales_table: false, purchase_table: false, customer_scorecard: true,
-    quality_dashboard: true, supplier_scorecard: true,
+    quality_dashboard: true, supplier_scorecard: true, material_scorecard: true,
   },
   owner: {
     // 오너: 목표달성률 + 품질 현황만
     summary: false, kpi_delivery: false, kpi_quality: false, kpi_inventory: false, kpi_profit: false,
     target: true, closing: false, stock_chart: false, monthly_trend: false,
     sales_table: false, purchase_table: false, customer_scorecard: false,
-    quality_dashboard: true, supplier_scorecard: false,
+    quality_dashboard: true, supplier_scorecard: false, material_scorecard: false,
   },
   // ── 재무·영업 ──────────────────────────────────────────────────
   accounting: {
@@ -43,36 +44,36 @@ const ROLE_SECTIONS = {
     summary: true, kpi_delivery: false, kpi_quality: false, kpi_inventory: true, kpi_profit: true,
     target: true, closing: true, stock_chart: false, monthly_trend: true,
     sales_table: true, purchase_table: true, customer_scorecard: false,
-    quality_dashboard: false, supplier_scorecard: false,
+    quality_dashboard: false, supplier_scorecard: false, material_scorecard: false,
   },
   sales: {
     // 영업: 매출·납기·고객사 현황. 구매·품질 제외
     summary: true, kpi_delivery: true, kpi_quality: false, kpi_inventory: false, kpi_profit: false,
     target: true, closing: false, stock_chart: false, monthly_trend: true,
     sales_table: true, purchase_table: false, customer_scorecard: true,
-    quality_dashboard: false, supplier_scorecard: false,
+    quality_dashboard: false, supplier_scorecard: false, material_scorecard: false,
   },
   shipping: {
     // 출하: 납기·매출·고객사 납기. 구매·품질 제외
     summary: true, kpi_delivery: true, kpi_quality: false, kpi_inventory: false, kpi_profit: false,
     target: true, closing: false, stock_chart: false, monthly_trend: false,
     sales_table: true, purchase_table: false, customer_scorecard: true,
-    quality_dashboard: false, supplier_scorecard: false,
+    quality_dashboard: false, supplier_scorecard: false, material_scorecard: false,
   },
   // ── 구매·자재 ──────────────────────────────────────────────────
   purchase: {
-    // 외주구매: 발주·입고·재고·불량률·외주처 스코어카드
+    // 외주구매: 발주·입고·재고·불량률·외주처 스코어카드(제조외주 전용)
     summary: true, kpi_delivery: false, kpi_quality: true, kpi_inventory: true, kpi_profit: false,
     target: false, closing: false, stock_chart: true, monthly_trend: false,
     sales_table: false, purchase_table: true, customer_scorecard: false,
-    quality_dashboard: false, supplier_scorecard: true,
+    quality_dashboard: false, supplier_scorecard: true, material_scorecard: false,
   },
   material: {
-    // 자재구매: 재고 현황만
-    summary: false, kpi_delivery: false, kpi_quality: false, kpi_inventory: true, kpi_profit: false,
+    // 자재구매: 재고현황 + 자재 공급업체 스코어카드(외주처 스코어 제외)
+    summary: true, kpi_delivery: false, kpi_quality: false, kpi_inventory: true, kpi_profit: false,
     target: false, closing: false, stock_chart: true, monthly_trend: false,
     sales_table: false, purchase_table: false, customer_scorecard: false,
-    quality_dashboard: false, supplier_scorecard: false,
+    quality_dashboard: false, supplier_scorecard: false, material_scorecard: true,
   },
   // ── 품질 ───────────────────────────────────────────────────────
   quality: {
@@ -80,14 +81,14 @@ const ROLE_SECTIONS = {
     summary: false, kpi_delivery: false, kpi_quality: true, kpi_inventory: false, kpi_profit: false,
     target: false, closing: false, stock_chart: false, monthly_trend: false,
     sales_table: false, purchase_table: false, customer_scorecard: false,
-    quality_dashboard: true, supplier_scorecard: false,
+    quality_dashboard: true, supplier_scorecard: false, material_scorecard: false,
   },
   quality_manager: {
     // 품질책임자: 품질 KPI + 납기준수율 + 고객사 납기 스코어카드. 구매·매출 제외
     summary: false, kpi_delivery: true, kpi_quality: true, kpi_inventory: false, kpi_profit: false,
     target: false, closing: false, stock_chart: false, monthly_trend: false,
     sales_table: false, purchase_table: false, customer_scorecard: true,
-    quality_dashboard: true, supplier_scorecard: false,
+    quality_dashboard: true, supplier_scorecard: false, material_scorecard: false,
   },
   // ── 생산 ───────────────────────────────────────────────────────
   production: {
@@ -95,14 +96,14 @@ const ROLE_SECTIONS = {
     summary: false, kpi_delivery: false, kpi_quality: true, kpi_inventory: false, kpi_profit: false,
     target: false, closing: false, stock_chart: false, monthly_trend: false,
     sales_table: false, purchase_table: false, customer_scorecard: false,
-    quality_dashboard: true, supplier_scorecard: false,
+    quality_dashboard: true, supplier_scorecard: false, material_scorecard: false,
   },
   manufacturing: {
     // 제조관리 총괄: 불량률 + 재고 + 품질 대시보드. 매출·구매금액 제외
     summary: false, kpi_delivery: false, kpi_quality: true, kpi_inventory: true, kpi_profit: false,
     target: false, closing: false, stock_chart: true, monthly_trend: false,
     sales_table: false, purchase_table: false, customer_scorecard: false,
-    quality_dashboard: true, supplier_scorecard: false,
+    quality_dashboard: true, supplier_scorecard: false, material_scorecard: false,
   },
 }
 
@@ -182,7 +183,7 @@ export default function Dashboard() {
     setLoading(true)
     const needsKpi = show.summary || show.kpi_delivery || show.kpi_quality || show.kpi_inventory || show.kpi_profit
     const needsSales = show.summary || show.closing || show.sales_table
-    const needsPurchase = show.closing || show.purchase_table
+    const needsPurchase = show.closing || show.purchase_table || show.material_scorecard
     const calls = []
     if (show.target || show.quality_dashboard)
       calls.push(api.get(`/dashboard/sales-vs-target?year=${year}&month=${month}`).then(r => setVsTarget(r.data)).catch(() => {}))
@@ -708,6 +709,54 @@ export default function Dashboard() {
 
       {/* ── 품질 대시보드 ── */}
       {show.quality_dashboard && <QualityDashboard />}
+
+      {/* ── 자재 공급업체 스코어카드 (자재구매 전용) ── */}
+      {show.material_scorecard && (
+        <>
+          <div className="section-title mt-16">자재 공급업체 입고 현황 — {year}년 {month}월</div>
+          {purchaseByPartner.length > 0 ? (
+            <div className="table-wrap" style={{ marginBottom: 24 }}>
+              <table>
+                <thead>
+                  <tr>
+                    <th style={{ width: 36 }}>순위</th>
+                    <th>공급업체명</th>
+                    <th className="text-right">이달 입고수량</th>
+                    <th className="text-right">이달 입고금액</th>
+                    <th className="text-right">비중</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {purchaseByPartner.map((r, i) => (
+                    <tr key={r.partner_id}>
+                      <td className="text-center" style={{ color: 'var(--text-sm)', fontSize: 12 }}>
+                        {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : i + 1}
+                      </td>
+                      <td style={{ fontWeight: 500 }}>{r.partner_name}</td>
+                      <td className="text-right">{r.qty.toLocaleString()}</td>
+                      <td className="text-right" style={{ fontWeight: 700, color: 'var(--primary)' }}>
+                        ₩{r.amount.toLocaleString()}
+                      </td>
+                      <td className="text-right" style={{ fontSize: 12, color: 'var(--text-sm)' }}>
+                        {purchaseTotal > 0 ? ((r.amount / purchaseTotal) * 100).toFixed(1) + '%' : '—'}
+                      </td>
+                    </tr>
+                  ))}
+                  <tr style={{ fontWeight: 700, borderTop: '2px solid var(--border)', background: '#f8fafc' }}>
+                    <td colSpan={3} className="text-right">합계</td>
+                    <td className="text-right" style={{ color: 'var(--primary)' }}>
+                      ₩{purchaseTotal.toLocaleString()}
+                    </td>
+                    <td className="text-right">100%</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="empty" style={{ marginBottom: 24 }}>이달 자재 입고 데이터 없음</div>
+          )}
+        </>
+      )}
 
       {/* ── 외주처 스코어카드 ── */}
       {show.supplier_scorecard && (
