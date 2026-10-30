@@ -83,9 +83,12 @@ def _explode_bom(
         return
     bom_lines = all_bom_map.get(part_no, [])
     if not bom_lines:
-        # BOM 없는 품목은 구매로 처리
-        purchase_demand[part_no] = purchase_demand.get(part_no, 0) + qty
-        demand_source.setdefault(part_no, []).append({"parent": parent_label, "qty": qty})
+        item = all_item_map.get(part_no)
+        itype = item.item_type if item else "raw"
+        # 완제품/반제품은 BOM 없어도 구매로 처리하지 않음 (prod_demand는 호출부에서 처리)
+        if itype not in MAKE_TYPES:
+            purchase_demand[part_no] = purchase_demand.get(part_no, 0) + qty
+            demand_source.setdefault(part_no, []).append({"parent": parent_label, "qty": qty})
         return
 
     for bom in bom_lines:
@@ -252,6 +255,11 @@ def run_mrp(
 
         for product_part_no, need_qty in demand.items():
             visited.add(product_part_no)
+            item = all_item_map.get(product_part_no)
+            itype = item.item_type if item else "raw"
+            # 완제품/반제품 수요는 생산오더 대상으로 직접 추가
+            if itype in MAKE_TYPES:
+                prod_demand[product_part_no] = prod_demand.get(product_part_no, 0) + float(need_qty)
             _explode_bom(
                 product_part_no, float(need_qty),
                 all_bom_map, all_item_map,
