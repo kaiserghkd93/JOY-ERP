@@ -4,6 +4,89 @@ import * as XLSX from 'xlsx'
 import api from '../api'
 import { getRole } from '../auth'
 
+// ── 역할별 노출 섹션 정의 ─────────────────────────────────────────
+// true = 보임 / false = 숨김
+const ROLE_SECTIONS = {
+  admin: {
+    summary: true, kpi_delivery: true, kpi_quality: true, kpi_inventory: true, kpi_profit: true,
+    target: true, closing: true, stock_chart: true, monthly_trend: true,
+    sales_table: true, purchase_table: true, customer_scorecard: true,
+    quality_dashboard: true, supplier_scorecard: true,
+  },
+  executive: {
+    summary: true, kpi_delivery: true, kpi_quality: true, kpi_inventory: false, kpi_profit: true,
+    target: true, closing: true, stock_chart: false, monthly_trend: true,
+    sales_table: false, purchase_table: false, customer_scorecard: false,
+    quality_dashboard: true, supplier_scorecard: false,
+  },
+  owner: {
+    summary: false, kpi_delivery: false, kpi_quality: false, kpi_inventory: false, kpi_profit: false,
+    target: true, closing: false, stock_chart: false, monthly_trend: false,
+    sales_table: false, purchase_table: false, customer_scorecard: false,
+    quality_dashboard: true, supplier_scorecard: false,
+  },
+  manager: {
+    summary: true, kpi_delivery: true, kpi_quality: true, kpi_inventory: true, kpi_profit: true,
+    target: true, closing: true, stock_chart: false, monthly_trend: true,
+    sales_table: false, purchase_table: false, customer_scorecard: true,
+    quality_dashboard: true, supplier_scorecard: true,
+  },
+  accounting: {
+    summary: true, kpi_delivery: false, kpi_quality: false, kpi_inventory: true, kpi_profit: true,
+    target: true, closing: true, stock_chart: false, monthly_trend: true,
+    sales_table: true, purchase_table: true, customer_scorecard: false,
+    quality_dashboard: false, supplier_scorecard: false,
+  },
+  sales: {
+    summary: true, kpi_delivery: true, kpi_quality: false, kpi_inventory: false, kpi_profit: false,
+    target: true, closing: false, stock_chart: false, monthly_trend: true,
+    sales_table: true, purchase_table: false, customer_scorecard: true,
+    quality_dashboard: false, supplier_scorecard: false,
+  },
+  purchase: {
+    summary: true, kpi_delivery: false, kpi_quality: true, kpi_inventory: true, kpi_profit: false,
+    target: false, closing: false, stock_chart: true, monthly_trend: false,
+    sales_table: false, purchase_table: true, customer_scorecard: false,
+    quality_dashboard: false, supplier_scorecard: true,
+  },
+  material: {
+    summary: false, kpi_delivery: false, kpi_quality: false, kpi_inventory: true, kpi_profit: false,
+    target: false, closing: false, stock_chart: true, monthly_trend: false,
+    sales_table: false, purchase_table: false, customer_scorecard: false,
+    quality_dashboard: false, supplier_scorecard: false,
+  },
+  quality: {
+    summary: false, kpi_delivery: false, kpi_quality: true, kpi_inventory: false, kpi_profit: false,
+    target: false, closing: false, stock_chart: false, monthly_trend: false,
+    sales_table: false, purchase_table: false, customer_scorecard: false,
+    quality_dashboard: true, supplier_scorecard: true,
+  },
+  quality_manager: {
+    summary: false, kpi_delivery: true, kpi_quality: true, kpi_inventory: false, kpi_profit: false,
+    target: false, closing: false, stock_chart: false, monthly_trend: false,
+    sales_table: false, purchase_table: false, customer_scorecard: true,
+    quality_dashboard: true, supplier_scorecard: true,
+  },
+  production: {
+    summary: false, kpi_delivery: false, kpi_quality: true, kpi_inventory: false, kpi_profit: false,
+    target: false, closing: false, stock_chart: false, monthly_trend: false,
+    sales_table: false, purchase_table: false, customer_scorecard: false,
+    quality_dashboard: true, supplier_scorecard: false,
+  },
+  manufacturing: {
+    summary: false, kpi_delivery: false, kpi_quality: true, kpi_inventory: true, kpi_profit: false,
+    target: false, closing: false, stock_chart: true, monthly_trend: false,
+    sales_table: false, purchase_table: false, customer_scorecard: false,
+    quality_dashboard: true, supplier_scorecard: false,
+  },
+  shipping: {
+    summary: true, kpi_delivery: true, kpi_quality: false, kpi_inventory: false, kpi_profit: false,
+    target: true, closing: false, stock_chart: false, monthly_trend: false,
+    sales_table: true, purchase_table: false, customer_scorecard: true,
+    quality_dashboard: false, supplier_scorecard: false,
+  },
+}
+
 function exportExcel(rows, columns, filename) {
   const data = [columns.map(c => c.label), ...rows.map(r => columns.map(c => r[c.key]))]
   const ws = XLSX.utils.aoa_to_sheet(data)
@@ -60,7 +143,8 @@ const customTooltipStyle = {
 export default function Dashboard() {
   const now = new Date()
   const role = getRole()
-  const isOwner = role === 'owner'
+  const show = ROLE_SECTIONS[role] || ROLE_SECTIONS.admin
+
   const [year, setYear] = useState(now.getFullYear())
   const [month, setMonth] = useState(now.getMonth() + 1)
   const [kpi, setKpi] = useState(null)
@@ -77,22 +161,30 @@ export default function Dashboard() {
 
   const load = () => {
     setLoading(true)
-    const calls = [
-      api.get(`/dashboard/quality-summary?year=${year}&month=${month}`).then(r => setQualityKpi(r.data)).catch(() => {}),
-      api.get(`/dashboard/sales-vs-target?year=${year}&month=${month}`).then(r => setVsTarget(r.data)).catch(() => {}),
-    ]
-    if (!isOwner) {
-      calls.push(
-        api.get(`/dashboard/kpi?year=${year}&month=${month}`).then(r => setKpi(r.data)).catch(() => {}),
-        api.get('/dashboard/supplier-scorecard').then(r => setScorecard(r.data)).catch(() => {}),
-        api.get(`/dashboard/customer-scorecard?year=${year}&month=${month}`).then(r => setCustomerScorecard(r.data)).catch(() => {}),
-        api.get(`/dashboard/monthly-closing?year=${year}&month=${month}`).then(r => setClosing(r.data)).catch(() => {}),
-        api.get('/dashboard/stock-summary').then(r => setStockSummary(r.data)).catch(() => {}),
-        api.get(`/dashboard/sales-by-partner?year=${year}&month=${month}`).then(r => setSalesByPartner(r.data)).catch(() => {}),
-        api.get(`/dashboard/purchase-by-partner?year=${year}&month=${month}`).then(r => setPurchaseByPartner(r.data)).catch(() => {}),
-        api.get(`/dashboard/monthly-trend?year=${year}`).then(r => setMonthlyTrend(r.data)).catch(() => {}),
-      )
-    }
+    const needsKpi = show.summary || show.kpi_delivery || show.kpi_quality || show.kpi_inventory || show.kpi_profit
+    const needsSales = show.summary || show.closing || show.sales_table
+    const needsPurchase = show.closing || show.purchase_table
+    const calls = []
+    if (show.target || show.quality_dashboard)
+      calls.push(api.get(`/dashboard/sales-vs-target?year=${year}&month=${month}`).then(r => setVsTarget(r.data)).catch(() => {}))
+    if (show.quality_dashboard)
+      calls.push(api.get(`/dashboard/quality-summary?year=${year}&month=${month}`).then(r => setQualityKpi(r.data)).catch(() => {}))
+    if (needsKpi)
+      calls.push(api.get(`/dashboard/kpi?year=${year}&month=${month}`).then(r => setKpi(r.data)).catch(() => {}))
+    if (show.supplier_scorecard)
+      calls.push(api.get('/dashboard/supplier-scorecard').then(r => setScorecard(r.data)).catch(() => {}))
+    if (show.customer_scorecard)
+      calls.push(api.get(`/dashboard/customer-scorecard?year=${year}&month=${month}`).then(r => setCustomerScorecard(r.data)).catch(() => {}))
+    if (show.closing)
+      calls.push(api.get(`/dashboard/monthly-closing?year=${year}&month=${month}`).then(r => setClosing(r.data)).catch(() => {}))
+    if (show.stock_chart)
+      calls.push(api.get('/dashboard/stock-summary').then(r => setStockSummary(r.data)).catch(() => {}))
+    if (needsSales)
+      calls.push(api.get(`/dashboard/sales-by-partner?year=${year}&month=${month}`).then(r => setSalesByPartner(r.data)).catch(() => {}))
+    if (needsPurchase)
+      calls.push(api.get(`/dashboard/purchase-by-partner?year=${year}&month=${month}`).then(r => setPurchaseByPartner(r.data)).catch(() => {}))
+    if (show.monthly_trend)
+      calls.push(api.get(`/dashboard/monthly-trend?year=${year}`).then(r => setMonthlyTrend(r.data)).catch(() => {}))
     Promise.all(calls).finally(() => setLoading(false))
   }
 
@@ -114,7 +206,6 @@ export default function Dashboard() {
     return (
       <div>
         <div className="section-title mt-16">품질 대시보드 — {qualityKpi.year}년 {qualityKpi.month}월</div>
-        {/* KPI 3종 */}
         <div className="kpi-grid" style={{ marginBottom: 16 }}>
           <KpiCard icon="🔍" label="수입검사 불량율"
             value={insp.defect_rate != null ? insp.defect_rate.toFixed(2) : null} unit=" %"
@@ -145,115 +236,36 @@ export default function Dashboard() {
             trendDir={po.defect_rate == null ? null : po.defect_rate <= 2 ? 'up' : 'down'}
           />
         </div>
-        {/* 불량유형 상위 5 */}
         {loss.top_defects.length > 0 && (
           <>
-          <div className="section-title" style={{fontSize:13}}>공정불량 유형별 순위 (이번 달)</div>
-          <div className="table-wrap" style={{marginBottom:16}}>
-            <table style={{fontSize:12}}>
-              <thead><tr><th>순위</th><th>불량유형</th><th className="text-right">불량수량</th><th className="text-right">불량금액(원)</th></tr></thead>
-              <tbody>
-                {loss.top_defects.map((d,i) => (
-                  <tr key={d.defect_type}>
-                    <td style={{textAlign:'center',color:'var(--text-sm)'}}>{i===0?'🥇':i===1?'🥈':i===2?'🥉':i+1}</td>
-                    <td style={{fontWeight:i<3?600:400}}>{d.defect_type}</td>
-                    <td className="text-right">{d.qty.toLocaleString()}</td>
-                    <td className="text-right" style={{color:'var(--danger)',fontWeight:600}}>{fmtW(d.cost)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+            <div className="section-title" style={{ fontSize: 13 }}>공정불량 유형별 순위 (이번 달)</div>
+            <div className="table-wrap" style={{ marginBottom: 16 }}>
+              <table style={{ fontSize: 12 }}>
+                <thead><tr><th>순위</th><th>불량유형</th><th className="text-right">불량수량</th><th className="text-right">불량금액(원)</th></tr></thead>
+                <tbody>
+                  {loss.top_defects.map((d, i) => (
+                    <tr key={d.defect_type}>
+                      <td style={{ textAlign: 'center', color: 'var(--text-sm)' }}>{i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : i + 1}</td>
+                      <td style={{ fontWeight: i < 3 ? 600 : 400 }}>{d.defect_type}</td>
+                      <td className="text-right">{d.qty.toLocaleString()}</td>
+                      <td className="text-right" style={{ color: 'var(--danger)', fontWeight: 600 }}>{fmtW(d.cost)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </>
         )}
-        {/* 검사 현황 */}
-        <div className="table-wrap" style={{marginBottom:16}}>
-          <table style={{fontSize:12}}>
+        <div className="table-wrap" style={{ marginBottom: 16 }}>
+          <table style={{ fontSize: 12 }}>
             <thead><tr><th>구분</th><th className="text-right">건수</th><th className="text-right">비고</th></tr></thead>
             <tbody>
-              <tr><td>총 검사</td><td className="text-right">{insp.total}건</td><td className="text-right" style={{color:'var(--text-sm)'}}>불량수량 {insp.total_fail_qty.toLocaleString()}개</td></tr>
-              <tr style={{background:'#f0fdf4'}}><td>합격</td><td className="text-right" style={{color:'var(--success)',fontWeight:600}}>{insp.pass}건</td><td className="text-right" style={{color:'var(--text-sm)'}}>{insp.pass_rate != null ? insp.pass_rate.toFixed(1)+'%' : '—'}</td></tr>
-              <tr style={{background:'#fef2f2'}}><td>불합격</td><td className="text-right" style={{color:'var(--danger)',fontWeight:600}}>{insp.fail}건</td><td className="text-right" style={{color:'var(--text-sm)'}}>{insp.total > 0 ? (100 - insp.pass_rate).toFixed(1)+'%' : '—'}</td></tr>
+              <tr><td>총 검사</td><td className="text-right">{insp.total}건</td><td className="text-right" style={{ color: 'var(--text-sm)' }}>불량수량 {insp.total_fail_qty.toLocaleString()}개</td></tr>
+              <tr style={{ background: '#f0fdf4' }}><td>합격</td><td className="text-right" style={{ color: 'var(--success)', fontWeight: 600 }}>{insp.pass}건</td><td className="text-right" style={{ color: 'var(--text-sm)' }}>{insp.pass_rate != null ? insp.pass_rate.toFixed(1) + '%' : '—'}</td></tr>
+              <tr style={{ background: '#fef2f2' }}><td>불합격</td><td className="text-right" style={{ color: 'var(--danger)', fontWeight: 600 }}>{insp.fail}건</td><td className="text-right" style={{ color: 'var(--text-sm)' }}>{insp.total > 0 ? (100 - insp.pass_rate).toFixed(1) + '%' : '—'}</td></tr>
             </tbody>
           </table>
         </div>
-      </div>
-    )
-  }
-
-  if (isOwner) {
-    return (
-      <div>
-        <div className="toolbar" style={{ marginBottom: 16 }}>
-          <select value={year} onChange={e => setYear(+e.target.value)} style={{ width: 90 }}>
-            {[2024, 2025, 2026, 2027].map(y => <option key={y}>{y}</option>)}
-          </select>
-          <select value={month} onChange={e => setMonth(+e.target.value)} style={{ width: 75 }}>
-            {Array.from({ length: 12 }, (_, i) => i + 1).map(m =>
-              <option key={m} value={m}>{m}월</option>
-            )}
-          </select>
-          <button className="btn btn-outline" onClick={load} disabled={loading}>{loading ? '...' : '⟳ 새로고침'}</button>
-          <div className="spacer" />
-          <span className="text-muted">{year}년 {month}월 기준</span>
-        </div>
-
-        {/* ── 목표매출 대시보드 ── */}
-        {vsTarget && (
-          <div className="card" style={{ marginBottom: 16, padding: '12px 16px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 10 }}>
-              <div className="section-title" style={{ margin: 0 }}>{year}년 {month}월 매출 목표 달성률</div>
-              <div className="spacer" />
-              <span style={{ fontSize: 13, fontWeight: 800, color: vsTarget.total_rate != null && vsTarget.total_rate >= 100 ? 'var(--success)' : vsTarget.total_rate != null && vsTarget.total_rate >= 70 ? '#E67E22' : 'var(--danger)' }}>
-                {vsTarget.total_rate != null ? `${vsTarget.total_rate}%` : '목표 미설정'}
-              </span>
-            </div>
-            {vsTarget.total_target > 0 && (
-              <div style={{ marginBottom: 14 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--text-sm)', marginBottom: 3 }}>
-                  <span>실적 ₩{Math.round(vsTarget.total_actual / 10000).toLocaleString()}만</span>
-                  <span>목표 ₩{Math.round(vsTarget.total_target / 10000).toLocaleString()}만</span>
-                </div>
-                <div style={{ background: 'var(--border)', borderRadius: 4, height: 10, overflow: 'hidden' }}>
-                  <div style={{ width: `${Math.min(100, vsTarget.total_rate ?? 0)}%`, height: '100%', background: vsTarget.total_rate >= 100 ? 'var(--success)' : vsTarget.total_rate >= 70 ? '#E67E22' : 'var(--danger)', borderRadius: 4, transition: 'width .4s' }} />
-                </div>
-              </div>
-            )}
-            {vsTarget.details.length > 0 && (
-              <table style={{ fontSize: 12 }}>
-                <thead><tr><th>거래처</th><th className="text-right">목표(만원)</th><th className="text-right">실적(만원)</th><th className="text-right">달성률</th><th style={{width:120}}>진행도</th></tr></thead>
-                <tbody>
-                  {vsTarget.details.map(d => {
-                    const rate = d.rate ?? 0
-                    const barColor = rate >= 100 ? 'var(--success)' : rate >= 70 ? '#E67E22' : d.target > 0 ? 'var(--danger)' : 'var(--primary)'
-                    return (
-                      <tr key={d.partner_id}>
-                        <td style={{ fontWeight: 600 }}>{d.partner_name}</td>
-                        <td className="text-right">{d.target > 0 ? `₩${Math.round(d.target/10000).toLocaleString()}만` : <span className="text-muted">—</span>}</td>
-                        <td className="text-right" style={{ color: 'var(--primary)', fontWeight: 700 }}>
-                          {d.actual > 0 ? `₩${Math.round(d.actual/10000).toLocaleString()}만` : <span className="text-muted">—</span>}
-                        </td>
-                        <td className="text-right" style={{ fontWeight: 700, color: barColor }}>
-                          {d.rate != null ? `${d.rate}%` : <span className="text-muted">—</span>}
-                        </td>
-                        <td style={{ padding: '4px 8px' }}>
-                          {d.target > 0 ? (
-                            <div style={{ background: 'var(--border)', borderRadius: 3, height: 7, overflow: 'hidden' }}>
-                              <div style={{ width: `${Math.min(100, rate)}%`, height: '100%', background: barColor, borderRadius: 3 }} />
-                            </div>
-                          ) : <span className="text-muted" style={{ fontSize: 10 }}>목표없음</span>}
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            )}
-          </div>
-        )}
-
-        {/* ── 품질 대시보드 ── */}
-        <QualityDashboard />
       </div>
     )
   }
@@ -278,71 +290,83 @@ export default function Dashboard() {
         <span className="text-muted">{year}년 {month}월 기준</span>
       </div>
 
-      {/* ── 발주 현황 바 ── */}
-      <div style={{ display: 'flex', gap: 12, marginBottom: 16 }}>
-        <SummaryBox label="오늘 신규 발주" value={kpi?.po_today} unit="건"
-          color="#1d4ed8" bg="#eff6ff" border="#bfdbfe" />
-        <SummaryBox label="이달 누계 발주" value={kpi?.po_this_month} unit="건"
-          color="#92400e" bg="#fefce8" border="#fde68a" />
-        <SummaryBox label="미입고 진행 중" value={kpi?.po_open} unit="건"
-          color="#166534" bg="#f0fdf4" border="#bbf7d0" />
-        <SummaryBox label="이달 매출 합계"
-          value={salesTotal > 0 ? `₩${Math.round(salesTotal/10000).toLocaleString()}만` : '—'}
-          unit=""
-          color="#7c3aed" bg="#faf5ff" border="#e9d5ff" />
-      </div>
+      {/* ── 발주/매출 요약 바 ── */}
+      {show.summary && (
+        <div style={{ display: 'flex', gap: 12, marginBottom: 16 }}>
+          <SummaryBox label="오늘 신규 발주" value={kpi?.po_today} unit="건"
+            color="#1d4ed8" bg="#eff6ff" border="#bfdbfe" />
+          <SummaryBox label="이달 누계 발주" value={kpi?.po_this_month} unit="건"
+            color="#92400e" bg="#fefce8" border="#fde68a" />
+          <SummaryBox label="미입고 진행 중" value={kpi?.po_open} unit="건"
+            color="#166534" bg="#f0fdf4" border="#bbf7d0" />
+          <SummaryBox label="이달 매출 합계"
+            value={salesTotal > 0 ? `₩${Math.round(salesTotal / 10000).toLocaleString()}만` : '—'}
+            unit=""
+            color="#7c3aed" bg="#faf5ff" border="#e9d5ff" />
+        </div>
+      )}
 
-      {/* ── KPI 카드 4종 ── */}
-      <div className="kpi-grid" style={{ marginBottom: 18 }}>
-        <KpiCard
-          icon="📦" label="납기준수율 (On-time)"
-          value={kpi != null ? kpi.delivery_rate.toFixed(1) : null} unit=" %"
-          sub="고객사 출하 기준"
-          accent={kpi != null && kpi.delivery_rate >= 90 ? 'var(--success)' : kpi != null && kpi.delivery_rate >= 70 ? 'var(--warn)' : 'var(--danger)'}
-          trend={kpi != null && kpi.delivery_rate >= 90 ? '양호' : '주의 필요'}
-          trendDir={kpi != null && kpi.delivery_rate >= 90 ? 'up' : kpi != null ? 'down' : null}
-        />
-        <KpiCard
-          icon="🔍" label="불량율"
-          value={kpi != null ? kpi.defect_rate.toFixed(2) : null} unit=" %"
-          sub="수입검사 기준"
-          accent={kpi != null && kpi.defect_rate <= 1 ? 'var(--success)' : kpi != null && kpi.defect_rate <= 5 ? 'var(--warn)' : 'var(--danger)'}
-          trend={kpi != null && kpi.defect_rate <= 1 ? '양호' : '관리 필요'}
-          trendDir={kpi != null && kpi.defect_rate <= 1 ? 'up' : kpi != null ? 'down' : null}
-        />
-        <KpiCard
-          icon="🔄" label="재고회전율"
-          value={kpi != null ? kpi.inventory_turnover.toFixed(2) : null} unit=" 회"
-          sub={`${year}년 ${month}월 누계`}
-          accent="var(--primary)"
-        />
-        <KpiCard
-          icon="💹" label="매출총이익 / 마진율"
-          value={kpi != null ? `₩${Number(kpi.gross_profit).toLocaleString()}` : null}
-          sub={kpi != null ? `마진율 ${kpi.margin_rate.toFixed(1)}%` : ''}
-          accent={kpi != null && kpi.margin_rate > 0 ? 'var(--success)' : 'var(--danger)'}
-          trend={kpi != null ? `${kpi.margin_rate.toFixed(1)}% 마진` : null}
-          trendDir={kpi != null && kpi.margin_rate > 0 ? 'up' : kpi != null ? 'down' : null}
-        />
-      </div>
+      {/* ── KPI 카드 (역할별 표시) ── */}
+      {(show.kpi_delivery || show.kpi_quality || show.kpi_inventory || show.kpi_profit) && (
+        <div className="kpi-grid" style={{ marginBottom: 18 }}>
+          {show.kpi_delivery && (
+            <KpiCard
+              icon="📦" label="납기준수율 (On-time)"
+              value={kpi != null ? kpi.delivery_rate.toFixed(1) : null} unit=" %"
+              sub="고객사 출하 기준"
+              accent={kpi != null && kpi.delivery_rate >= 90 ? 'var(--success)' : kpi != null && kpi.delivery_rate >= 70 ? 'var(--warn)' : 'var(--danger)'}
+              trend={kpi != null && kpi.delivery_rate >= 90 ? '양호' : '주의 필요'}
+              trendDir={kpi != null && kpi.delivery_rate >= 90 ? 'up' : kpi != null ? 'down' : null}
+            />
+          )}
+          {show.kpi_quality && (
+            <KpiCard
+              icon="🔍" label="불량율"
+              value={kpi != null ? kpi.defect_rate.toFixed(2) : null} unit=" %"
+              sub="수입검사 기준"
+              accent={kpi != null && kpi.defect_rate <= 1 ? 'var(--success)' : kpi != null && kpi.defect_rate <= 5 ? 'var(--warn)' : 'var(--danger)'}
+              trend={kpi != null && kpi.defect_rate <= 1 ? '양호' : '관리 필요'}
+              trendDir={kpi != null && kpi.defect_rate <= 1 ? 'up' : kpi != null ? 'down' : null}
+            />
+          )}
+          {show.kpi_inventory && (
+            <KpiCard
+              icon="🔄" label="재고회전율"
+              value={kpi != null ? kpi.inventory_turnover.toFixed(2) : null} unit=" 회"
+              sub={`${year}년 ${month}월 누계`}
+              accent="var(--primary)"
+            />
+          )}
+          {show.kpi_profit && (
+            <KpiCard
+              icon="💹" label="매출총이익 / 마진율"
+              value={kpi != null ? `₩${Number(kpi.gross_profit).toLocaleString()}` : null}
+              sub={kpi != null ? `마진율 ${kpi.margin_rate.toFixed(1)}%` : ''}
+              accent={kpi != null && kpi.margin_rate > 0 ? 'var(--success)' : 'var(--danger)'}
+              trend={kpi != null ? `${kpi.margin_rate.toFixed(1)}% 마진` : null}
+              trendDir={kpi != null && kpi.margin_rate > 0 ? 'up' : kpi != null ? 'down' : null}
+            />
+          )}
+        </div>
+      )}
 
       {/* ── 매출 목표 달성률 ── */}
-      {vsTarget && (
+      {show.target && vsTarget && (
         <div className="card" style={{ marginBottom: 16, padding: '12px 16px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 10 }}>
             <div className="section-title" style={{ margin: 0 }}>
               {year}년 {month}월 매출 목표 달성률
             </div>
-            <a href="/sales-target" style={{ fontSize: 11, color: 'var(--primary)', textDecoration: 'none' }}>
-              목표 수정 →
-            </a>
+            {show.closing && (
+              <a href="/sales-target" style={{ fontSize: 11, color: 'var(--primary)', textDecoration: 'none' }}>
+                목표 수정 →
+              </a>
+            )}
             <div className="spacer" />
             <span style={{ fontSize: 13, fontWeight: 800, color: vsTarget.total_rate != null && vsTarget.total_rate >= 100 ? 'var(--success)' : vsTarget.total_rate != null && vsTarget.total_rate >= 70 ? '#E67E22' : 'var(--danger)' }}>
               {vsTarget.total_rate != null ? `${vsTarget.total_rate}%` : '목표 미설정'}
             </span>
           </div>
-
-          {/* 전체 프로그레스바 */}
           {vsTarget.total_target > 0 && (
             <div style={{ marginBottom: 14 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--text-sm)', marginBottom: 3 }}>
@@ -360,8 +384,6 @@ export default function Dashboard() {
               </div>
             </div>
           )}
-
-          {/* 거래처별 테이블 */}
           {vsTarget.details.length > 0 && (
             <table style={{ fontSize: 12 }}>
               <thead>
@@ -380,9 +402,9 @@ export default function Dashboard() {
                   return (
                     <tr key={d.partner_id}>
                       <td style={{ fontWeight: 600 }}>{d.partner_name}</td>
-                      <td className="text-right">{d.target > 0 ? `₩${Math.round(d.target/10000).toLocaleString()}만` : <span className="text-muted">—</span>}</td>
+                      <td className="text-right">{d.target > 0 ? `₩${Math.round(d.target / 10000).toLocaleString()}만` : <span className="text-muted">—</span>}</td>
                       <td className="text-right" style={{ color: 'var(--primary)', fontWeight: 700 }}>
-                        {d.actual > 0 ? `₩${Math.round(d.actual/10000).toLocaleString()}만` : <span className="text-muted">—</span>}
+                        {d.actual > 0 ? `₩${Math.round(d.actual / 10000).toLocaleString()}만` : <span className="text-muted">—</span>}
                       </td>
                       <td className="text-right" style={{ fontWeight: 700, color: barColor }}>
                         {d.rate != null ? `${d.rate}%` : <span className="text-muted">—</span>}
@@ -400,7 +422,6 @@ export default function Dashboard() {
               </tbody>
             </table>
           )}
-
           {vsTarget.details.length === 0 && (
             <div className="text-muted" style={{ fontSize: 12, padding: '8px 0' }}>
               목표 매출 데이터 없음 — <a href="/sales-target" style={{ color: 'var(--primary)' }}>목표 설정하기</a>
@@ -410,288 +431,310 @@ export default function Dashboard() {
       )}
 
       {/* ── 월 마감 + 재고 차트 ── */}
-      <div className="chart-row">
-        {/* 월 마감 */}
-        <div className="card">
-          <div className="section-title">{year}년 {month}월 마감 요약</div>
-          <table>
-            <tbody>
-              <tr style={{ background: '#eff6ff' }}>
-                <td style={{ fontWeight: 700, paddingLeft: 8 }}>매출</td>
-                <td className="text-right" style={{ fontWeight: 700, color: '#1d4ed8' }}>
-                  ₩{totalSales.toLocaleString()}
-                </td>
-              </tr>
-              {salesByPartner.map(r => (
-                <tr key={r.partner_id}>
-                  <td style={{ paddingLeft: 20, fontSize: 12, color: 'var(--text-sm)' }}>└ {r.partner_name}</td>
-                  <td className="text-right" style={{ fontSize: 12, color: '#1d4ed8' }}>₩{r.amount.toLocaleString()}</td>
-                </tr>
-              ))}
-              {salesByPartner.length === 0 && (
-                <tr><td colSpan={2} style={{ paddingLeft: 20, fontSize: 12, color: 'var(--text-xs)' }}>출고 데이터 없음</td></tr>
-              )}
-              <tr style={{ background: '#fff7ed', borderTop: '1px solid var(--border)' }}>
-                <td style={{ fontWeight: 700, paddingLeft: 8 }}>매입</td>
-                <td className="text-right" style={{ fontWeight: 700, color: '#ea580c' }}>
-                  ₩{totalPurchases.toLocaleString()}
-                </td>
-              </tr>
-              {purchaseByPartner.map(r => (
-                <tr key={r.partner_id}>
-                  <td style={{ paddingLeft: 20, fontSize: 12, color: 'var(--text-sm)' }}>└ {r.partner_name}</td>
-                  <td className="text-right" style={{ fontSize: 12, color: '#ea580c' }}>₩{r.amount.toLocaleString()}</td>
-                </tr>
-              ))}
-              {purchaseByPartner.length === 0 && (
-                <tr><td colSpan={2} style={{ paddingLeft: 20, fontSize: 12, color: 'var(--text-xs)' }}>입고 데이터 없음</td></tr>
-              )}
-              <tr style={{ borderTop: '2px solid var(--border)', background: grossProfit >= 0 ? '#f0fdf4' : '#fef2f2' }}>
-                <td style={{ fontWeight: 700, paddingLeft: 8 }}>총이익</td>
-                <td className="text-right" style={{ fontWeight: 800, color: grossProfit >= 0 ? 'var(--success)' : 'var(--danger)' }}>
-                  ₩{grossProfit.toLocaleString()}
-                  {totalSales > 0 && (
-                    <span style={{ fontSize: 11, fontWeight: 400, marginLeft: 6, color: 'var(--text-sm)' }}>
-                      ({((grossProfit / totalSales) * 100).toFixed(1)}%)
-                    </span>
-                  )}
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-
-        {/* 재고 차트 */}
-        <div className="card">
-          <div className="section-title">재고 현황 — 상위 10개 (수량 기준)</div>
-          {stockSummary.length > 0 ? (
-            <ResponsiveContainer width="100%" height={190}>
-              <BarChart data={stockSummary.slice(0, 10)} margin={{ top: 4, right: 0, left: -15, bottom: 38 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
-                <XAxis dataKey="part_no" tick={{ fontSize: 9 }} angle={-40} textAnchor="end" interval={0} />
-                <YAxis tick={{ fontSize: 10 }} />
-                <Tooltip
-                  contentStyle={customTooltipStyle}
-                  formatter={v => [`${v.toLocaleString()}개`, '재고수량']}
-                />
-                <Bar dataKey="current_stock" fill="#2563EB" name="재고수량" radius={[3, 3, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          ) : <div className="empty">재고 데이터 없음</div>}
-        </div>
-      </div>
-
-      {/* ── 월별 트렌드 ── */}
-      <div className="card" style={{ marginBottom: 18 }}>
-        <div className="section-title" style={{ marginBottom: 12 }}>
-          월별 매출 / 매입 트렌드 ({year}년)
-        </div>
-        <ResponsiveContainer width="100%" height={230}>
-          <LineChart data={monthlyTrend} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
-            <XAxis dataKey="month" tickFormatter={m => `${m}월`} tick={{ fontSize: 11 }} />
-            <YAxis
-              tick={{ fontSize: 10 }}
-              tickFormatter={v => v >= 1000000 ? `${(v/1000000).toFixed(0)}M` : v >= 1000 ? `${(v/1000).toFixed(0)}K` : v}
-            />
-            <Tooltip
-              contentStyle={customTooltipStyle}
-              formatter={(v, name) => [`₩${Number(v).toLocaleString()}`, name]}
-              labelFormatter={m => `${m}월`}
-            />
-            <Legend />
-            <Line type="monotone" dataKey="sales"     stroke="#2563EB" strokeWidth={2.5} name="매출" dot={{ r: 3, fill: '#2563EB' }} />
-            <Line type="monotone" dataKey="purchases" stroke="#ea580c" strokeWidth={2.5} name="매입" dot={{ r: 3, fill: '#ea580c' }} />
-            <Line type="monotone" dataKey="profit"    stroke="#059669" strokeWidth={2} strokeDasharray="5 3" name="이익" dot={{ r: 3, fill: '#059669' }} />
-          </LineChart>
-        </ResponsiveContainer>
-      </div>
-
-      {/* ── 고객사별 출고 테이블 ── */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-        <div className="section-title" style={{ margin: 0 }}>고객사별 출고금액 — {year}년 {month}월</div>
-        <button className="btn btn-sm btn-outline" onClick={() => exportExcel(
-          salesByPartner,
-          [{ key: 'partner_name', label: '고객사명' }, { key: 'qty', label: '출고수량' }, { key: 'amount', label: '출고금액(원)' }],
-          `고객사별_출고금액_${year}${String(month).padStart(2,'0')}.xlsx`
-        )}>↓ Excel</button>
-      </div>
-      <div className="table-wrap" style={{ marginBottom: 18 }}>
-        <table>
-          <thead>
-            <tr>
-              <th style={{ width: 36 }}>순위</th>
-              <th>고객사명</th>
-              <th className="text-right">출고수량</th>
-              <th className="text-right">출고금액</th>
-              <th className="text-right">비율</th>
-            </tr>
-          </thead>
-          <tbody>
-            {salesByPartner.length === 0 && <tr><td colSpan={5} className="empty">해당 월 출고 데이터 없음</td></tr>}
-            {salesByPartner.map((r, i) => (
-              <tr key={r.partner_id}>
-                <td className="text-center" style={{ color: 'var(--text-sm)', fontSize: 12 }}>
-                  {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : i + 1}
-                </td>
-                <td style={{ fontWeight: 500 }}>{r.partner_name}</td>
-                <td className="text-right">{r.qty.toLocaleString()}</td>
-                <td className="text-right" style={{ fontWeight: 600, color: 'var(--primary)' }}>₩{r.amount.toLocaleString()}</td>
-                <td className="text-right" style={{ fontSize: 12, color: 'var(--text-sm)' }}>
-                  {salesTotal > 0 ? ((r.amount / salesTotal) * 100).toFixed(1) + '%' : '—'}
-                </td>
-              </tr>
-            ))}
-            {salesByPartner.length > 0 && (
-              <tr style={{ fontWeight: 700, borderTop: '2px solid var(--border)', background: '#f8fafc' }}>
-                <td colSpan={3} className="text-right">합계</td>
-                <td className="text-right" style={{ color: 'var(--primary)' }}>₩{salesTotal.toLocaleString()}</td>
-                <td className="text-right">100%</td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
-
-      {/* ── 외주처별 입고 테이블 ── */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-        <div className="section-title" style={{ margin: 0 }}>외주처별 입고금액 — {year}년 {month}월</div>
-        <button className="btn btn-sm btn-outline" onClick={() => exportExcel(
-          purchaseByPartner,
-          [{ key: 'partner_name', label: '외주처명' }, { key: 'qty', label: '입고수량' }, { key: 'amount', label: '입고금액(원)' }],
-          `외주처별_입고금액_${year}${String(month).padStart(2,'0')}.xlsx`
-        )}>↓ Excel</button>
-      </div>
-      <div className="table-wrap" style={{ marginBottom: 18 }}>
-        <table>
-          <thead>
-            <tr>
-              <th style={{ width: 36 }}>순위</th>
-              <th>외주처명</th>
-              <th className="text-right">입고수량</th>
-              <th className="text-right">입고금액</th>
-              <th className="text-right">비율</th>
-            </tr>
-          </thead>
-          <tbody>
-            {purchaseByPartner.length === 0 && <tr><td colSpan={5} className="empty">해당 월 입고 데이터 없음</td></tr>}
-            {purchaseByPartner.map((r, i) => (
-              <tr key={r.partner_id}>
-                <td className="text-center" style={{ color: 'var(--text-sm)', fontSize: 12 }}>{i + 1}</td>
-                <td style={{ fontWeight: 500 }}>{r.partner_name}</td>
-                <td className="text-right">{r.qty.toLocaleString()}</td>
-                <td className="text-right" style={{ fontWeight: 600, color: 'var(--success)' }}>₩{r.amount.toLocaleString()}</td>
-                <td className="text-right" style={{ fontSize: 12, color: 'var(--text-sm)' }}>
-                  {purchaseTotal > 0 ? ((r.amount / purchaseTotal) * 100).toFixed(1) + '%' : '—'}
-                </td>
-              </tr>
-            ))}
-            {purchaseByPartner.length > 0 && (
-              <tr style={{ fontWeight: 700, borderTop: '2px solid var(--border)', background: '#f8fafc' }}>
-                <td colSpan={3} className="text-right">합계</td>
-                <td className="text-right" style={{ color: 'var(--success)' }}>₩{purchaseTotal.toLocaleString()}</td>
-                <td className="text-right">100%</td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
-
-      {/* ── 고객사 납기준수율 스코어카드 ── */}
-      <div className="section-title mt-16">고객사 납기준수율 스코어카드</div>
-      {customerScorecard.length > 0 ? (
-        <div className="table-wrap" style={{ marginBottom: 18 }}>
-          <table>
-            <thead>
-              <tr>
-                <th>고객사명</th>
-                <th className="text-right">전체 수주</th>
-                <th className="text-right">출하완료</th>
-                <th className="text-right">납기준수</th>
-                <th>납기준수율</th>
-                <th className="text-right">총 출하금액</th>
-              </tr>
-            </thead>
-            <tbody>
-              {customerScorecard.map(c => {
-                const dr = c.delivery_rate
-                return (
-                  <tr key={c.partner_id}>
-                    <td style={{ fontWeight: 600 }}>{c.name}</td>
-                    <td className="text-right" style={{ color: 'var(--text-sm)' }}>{c.total_orders}건</td>
-                    <td className="text-right">{c.closed_orders}건</td>
-                    <td className="text-right" style={{ color: 'var(--primary)', fontWeight: 600 }}>{c.on_time}건</td>
-                    <td>
-                      {dr != null ? (
-                        <div className="stock-bar-wrap">
-                          <div className="stock-bar">
-                            <div className={`stock-bar-fill ${dr >= 90 ? '' : dr >= 70 ? 'warn' : 'danger'}`}
-                              style={{ width: `${Math.min(dr, 100)}%` }} />
-                          </div>
-                          <span className={`badge ${dr >= 90 ? 'badge-green' : dr >= 70 ? 'badge-amber' : 'badge-red'}`}
-                            style={{ minWidth: 52, justifyContent: 'center' }}>
-                            {dr.toFixed(1)}%
-                          </span>
-                        </div>
-                      ) : <span className="badge badge-gray">데이터없음</span>}
-                    </td>
-                    <td className="text-right" style={{ fontWeight: 600, color: 'var(--primary)' }}>
-                      ₩{Number(c.total_ship_amt).toLocaleString()}
+      {(show.closing || show.stock_chart) && (
+        <div className="chart-row">
+          {show.closing && (
+            <div className="card">
+              <div className="section-title">{year}년 {month}월 마감 요약</div>
+              <table>
+                <tbody>
+                  <tr style={{ background: '#eff6ff' }}>
+                    <td style={{ fontWeight: 700, paddingLeft: 8 }}>매출</td>
+                    <td className="text-right" style={{ fontWeight: 700, color: '#1d4ed8' }}>
+                      ₩{totalSales.toLocaleString()}
                     </td>
                   </tr>
-                )
-              })}
-            </tbody>
-          </table>
+                  {salesByPartner.map(r => (
+                    <tr key={r.partner_id}>
+                      <td style={{ paddingLeft: 20, fontSize: 12, color: 'var(--text-sm)' }}>└ {r.partner_name}</td>
+                      <td className="text-right" style={{ fontSize: 12, color: '#1d4ed8' }}>₩{r.amount.toLocaleString()}</td>
+                    </tr>
+                  ))}
+                  {salesByPartner.length === 0 && (
+                    <tr><td colSpan={2} style={{ paddingLeft: 20, fontSize: 12, color: 'var(--text-xs)' }}>출고 데이터 없음</td></tr>
+                  )}
+                  <tr style={{ background: '#fff7ed', borderTop: '1px solid var(--border)' }}>
+                    <td style={{ fontWeight: 700, paddingLeft: 8 }}>매입</td>
+                    <td className="text-right" style={{ fontWeight: 700, color: '#ea580c' }}>
+                      ₩{totalPurchases.toLocaleString()}
+                    </td>
+                  </tr>
+                  {purchaseByPartner.map(r => (
+                    <tr key={r.partner_id}>
+                      <td style={{ paddingLeft: 20, fontSize: 12, color: 'var(--text-sm)' }}>└ {r.partner_name}</td>
+                      <td className="text-right" style={{ fontSize: 12, color: '#ea580c' }}>₩{r.amount.toLocaleString()}</td>
+                    </tr>
+                  ))}
+                  {purchaseByPartner.length === 0 && (
+                    <tr><td colSpan={2} style={{ paddingLeft: 20, fontSize: 12, color: 'var(--text-xs)' }}>입고 데이터 없음</td></tr>
+                  )}
+                  <tr style={{ borderTop: '2px solid var(--border)', background: grossProfit >= 0 ? '#f0fdf4' : '#fef2f2' }}>
+                    <td style={{ fontWeight: 700, paddingLeft: 8 }}>총이익</td>
+                    <td className="text-right" style={{ fontWeight: 800, color: grossProfit >= 0 ? 'var(--success)' : 'var(--danger)' }}>
+                      ₩{grossProfit.toLocaleString()}
+                      {totalSales > 0 && (
+                        <span style={{ fontSize: 11, fontWeight: 400, marginLeft: 6, color: 'var(--text-sm)' }}>
+                          ({((grossProfit / totalSales) * 100).toFixed(1)}%)
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {show.stock_chart && (
+            <div className="card">
+              <div className="section-title">재고 현황 — 상위 10개 (수량 기준)</div>
+              {stockSummary.length > 0 ? (
+                <ResponsiveContainer width="100%" height={190}>
+                  <BarChart data={stockSummary.slice(0, 10)} margin={{ top: 4, right: 0, left: -15, bottom: 38 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+                    <XAxis dataKey="part_no" tick={{ fontSize: 9 }} angle={-40} textAnchor="end" interval={0} />
+                    <YAxis tick={{ fontSize: 10 }} />
+                    <Tooltip
+                      contentStyle={customTooltipStyle}
+                      formatter={v => [`${v.toLocaleString()}개`, '재고수량']}
+                    />
+                    <Bar dataKey="current_stock" fill="#2563EB" name="재고수량" radius={[3, 3, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : <div className="empty">재고 데이터 없음</div>}
+            </div>
+          )}
         </div>
-      ) : (
-        <div className="empty" style={{ marginBottom: 18 }}>고객사 데이터 없음</div>
+      )}
+
+      {/* ── 월별 트렌드 ── */}
+      {show.monthly_trend && (
+        <div className="card" style={{ marginBottom: 18 }}>
+          <div className="section-title" style={{ marginBottom: 12 }}>
+            월별 매출 / 매입 트렌드 ({year}년)
+          </div>
+          <ResponsiveContainer width="100%" height={230}>
+            <LineChart data={monthlyTrend} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+              <XAxis dataKey="month" tickFormatter={m => `${m}월`} tick={{ fontSize: 11 }} />
+              <YAxis
+                tick={{ fontSize: 10 }}
+                tickFormatter={v => v >= 1000000 ? `${(v / 1000000).toFixed(0)}M` : v >= 1000 ? `${(v / 1000).toFixed(0)}K` : v}
+              />
+              <Tooltip
+                contentStyle={customTooltipStyle}
+                formatter={(v, name) => [`₩${Number(v).toLocaleString()}`, name]}
+                labelFormatter={m => `${m}월`}
+              />
+              <Legend />
+              <Line type="monotone" dataKey="sales"     stroke="#2563EB" strokeWidth={2.5} name="매출" dot={{ r: 3, fill: '#2563EB' }} />
+              <Line type="monotone" dataKey="purchases" stroke="#ea580c" strokeWidth={2.5} name="매입" dot={{ r: 3, fill: '#ea580c' }} />
+              <Line type="monotone" dataKey="profit"    stroke="#059669" strokeWidth={2} strokeDasharray="5 3" name="이익" dot={{ r: 3, fill: '#059669' }} />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+
+      {/* ── 고객사별 출고 테이블 ── */}
+      {show.sales_table && (
+        <>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+            <div className="section-title" style={{ margin: 0 }}>고객사별 출고금액 — {year}년 {month}월</div>
+            <button className="btn btn-sm btn-outline" onClick={() => exportExcel(
+              salesByPartner,
+              [{ key: 'partner_name', label: '고객사명' }, { key: 'qty', label: '출고수량' }, { key: 'amount', label: '출고금액(원)' }],
+              `고객사별_출고금액_${year}${String(month).padStart(2, '0')}.xlsx`
+            )}>↓ Excel</button>
+          </div>
+          <div className="table-wrap" style={{ marginBottom: 18 }}>
+            <table>
+              <thead>
+                <tr>
+                  <th style={{ width: 36 }}>순위</th>
+                  <th>고객사명</th>
+                  <th className="text-right">출고수량</th>
+                  <th className="text-right">출고금액</th>
+                  <th className="text-right">비율</th>
+                </tr>
+              </thead>
+              <tbody>
+                {salesByPartner.length === 0 && <tr><td colSpan={5} className="empty">해당 월 출고 데이터 없음</td></tr>}
+                {salesByPartner.map((r, i) => (
+                  <tr key={r.partner_id}>
+                    <td className="text-center" style={{ color: 'var(--text-sm)', fontSize: 12 }}>
+                      {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : i + 1}
+                    </td>
+                    <td style={{ fontWeight: 500 }}>{r.partner_name}</td>
+                    <td className="text-right">{r.qty.toLocaleString()}</td>
+                    <td className="text-right" style={{ fontWeight: 600, color: 'var(--primary)' }}>₩{r.amount.toLocaleString()}</td>
+                    <td className="text-right" style={{ fontSize: 12, color: 'var(--text-sm)' }}>
+                      {salesTotal > 0 ? ((r.amount / salesTotal) * 100).toFixed(1) + '%' : '—'}
+                    </td>
+                  </tr>
+                ))}
+                {salesByPartner.length > 0 && (
+                  <tr style={{ fontWeight: 700, borderTop: '2px solid var(--border)', background: '#f8fafc' }}>
+                    <td colSpan={3} className="text-right">합계</td>
+                    <td className="text-right" style={{ color: 'var(--primary)' }}>₩{salesTotal.toLocaleString()}</td>
+                    <td className="text-right">100%</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+
+      {/* ── 외주처별 입고 테이블 ── */}
+      {show.purchase_table && (
+        <>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+            <div className="section-title" style={{ margin: 0 }}>외주처별 입고금액 — {year}년 {month}월</div>
+            <button className="btn btn-sm btn-outline" onClick={() => exportExcel(
+              purchaseByPartner,
+              [{ key: 'partner_name', label: '외주처명' }, { key: 'qty', label: '입고수량' }, { key: 'amount', label: '입고금액(원)' }],
+              `외주처별_입고금액_${year}${String(month).padStart(2, '0')}.xlsx`
+            )}>↓ Excel</button>
+          </div>
+          <div className="table-wrap" style={{ marginBottom: 18 }}>
+            <table>
+              <thead>
+                <tr>
+                  <th style={{ width: 36 }}>순위</th>
+                  <th>외주처명</th>
+                  <th className="text-right">입고수량</th>
+                  <th className="text-right">입고금액</th>
+                  <th className="text-right">비율</th>
+                </tr>
+              </thead>
+              <tbody>
+                {purchaseByPartner.length === 0 && <tr><td colSpan={5} className="empty">해당 월 입고 데이터 없음</td></tr>}
+                {purchaseByPartner.map((r, i) => (
+                  <tr key={r.partner_id}>
+                    <td className="text-center" style={{ color: 'var(--text-sm)', fontSize: 12 }}>{i + 1}</td>
+                    <td style={{ fontWeight: 500 }}>{r.partner_name}</td>
+                    <td className="text-right">{r.qty.toLocaleString()}</td>
+                    <td className="text-right" style={{ fontWeight: 600, color: 'var(--success)' }}>₩{r.amount.toLocaleString()}</td>
+                    <td className="text-right" style={{ fontSize: 12, color: 'var(--text-sm)' }}>
+                      {purchaseTotal > 0 ? ((r.amount / purchaseTotal) * 100).toFixed(1) + '%' : '—'}
+                    </td>
+                  </tr>
+                ))}
+                {purchaseByPartner.length > 0 && (
+                  <tr style={{ fontWeight: 700, borderTop: '2px solid var(--border)', background: '#f8fafc' }}>
+                    <td colSpan={3} className="text-right">합계</td>
+                    <td className="text-right" style={{ color: 'var(--success)' }}>₩{purchaseTotal.toLocaleString()}</td>
+                    <td className="text-right">100%</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+
+      {/* ── 고객사 납기준수율 스코어카드 ── */}
+      {show.customer_scorecard && (
+        <>
+          <div className="section-title mt-16">고객사 납기준수율 스코어카드</div>
+          {customerScorecard.length > 0 ? (
+            <div className="table-wrap" style={{ marginBottom: 18 }}>
+              <table>
+                <thead>
+                  <tr>
+                    <th>고객사명</th>
+                    <th className="text-right">전체 수주</th>
+                    <th className="text-right">출하완료</th>
+                    <th className="text-right">납기준수</th>
+                    <th>납기준수율</th>
+                    <th className="text-right">총 출하금액</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {customerScorecard.map(c => {
+                    const dr = c.delivery_rate
+                    return (
+                      <tr key={c.partner_id}>
+                        <td style={{ fontWeight: 600 }}>{c.name}</td>
+                        <td className="text-right" style={{ color: 'var(--text-sm)' }}>{c.total_orders}건</td>
+                        <td className="text-right">{c.closed_orders}건</td>
+                        <td className="text-right" style={{ color: 'var(--primary)', fontWeight: 600 }}>{c.on_time}건</td>
+                        <td>
+                          {dr != null ? (
+                            <div className="stock-bar-wrap">
+                              <div className="stock-bar">
+                                <div className={`stock-bar-fill ${dr >= 90 ? '' : dr >= 70 ? 'warn' : 'danger'}`}
+                                  style={{ width: `${Math.min(dr, 100)}%` }} />
+                              </div>
+                              <span className={`badge ${dr >= 90 ? 'badge-green' : dr >= 70 ? 'badge-amber' : 'badge-red'}`}
+                                style={{ minWidth: 52, justifyContent: 'center' }}>
+                                {dr.toFixed(1)}%
+                              </span>
+                            </div>
+                          ) : <span className="badge badge-gray">데이터없음</span>}
+                        </td>
+                        <td className="text-right" style={{ fontWeight: 600, color: 'var(--primary)' }}>
+                          ₩{Number(c.total_ship_amt).toLocaleString()}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="empty" style={{ marginBottom: 18 }}>고객사 데이터 없음</div>
+          )}
+        </>
       )}
 
       {/* ── 품질 대시보드 ── */}
-      <QualityDashboard />
+      {show.quality_dashboard && <QualityDashboard />}
 
       {/* ── 외주처 스코어카드 ── */}
-      <div className="section-title mt-16">외주처 스코어카드</div>
-      {scorecard.length > 0 ? (
-        <div className="table-wrap" style={{ marginBottom: 24 }}>
-          <table>
-            <thead>
-              <tr>
-                <th>외주처명</th>
-                <th className="text-right">발주건수</th>
-                <th>On-time Rate</th>
-                <th>불량율</th>
-                <th className="text-right">총입고금액</th>
-              </tr>
-            </thead>
-            <tbody>
-              {scorecard.map(s => {
-                const dr = s.delivery_rate ?? null
-                const fr = s.defect_rate ?? null
-                return (
-                  <tr key={s.partner_id}>
-                    <td style={{ fontWeight: 500 }}>{s.name}</td>
-                    <td className="text-right">{s.total_pos}건</td>
-                    <td>
-                      {dr != null
-                        ? <span className={`badge ${dr >= 90 ? 'badge-green' : dr >= 70 ? 'badge-amber' : 'badge-red'}`}>{dr.toFixed(1)}%</span>
-                        : <span className="badge badge-gray">데이터없음</span>}
-                    </td>
-                    <td>
-                      {fr != null
-                        ? <span className={`badge ${fr <= 1 ? 'badge-green' : fr <= 5 ? 'badge-amber' : 'badge-red'}`}>{fr.toFixed(2)}%</span>
-                        : <span className="badge badge-gray">데이터없음</span>}
-                    </td>
-                    <td className="text-right">₩{Number(s.total_buy_amt ?? 0).toLocaleString()}</td>
+      {show.supplier_scorecard && (
+        <>
+          <div className="section-title mt-16">외주처 스코어카드</div>
+          {scorecard.length > 0 ? (
+            <div className="table-wrap" style={{ marginBottom: 24 }}>
+              <table>
+                <thead>
+                  <tr>
+                    <th>외주처명</th>
+                    <th className="text-right">발주건수</th>
+                    <th>On-time Rate</th>
+                    <th>불량율</th>
+                    <th className="text-right">총입고금액</th>
                   </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        </div>
-      ) : (
-        <div className="empty" style={{ marginBottom: 24 }}>외주처 데이터 없음 — 기준정보에서 거래처를 등록하세요</div>
+                </thead>
+                <tbody>
+                  {scorecard.map(s => {
+                    const dr = s.delivery_rate ?? null
+                    const fr = s.defect_rate ?? null
+                    return (
+                      <tr key={s.partner_id}>
+                        <td style={{ fontWeight: 500 }}>{s.name}</td>
+                        <td className="text-right">{s.total_pos}건</td>
+                        <td>
+                          {dr != null
+                            ? <span className={`badge ${dr >= 90 ? 'badge-green' : dr >= 70 ? 'badge-amber' : 'badge-red'}`}>{dr.toFixed(1)}%</span>
+                            : <span className="badge badge-gray">데이터없음</span>}
+                        </td>
+                        <td>
+                          {fr != null
+                            ? <span className={`badge ${fr <= 1 ? 'badge-green' : fr <= 5 ? 'badge-amber' : 'badge-red'}`}>{fr.toFixed(2)}%</span>
+                            : <span className="badge badge-gray">데이터없음</span>}
+                        </td>
+                        <td className="text-right">₩{Number(s.total_buy_amt ?? 0).toLocaleString()}</td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="empty" style={{ marginBottom: 24 }}>외주처 데이터 없음 — 기준정보에서 거래처를 등록하세요</div>
+          )}
+        </>
       )}
     </div>
   )
