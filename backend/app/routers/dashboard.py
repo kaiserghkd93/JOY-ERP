@@ -682,6 +682,107 @@ def stock_summary(db: Session = Depends(get_db)):
     return sorted(rows, key=lambda x: x["stock_value"], reverse=True)
 
 
+@router.get("/production-status")
+def production_status(year: int | None = None, month: int | None = None, db: Session = Depends(get_db)):
+    """생산/제조 대시보드 — 진행중 작업지시 + 이달 월 생산계획 vs 실적"""
+    from app.models.production import ProductionOrder, POrdStatus, MonthlyPlan, DailyActual
+    y = year or date.today().year
+    m = month or date.today().month
+    first_day = date(y, m, 1)
+    last_day  = date(y + 1, 1, 1) - timedelta(days=1) if m == 12 else date(y, m + 1, 1) - timedelta(days=1)
+
+    # ── 품목 맵 ─────────────────────────────────────────────────
+    item_map = {i.part_no: i.name for i in db.query(Item).all()}
+
+    # ── 작업지시 현황 (상태별 카운트) ───────────────────────────
+    from sqlalchemy import case
+    status_counts = db.query(
+        ProductionOrder.status,
+        func.count(ProductionOrder.pord_no).label("cnt"),
+    ).group_by(ProductionOrder.status).all()
+    cnt_map = {r.status: int(r.cnt) for r in status_counts}
+
+    # ── 진행중 작업지시 목록 ────────────────────────────────────
+    in_progress = db.query(ProductionOrder).filter(
+        ProductionOrder.status == POrdStatus.in_progress,
+    ).order_by(ProductionOrder.plan_date.asc()).all()
+
+    orders_out = []
+    for o in in_progress:
+        progress = round(o.actual_qty / o.planned_qty * 100, 1) if o.planned_qty > 0 else 0.0
+        orders_out.append({
+            "pord_no": o.pord_no,
+            "part_no": o.part_no,
+            "part_name": item_map.get(o.part_no, o.part_no),
+            "mold_no": o.mold_no,
+            "planned_qty": o.planned_qty,
+            "actual_qty": o.actual_qty,
+            "progress": progress,
+            "plan_date": o.plan_date.isoformat() if o.plan_date else None,
+            "status": o.status,
+        })
+
+    # ── 이달 월 생산계획 vs 실적 ────────────────────────────────
+    plans = db.query(MonthlyPlan).filter(
+        MonthlyPlan.year == y,
+        MonthlyPlan.month == m,
+    ).all()
+
+    plan_ids = [p.id for p in plans]
+    actual_sums = {}
+    if plan_ids:
+        rows = db.query(
+            DailyActual.plan_id,
+            func.sum(DailyActual.actual_qty).label("total"),
+        ).filter(
+            DailyActual.plan_id.in_(plan_ids),
+        ).group_by(DailyActual.plan_id).all()
+        actual_sums = {r.plan_id: int(r.total or 0) for r in rows}
+
+    monthly_plan_out = []
+    for p in plans:
+        actual = actual_sums.get(p.id, 0)
+        rate = round(actual / p.planned_qty * 100, 1) if p.planned_qty > 0 else 0.0
+        monthly_plan_out.append({
+            "plan_id": p.id,
+            "part_no": p.part_no,
+            "part_name": item_map.get(p.part_no, p.part_no),
+            "planned_qty": p.planned_qty,
+            "actual_qty": actual,
+            "achievement_rate": rate,
+        })
+    monthly_plan_out.sort(key=lambda x: x["achievement_rate"])
+
+    # ── 이달 생산 실적 합계 (completed orders) ──────────────────
+    completed_this_month = db.query(
+        func.count(ProductionOrder.pord_no).label("cnt"),
+        func.sum(ProductionOrder.actual_qty).label("total_actual"),
+        func.sum(ProductionOrder.planned_qty).label("total_planned"),
+    ).filter(
+        ProductionOrder.status == POrdStatus.completed,
+        ProductionOrder.complete_date >= first_day,
+        ProductionOrder.complete_date <= last_day,
+    ).first()
+
+    return {
+        "year": y,
+        "month": m,
+        "counts": {
+            "planned": cnt_map.get(POrdStatus.planned, 0),
+            "in_progress": cnt_map.get(POrdStatus.in_progress, 0),
+            "completed": cnt_map.get(POrdStatus.completed, 0),
+            "cancelled": cnt_map.get(POrdStatus.cancelled, 0),
+        },
+        "in_progress_orders": orders_out,
+        "monthly_plan": monthly_plan_out,
+        "monthly_completed": {
+            "count": int(completed_this_month.cnt or 0),
+            "total_actual": int(completed_this_month.total_actual or 0),
+            "total_planned": int(completed_this_month.total_planned or 0),
+        },
+    }
+
+
 @router.get("/alerts")
 def alerts(db: Session = Depends(get_db)):
     """상단 알람바: 납기 초과·임박 발주, 신규 수주 요청"""

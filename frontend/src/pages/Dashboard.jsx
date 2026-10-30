@@ -92,18 +92,20 @@ const ROLE_SECTIONS = {
   },
   // ── 생산 ───────────────────────────────────────────────────────
   production: {
-    // 생산관리: 불량률 + 품질 대시보드. 구매·매출 제외
+    // 생산관리: 불량률 + 품질 대시보드 + 생산현황. 구매·매출 제외
     summary: false, kpi_delivery: false, kpi_quality: true, kpi_inventory: false, kpi_profit: false,
     target: false, closing: false, stock_chart: false, monthly_trend: false,
     sales_table: false, purchase_table: false, customer_scorecard: false,
     quality_dashboard: true, supplier_scorecard: false, material_scorecard: false,
+    production_status: true,
   },
   manufacturing: {
-    // 제조관리 총괄: 불량률 + 재고 + 품질 대시보드. 매출·구매금액 제외
+    // 제조관리 총괄: 불량률 + 재고 + 품질 대시보드 + 생산현황. 매출·구매금액 제외
     summary: false, kpi_delivery: false, kpi_quality: true, kpi_inventory: true, kpi_profit: false,
     target: false, closing: false, stock_chart: true, monthly_trend: false,
     sales_table: false, purchase_table: false, customer_scorecard: false,
     quality_dashboard: true, supplier_scorecard: false, material_scorecard: false,
+    production_status: true,
   },
 }
 
@@ -177,6 +179,7 @@ export default function Dashboard() {
   const [monthlyTrend, setMonthlyTrend] = useState([])
   const [vsTarget, setVsTarget] = useState(null)
   const [qualityKpi, setQualityKpi] = useState(null)
+  const [productionStatus, setProductionStatus] = useState(null)
   const [loading, setLoading] = useState(false)
 
   const load = () => {
@@ -205,6 +208,8 @@ export default function Dashboard() {
       calls.push(api.get(`/dashboard/purchase-by-partner?year=${year}&month=${month}`).then(r => setPurchaseByPartner(r.data)).catch(() => {}))
     if (show.monthly_trend)
       calls.push(api.get(`/dashboard/monthly-trend?year=${year}`).then(r => setMonthlyTrend(r.data)).catch(() => {}))
+    if (show.production_status)
+      calls.push(api.get(`/dashboard/production-status?year=${year}&month=${month}`).then(r => setProductionStatus(r.data)).catch(() => {}))
     Promise.all(calls).finally(() => setLoading(false))
   }
 
@@ -756,6 +761,127 @@ export default function Dashboard() {
             <div className="empty" style={{ marginBottom: 24 }}>이달 자재 입고 데이터 없음</div>
           )}
         </>
+      )}
+
+      {/* ── 현재 생산 현황 (생산관리 / 제조관리 총괄 전용) ── */}
+      {show.production_status && productionStatus && (
+        <div>
+          <div className="section-title mt-16">현재 생산 현황 — {productionStatus.year}년 {productionStatus.month}월</div>
+
+          {/* 상태 요약 배지 */}
+          <div style={{ display: 'flex', gap: 10, marginBottom: 14 }}>
+            {[
+              { label: '계획', key: 'planned', color: '#1d4ed8', bg: '#eff6ff', border: '#bfdbfe' },
+              { label: '진행중', key: 'in_progress', color: '#92400e', bg: '#fefce8', border: '#fde68a' },
+              { label: '이달 완료', key: 'completed', color: '#166534', bg: '#f0fdf4', border: '#bbf7d0' },
+              { label: '취소', key: 'cancelled', color: '#6b7280', bg: '#f9fafb', border: '#e5e7eb' },
+            ].map(s => (
+              <div key={s.key} style={{
+                flex: 1, textAlign: 'center', padding: '10px 8px',
+                background: s.bg, border: `1px solid ${s.border}`, borderRadius: 'var(--radius)',
+              }}>
+                <div style={{ fontSize: 11, color: s.color, fontWeight: 700, marginBottom: 2 }}>{s.label}</div>
+                <div style={{ fontSize: 22, fontWeight: 800, color: s.color }}>
+                  {s.key === 'completed'
+                    ? productionStatus.monthly_completed.count
+                    : productionStatus.counts[s.key] ?? 0}
+                  <span style={{ fontSize: 12, fontWeight: 400, marginLeft: 3 }}>건</span>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* 진행중 작업지시 테이블 */}
+          <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)', marginBottom: 6 }}>
+            ▶ 진행중 작업지시 ({productionStatus.counts.in_progress}건)
+          </div>
+          <div className="table-wrap" style={{ marginBottom: 16 }}>
+            <table style={{ fontSize: 12 }}>
+              <thead>
+                <tr>
+                  <th>작업지시 번호</th>
+                  <th>품목명</th>
+                  <th>금형 (호기)</th>
+                  <th className="text-right">계획수량</th>
+                  <th className="text-right">실적수량</th>
+                  <th style={{ width: 130 }}>진행률</th>
+                  <th>계획일</th>
+                </tr>
+              </thead>
+              <tbody>
+                {productionStatus.in_progress_orders.length === 0 && (
+                  <tr><td colSpan={7} className="empty">진행중인 작업지시 없음</td></tr>
+                )}
+                {productionStatus.in_progress_orders.map(o => {
+                  const pct = o.progress ?? 0
+                  const barColor = pct >= 80 ? 'var(--success)' : pct >= 40 ? '#E67E22' : 'var(--primary)'
+                  return (
+                    <tr key={o.pord_no}>
+                      <td style={{ fontFamily: 'monospace', fontSize: 11, color: 'var(--text-sm)' }}>{o.pord_no}</td>
+                      <td style={{ fontWeight: 600 }}>{o.part_name}</td>
+                      <td style={{ color: o.mold_no ? 'var(--primary)' : 'var(--text-xs)', fontWeight: o.mold_no ? 600 : 400 }}>
+                        {o.mold_no ?? '—'}
+                      </td>
+                      <td className="text-right">{o.planned_qty.toLocaleString()}</td>
+                      <td className="text-right" style={{ fontWeight: 700, color: 'var(--success)' }}>{o.actual_qty.toLocaleString()}</td>
+                      <td style={{ padding: '4px 8px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <div style={{ flex: 1, background: 'var(--border)', borderRadius: 3, height: 8, overflow: 'hidden' }}>
+                            <div style={{ width: `${Math.min(100, pct)}%`, height: '100%', background: barColor, borderRadius: 3 }} />
+                          </div>
+                          <span style={{ fontSize: 11, fontWeight: 700, color: barColor, minWidth: 36 }}>{pct.toFixed(0)}%</span>
+                        </div>
+                      </td>
+                      <td style={{ fontSize: 11, color: 'var(--text-sm)' }}>{o.plan_date ?? '—'}</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          {/* 이달 월 생산계획 vs 실적 */}
+          {productionStatus.monthly_plan.length > 0 && (
+            <>
+              <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)', marginBottom: 6 }}>
+                ▶ 이달 생산계획 달성현황 ({productionStatus.month}월)
+              </div>
+              <div className="table-wrap" style={{ marginBottom: 24 }}>
+                <table style={{ fontSize: 12 }}>
+                  <thead>
+                    <tr>
+                      <th>품목명</th>
+                      <th className="text-right">계획수량</th>
+                      <th className="text-right">실적수량</th>
+                      <th style={{ width: 150 }}>달성률</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {productionStatus.monthly_plan.map(p => {
+                      const rate = p.achievement_rate ?? 0
+                      const barColor = rate >= 100 ? 'var(--success)' : rate >= 70 ? '#E67E22' : 'var(--danger)'
+                      return (
+                        <tr key={p.plan_id}>
+                          <td style={{ fontWeight: 600 }}>{p.part_name}</td>
+                          <td className="text-right">{p.planned_qty.toLocaleString()}</td>
+                          <td className="text-right" style={{ fontWeight: 700, color: 'var(--primary)' }}>{p.actual_qty.toLocaleString()}</td>
+                          <td style={{ padding: '4px 8px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                              <div style={{ flex: 1, background: 'var(--border)', borderRadius: 3, height: 8, overflow: 'hidden' }}>
+                                <div style={{ width: `${Math.min(100, rate)}%`, height: '100%', background: barColor, borderRadius: 3 }} />
+                              </div>
+                              <span style={{ fontSize: 11, fontWeight: 700, color: barColor, minWidth: 40 }}>{rate.toFixed(0)}%</span>
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
+        </div>
       )}
 
       {/* ── 외주처 스코어카드 ── */}
