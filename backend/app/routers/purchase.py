@@ -792,6 +792,47 @@ def cancel_receipt(gr_no: str, db: Session = Depends(get_db)):
     return r
 
 
+@router.delete("/receipts/{gr_no}/purge")
+def purge_receipt(gr_no: str, db: Session = Depends(get_db)):
+    """관리자 전용: 입고전표 + 검사결과 + NCR 완전 삭제 (테스트 데이터 정리용)
+    pending 상태인 입고전표만 삭제 가능. confirmed는 /reverse 사용.
+    """
+    from app.routers.auth import get_current_user
+    from app.models.quality import Inspection, NonConformance
+
+    r = db.get(Receipt, gr_no)
+    if not r:
+        raise HTTPException(404, f"입고 없음: {gr_no}")
+    if r.status == ReceiptStatus.confirmed:
+        raise HTTPException(400, "확정된 입고전표는 purge 불가 — /receipts/{gr_no}/reverse 사용")
+
+    # NCR 삭제 (이의신청 포함 cascade)
+    ncrs = db.query(NonConformance).filter(NonConformance.gr_no == gr_no).all()
+    for ncr in ncrs:
+        db.delete(ncr)
+
+    # 검사결과 삭제
+    insp = db.query(Inspection).filter(Inspection.gr_no == gr_no).first()
+    if insp:
+        db.delete(insp)
+
+    # PO 상태를 open으로 복원
+    if r.po_no and r.po_no != gr_no:
+        po = db.get(PurchaseOrder, r.po_no)
+        if po and po.status == POStatus.partial:
+            remaining = db.query(Receipt).filter(
+                Receipt.po_no == r.po_no,
+                Receipt.gr_no != gr_no,
+                Receipt.status != ReceiptStatus.cancelled,
+            ).count()
+            if remaining == 0:
+                po.status = POStatus.open
+
+    db.delete(r)
+    db.commit()
+    return {"ok": True, "purged": gr_no}
+
+
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 #  외주 월마감 Excel 보고서 — Sony Dark Theme
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

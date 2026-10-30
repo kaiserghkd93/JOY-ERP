@@ -73,6 +73,7 @@ function NcrPanel({ ncrList, isManager, onRefresh, onDetail }) {
 function NcrCreateModal({ onClose, onSaved }) {
   const [allItems, setAllItems] = useState([])
   const [partners, setPartners] = useState([])
+  const [receipts, setReceipts] = useState([])
   const [form, setForm] = useState({
     part_no: '', partner_id: '', gr_no: '', occur_type: '입고검사',
     defect_type: '', defect_qty: '', disposal: '미결', note: '',
@@ -81,9 +82,32 @@ function NcrCreateModal({ onClose, onSaved }) {
   useEffect(() => {
     api.get('/master/items').then(r => setAllItems(r.data)).catch(() => {})
     api.get('/master/partners').then(r => setPartners(r.data)).catch(() => {})
+    api.get('/receipt').then(r => setReceipts(r.data || [])).catch(() => {})
   }, [])
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
+
+  const handleGrChange = async (gr_no) => {
+    const rc = receipts.find(r => r.gr_no === gr_no)
+    setForm(f => ({
+      ...f,
+      gr_no,
+      part_no: rc?.part_no || f.part_no,
+      partner_id: rc?.partner_id || f.partner_id,
+    }))
+    if (!gr_no) return
+    try {
+      const r = await api.get(`/quality/inspections/${gr_no}`)
+      const insp = r.data
+      setForm(f => ({
+        ...f,
+        defect_type: insp.defect_note || f.defect_type,
+        defect_qty: insp.fail_qty > 0 ? String(insp.fail_qty) : f.defect_qty,
+        disposal: (insp.disposal && insp.disposal !== '보류' && insp.disposal !== '미결') ? insp.disposal : f.disposal,
+      }))
+    } catch { /* 검사결과 없음 */ }
+  }
+
   const submit = async () => {
     if (!form.part_no || !form.defect_type) return alert('품번과 불량내용은 필수입니다')
     await api.post('/quality/ncr', {
@@ -99,6 +123,13 @@ function NcrCreateModal({ onClose, onSaved }) {
     <div className="modal-overlay">
       <div className="modal" style={{maxWidth:520}}>
         <h3>부적합 통보 등록</h3>
+        <div className="form-group">
+          <label>입고번호 (선택하면 품번·불량정보 자동완성)</label>
+          <select value={form.gr_no} onChange={e => handleGrChange(e.target.value)}>
+            <option value="">— 입고번호 선택 —</option>
+            {receipts.map(r => <option key={r.gr_no} value={r.gr_no}>{r.gr_no} — {r.part_no} ({r.qty?.toLocaleString()}개)</option>)}
+          </select>
+        </div>
         <div className="grid-2">
           <div className="form-group">
             <label>품번 *</label>
@@ -140,10 +171,6 @@ function NcrCreateModal({ onClose, onSaved }) {
           </div>
         </div>
         <div className="form-group">
-          <label>입고번호 (해당 시)</label>
-          <input value={form.gr_no} onChange={e=>set('gr_no',e.target.value)} placeholder="GR-20261029-001" />
-        </div>
-        <div className="form-group">
           <label>비고</label>
           <textarea rows={2} value={form.note} onChange={e=>set('note',e.target.value)} style={{width:'100%',padding:8,borderRadius:6,border:'1px solid var(--border)'}} />
         </div>
@@ -154,6 +181,71 @@ function NcrCreateModal({ onClose, onSaved }) {
       </div>
     </div>
   )
+}
+
+function printReturnSlip(ncr) {
+  const date = (ncr.notified_at || ncr.created_at || '').slice(0, 10)
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
+<title>반품명세서 ${ncr.ncr_no}</title>
+<style>
+  body { font-family: '맑은 고딕', Arial, sans-serif; margin: 0; padding: 32px; color: #111; font-size: 13px; }
+  h1 { text-align: center; font-size: 22px; letter-spacing: 6px; margin-bottom: 4px; }
+  .sub { text-align: center; font-size: 12px; color: #555; margin-bottom: 24px; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+  th, td { border: 1px solid #333; padding: 7px 10px; font-size: 12px; }
+  th { background: #f0f0f0; font-weight: 700; width: 130px; text-align: left; }
+  .item-table th { background: #0d1f3c; color: #fff; text-align: center; }
+  .item-table td { text-align: center; }
+  .item-table td.left { text-align: left; }
+  .total { font-size: 14px; font-weight: 700; text-align: right; margin-bottom: 32px; }
+  .sign { display: flex; justify-content: flex-end; gap: 40px; margin-top: 48px; }
+  .sign-box { text-align: center; width: 120px; }
+  .sign-line { border-bottom: 1px solid #333; height: 48px; margin-bottom: 4px; }
+  .sign-label { font-size: 11px; color: #555; }
+  @media print { body { padding: 20px; } }
+</style></head><body>
+<h1>반 품 명 세 서</h1>
+<div class="sub">RETURN / REJECTION NOTICE</div>
+
+<table>
+  <tr><th>문서번호</th><td>${ncr.ncr_no}</td><th>발행일</th><td>${date}</td></tr>
+  <tr><th>협력업체</th><td colspan="3">${ncr.partner_name || ncr.partner_id || '—'}</td></tr>
+  <tr><th>입고번호</th><td>${ncr.gr_no || '—'}</td><th>발생유형</th><td>${ncr.occur_type}</td></tr>
+</table>
+
+<table class="item-table">
+  <thead><tr><th>#</th><th>품번</th><th class="left">품목명</th><th>반품수량</th><th>불량내용</th><th>처리방법</th></tr></thead>
+  <tbody>
+    <tr>
+      <td>1</td>
+      <td>${ncr.part_no}</td>
+      <td class="left">${ncr.item_name || ncr.part_no}</td>
+      <td><strong>${ncr.defect_qty.toLocaleString()}</strong> EA</td>
+      <td class="left">${ncr.defect_type}</td>
+      <td><strong>${ncr.disposal}</strong></td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="total">반품 합계 수량: ${ncr.defect_qty.toLocaleString()} EA</div>
+
+<table>
+  <tr><th>반품 사유</th><td>${ncr.defect_type}</td></tr>
+  <tr><th>처리 요청사항</th><td>${ncr.disposal === '반품' ? '상기 수량을 즉시 반품 처리하여 주시기 바랍니다.' : ncr.disposal === '폐기' ? '상기 수량을 폐기 처리하여 주시기 바랍니다.' : '상기 수량에 대하여 조치 바랍니다.'}</td></tr>
+  ${ncr.d3_containment ? `<tr><th>봉쇄조치</th><td>${ncr.d3_containment}</td></tr>` : ''}
+</table>
+
+<div class="sign">
+  <div class="sign-box"><div class="sign-line"></div><div class="sign-label">담당자</div></div>
+  <div class="sign-box"><div class="sign-line"></div><div class="sign-label">팀장</div></div>
+  <div class="sign-box"><div class="sign-line"></div><div class="sign-label">품질책임자</div></div>
+</div>
+
+<script>window.onload=function(){window.print()}</script>
+</body></html>`
+  const w = window.open('', '_blank', 'width=900,height=700')
+  w.document.write(html)
+  w.document.close()
 }
 
 function NcrDetailModal({ ncr, isManager, onClose, onSaved }) {
@@ -234,6 +326,9 @@ function NcrDetailModal({ ncr, isManager, onClose, onSaved }) {
 
         <div className="modal-footer">
           <button className="btn btn-outline" onClick={onClose}>닫기</button>
+          {['반품','폐기','특채'].includes(ncr.disposal) && (
+            <button className="btn btn-outline" style={{borderColor:'var(--primary)',color:'var(--primary)'}} onClick={() => printReturnSlip(ncr)}>🖨 반품명세서 출력</button>
+          )}
           {isManager && <button className="btn btn-primary" onClick={save}>저장</button>}
         </div>
       </div>
@@ -1068,7 +1163,7 @@ export default function Quality() {
                     )}
                     {/* 액션 버튼 */}
                     <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                      {!isManager && (selectedInsp.approval_status === '작성중' || selectedInsp.approval_status === '반려' || !selectedInsp.approval_status) && selectedInsp.result !== '검사대기' && (
+                      {(selectedInsp.approval_status === '작성중' || selectedInsp.approval_status === '반려' || !selectedInsp.approval_status) && selectedInsp.result !== '검사대기' && (
                         <button className="btn btn-primary" onClick={() => requestApproval(selectedInsp.id)}>📤 승인 요청</button>
                       )}
                       {isManager && selectedInsp.approval_status === '승인대기' && (<>

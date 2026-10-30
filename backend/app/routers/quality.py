@@ -224,7 +224,8 @@ def approve_inspection(insp_id: int, db: Session = Depends(get_db), user: User =
     insp = _get_insp(insp_id, db)
     if insp.approval_status != ApprovalStatus.pending:
         raise HTTPException(400, "승인대기 상태가 아닙니다")
-    if insp.inspector_id == user.username:
+    # admin/owner는 소규모 회사에서 겸직 허용
+    if insp.inspector_id == user.username and user.role not in ("admin", "owner"):
         raise HTTPException(403, "본인이 요청한 검사결과는 직접 승인할 수 없습니다")
     insp.approval_status = ApprovalStatus.approved
     insp.approver_id = user.username
@@ -254,7 +255,8 @@ def confirm_inspection(insp_id: int, db: Session = Depends(get_db), user: User =
     insp = _get_insp(insp_id, db)
     if insp.approval_status != ApprovalStatus.approved:
         raise HTTPException(400, "승인완료 상태에서만 최종 확정할 수 있습니다")
-    if insp.inspector_id == user.username:
+    # admin/owner는 소규모 회사에서 겸직 허용
+    if insp.inspector_id == user.username and user.role not in ("admin", "owner"):
         raise HTTPException(403, "본인이 등록한 검사결과는 직접 확정할 수 없습니다")
     insp.approval_status = ApprovalStatus.confirmed
     insp.confirmer_id = user.username
@@ -400,7 +402,14 @@ def _next_ncr_no(db: Session) -> str:
     return f"{prefix}-{count+1:03d}"
 
 
-@router.get("/ncr", response_model=list[NcrOut])
+def _ncr_to_dict(n: NonConformance) -> dict:
+    d = NcrOut.model_validate(n).model_dump()
+    d['item_name'] = n.item.name if n.item else n.part_no
+    d['partner_name'] = n.partner.name if n.partner else n.partner_id
+    return d
+
+
+@router.get("/ncr")
 def list_ncr(
     partner_id: str | None = None,
     status: str | None = None,
@@ -412,7 +421,7 @@ def list_ncr(
         q = q.filter(NonConformance.partner_id == partner_id)
     if status:
         q = q.filter(NonConformance.status == status)
-    return q.order_by(NonConformance.created_at.desc()).all()
+    return [_ncr_to_dict(n) for n in q.order_by(NonConformance.created_at.desc()).all()]
 
 
 @router.post("/ncr", response_model=NcrOut)
@@ -425,12 +434,12 @@ def create_ncr(body: NcrCreate, db: Session = Depends(get_db), user: User = Depe
     return ncr
 
 
-@router.get("/ncr/{ncr_no}", response_model=NcrOut)
+@router.get("/ncr/{ncr_no}")
 def get_ncr(ncr_no: str, db: Session = Depends(get_db), _: User = Depends(_require_quality)):
     ncr = db.get(NonConformance, ncr_no)
     if not ncr:
         raise HTTPException(404)
-    return ncr
+    return _ncr_to_dict(ncr)
 
 
 @router.patch("/ncr/{ncr_no}", response_model=NcrOut)

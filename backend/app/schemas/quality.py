@@ -156,7 +156,9 @@ class NcrOut(BaseModel):
     gr_no: str | None
     inspection_id: int | None
     part_no: str
+    item_name: str | None = None
     partner_id: str | None
+    partner_name: str | None = None
     occur_type: NcrOccurType
     defect_type: str
     defect_qty: int
