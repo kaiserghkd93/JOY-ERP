@@ -779,10 +779,10 @@ function MaterialPurchase() {
                 <tr><th>발주번호</th><th>거래처</th><th>품번</th><th>품명</th>
                   <th style={{textAlign:'right'}}>발주수량</th><th style={{textAlign:'right'}}>입고</th>
                   <th style={{textAlign:'right'}}>단가</th><th style={{textAlign:'right'}}>금액</th>
-                  <th>발주일</th><th>납기</th><th>상태</th></tr>
+                  <th>발주일</th><th>납기</th><th>상태</th><th>발주서</th><th>취소</th></tr>
               </thead>
               <tbody>
-                {monthOrders.length === 0 && <tr><td colSpan={11} className="empty">{loading?'조회 중...':'자재 발주 없음'}</td></tr>}
+                {monthOrders.length === 0 && <tr><td colSpan={13} className="empty">{loading?'조회 중...':'자재 발주 없음'}</td></tr>}
                 {monthOrders.map(o=>(
                   <tr key={o.po_no}>
                     <td style={{fontFamily:'monospace',fontSize:11}}>{o.po_no}</td>
@@ -795,9 +795,29 @@ function MaterialPurchase() {
                     <td style={{textAlign:'right'}}>₩{fmt(o.qty * o.unit_price)}</td>
                     <td style={{fontSize:11}}>{o.order_date}</td>
                     <td style={{fontSize:11}}>{o.due_date}</td>
-                    <td><span className={`badge ${o.status==='open'?'badge-blue':o.status==='partial'?'badge-amber':'badge-green'}`}>
+                    <td><span className={`badge ${o.status==='open'?'badge-blue':o.status==='partial'?'badge-amber':o.status==='closed'?'badge-green':'badge-gray'}`}>
                       {o.status==='open'?'발주중':o.status==='partial'?'일부입고':o.status==='closed'?'완료':'취소'}
                     </span></td>
+                    <td>
+                      <button className="btn btn-sm btn-primary"
+                        onClick={()=>window.open(`${api.defaults.baseURL}/material/orders/${o.po_no}/print`,'_blank')}>
+                        발주서 출력
+                      </button>
+                    </td>
+                    <td>
+                      {o.confirmed_qty === 0 && o.status !== 'closed' && o.status !== 'cancelled' && (
+                        <button className="btn btn-sm" style={{background:'#fee2e2',color:'#b91c1c',border:'1px solid #fca5a5'}}
+                          onClick={async()=>{
+                            if(!window.confirm(`자재 발주 ${o.po_no}를 삭제하시겠습니까?`)) return
+                            try {
+                              await api.delete(`/material/orders/${o.po_no}`)
+                              loadOrders()
+                            } catch(e) {
+                              alert(e.response?.data?.detail || '삭제 실패')
+                            }
+                          }}>삭제</button>
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>
