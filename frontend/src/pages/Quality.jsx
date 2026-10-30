@@ -307,7 +307,13 @@ function InspectionModal({ onClose, onSaved, prefill }) {
     }
     try {
       await api.post('/quality/inspections', payload)
-      onSaved()
+      const NCR_AUTO = ['반품', '폐기', '특채']
+      const failQty = +form.fail_qty || 0
+      if (failQty > 0 && NCR_AUTO.includes(form.disposal)) {
+        onSaved({ ncrCreated: true, disposal: form.disposal, failQty })
+      } else {
+        onSaved()
+      }
     } catch (e) { alert(e.response?.data?.detail || '저장 실패') }
   }
 
@@ -794,7 +800,9 @@ export default function Quality() {
   const [partAcList, setPartAcList] = useState([])
   const [partAcOpen, setPartAcOpen] = useState(false)
   const [partners, setPartners] = useState([])
-  const [editingInspector, setEditingInspector] = useState(null) // {id, value}
+  const [editingInspector, setEditingInspector] = useState(null)
+  const [selectedInsp, setSelectedInsp] = useState(null)
+  const [inspDetailTab, setInspDetailTab] = useState('info')
 
   const load = useCallback(() => {
     api.get('/quality/claims').then(r => setClaims(r.data)).catch(() => {})
@@ -810,6 +818,13 @@ export default function Quality() {
   useEffect(() => {
     api.get('/master/items').then(r => setItemMaster(Array.isArray(r.data) ? r.data : [])).catch(() => {})
   }, [])
+  // selectedInsp 신선도 유지: inspections 재로드 시 선택된 항목 자동 업데이트
+  useEffect(() => {
+    if (selectedInsp) {
+      const fresh = inspections.find(i => i.id === selectedInsp.id)
+      if (fresh) setSelectedInsp(fresh)
+    }
+  }, [inspections]) // eslint-disable-line
 
   const updateStatus = async (claim_no, status) => {
     await api.patch(`/quality/claims/${claim_no}`, { status })
@@ -859,105 +874,217 @@ export default function Quality() {
       </div>
 
       {tab === 'inspections' && (
-        <>
-        <div className="result-bar">
-          <span className="result-bar-title">입고검사 목록</span>
-          <span className="result-bar-count">{inspections.length}건</span>
-        </div>
-        <div className="table-wrap">
-          <table>
-            <thead><tr>
-              <th>입고번호</th><th>검사일</th><th>로트</th><th>샘플</th><th>Ac/Re</th>
-              <th>합격</th><th>불합격</th>
-              <th>판정</th><th>승인상태</th><th>담당자</th>
-              {isManager && <th>반려사유</th>}
-              <th>액션</th>
-            </tr></thead>
-            <tbody>
-              {inspections.length === 0 && <tr><td colSpan={10} className="empty">검사결과 없음</td></tr>}
+        <div style={{ display: 'grid', gridTemplateColumns: '290px 1fr', gap: 12, alignItems: 'start' }}>
+          {/* 좌측: 검사 목록 */}
+          <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 6, overflow: 'hidden' }}>
+            <div style={{ padding: '10px 14px', borderBottom: '1px solid var(--border)', background: '#f8fafc', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontWeight: 700, fontSize: 12 }}>입고검사 목록</span>
+              <span style={{ fontSize: 11, color: 'var(--text-sm)' }}>{inspections.length}건</span>
+            </div>
+            <div style={{ maxHeight: 600, overflowY: 'auto' }}>
+              {inspections.length === 0 && <div style={{ padding: 32, textAlign: 'center', color: 'var(--text-sm)', fontSize: 12 }}>검사결과 없음</div>}
               {inspections.map(insp => {
                 const isPending = insp.result === '검사대기'
+                const isSel = selectedInsp?.id === insp.id
                 return (
-                <tr key={insp.id} style={{ background: isPending ? '#fff7ed' : '' }}>
-                  <td style={{fontFamily:'monospace',fontSize:11}}>{insp.gr_no}</td>
-                  <td>{insp.inspect_date}</td>
-                  <td style={{color:'var(--text-sm)',fontSize:12}}>{insp.lot_size?.toLocaleString() || (isPending ? insp.inspect_qty?.toLocaleString() : '—')}</td>
-                  <td style={{fontWeight:insp.sample_size?600:'normal',color:insp.sample_size?'var(--primary)':'var(--text-sm)',fontSize:12}}>
-                    {insp.sample_size?.toLocaleString() || '—'}
-                  </td>
-                  <td style={{fontSize:11,color:'var(--text-sm)'}}>
-                    {insp.ac != null ? `${insp.ac}/${insp.re}` : '—'}
-                  </td>
-                  <td style={{color:'var(--success)'}}>{isPending ? '—' : insp.pass_qty?.toLocaleString()}</td>
-                  <td style={{color:'var(--danger)'}}>{isPending ? '—' : insp.fail_qty?.toLocaleString()}</td>
-                  <td>
-                    {isPending
-                      ? <span style={{background:'#f97316',color:'#fff',borderRadius:4,padding:'2px 8px',fontSize:11,fontWeight:700,animation:'pulse 1.5s infinite'}}>⚠ 검사대기</span>
-                      : <span className={`badge ${insp.result==='합격'?'badge-green':insp.result==='불합격'?'badge-red':'badge-amber'}`}>{insp.result}</span>
-                    }
-                  </td>
-                  <td><span className={`badge ${APPR_BADGE[insp.approval_status||'작성중']}`}>{insp.approval_status||'작성중'}</span></td>
-                  <td style={{minWidth:90}}>
-                    {editingInspector?.id === insp.id
-                      ? <input
-                          autoFocus
-                          value={editingInspector.value}
-                          onChange={e=>setEditingInspector(p=>({...p,value:e.target.value}))}
-                          onBlur={async()=>{
-                            const v = editingInspector.value.trim()
-                            if(v && v !== (insp.inspector_id||'')) {
-                              try {
-                                await api.patch(`/inspections/${insp.id}/inspector`, {inspector_id:v})
-                                load()
-                              } catch(e) { alert(e.response?.data?.detail||'저장 실패') }
-                            }
-                            setEditingInspector(null)
-                          }}
-                          onKeyDown={e=>{
-                            if(e.key==='Enter') e.target.blur()
-                            if(e.key==='Escape') setEditingInspector(null)
-                          }}
-                          style={{width:'100%',padding:'2px 6px',fontSize:11,border:'1px solid var(--primary)',borderRadius:4}}
-                        />
-                      : <span
-                          title="클릭하여 수정"
-                          onClick={()=>setEditingInspector({id:insp.id,value:insp.inspector_id||''})}
-                          style={{cursor:'pointer',fontSize:11,color:insp.inspector_id?'var(--text)':'var(--text-sm)',borderBottom:'1px dashed var(--border)',paddingBottom:1}}
-                        >
-                          {insp.inspector_id||'미지정'}
-                        </span>
-                    }
-                  </td>
-                  {isManager && <td style={{fontSize:11,color:'var(--danger)',maxWidth:120,overflow:'hidden',textOverflow:'ellipsis'}}>{insp.rejection_reason||'—'}</td>}
-                  <td>
-                    <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>
-                      {/* 검사대기 → 결과입력 버튼 (포털 자동생성 레코드) */}
-                      {isPending && (
-                        <button className="btn btn-sm" style={{background:'#f97316',color:'#fff',border:'none',fontWeight:700}}
-                          onClick={()=>setShowInspModal({gr_no: insp.gr_no, inspect_qty: insp.inspect_qty})}>
-                          ✍ 결과 입력
+                  <div key={insp.id}
+                    onClick={() => { setSelectedInsp(insp); setInspDetailTab('info') }}
+                    style={{
+                      padding: '10px 14px', borderBottom: '1px solid var(--border)', cursor: 'pointer',
+                      background: isSel ? '#eff6ff' : isPending ? '#fff7ed' : 'var(--surface)',
+                      borderLeft: isSel ? '3px solid var(--primary)' : '3px solid transparent',
+                      transition: 'background 0.1s',
+                    }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                      <span style={{ fontFamily: 'monospace', fontSize: 11, fontWeight: 700 }}>{insp.gr_no}</span>
+                      {isPending
+                        ? <span style={{ background: '#f97316', color: '#fff', borderRadius: 4, padding: '1px 6px', fontSize: 10, fontWeight: 700 }}>⚠ 대기</span>
+                        : <span className={`badge ${insp.result === '합격' ? 'badge-green' : insp.result === '불합격' ? 'badge-red' : 'badge-amber'}`} style={{ fontSize: 10 }}>{insp.result}</span>
+                      }
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontSize: 11, color: 'var(--text-sm)' }}>{insp.inspect_date}</span>
+                      <span className={`badge ${APPR_BADGE[insp.approval_status || '작성중']}`} style={{ fontSize: 9 }}>{insp.approval_status || '작성중'}</span>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+
+          {/* 우측: SAP 스타일 상세 패널 */}
+          {!selectedInsp ? (
+            <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 6, textAlign: 'center', padding: '80px 0', color: 'var(--text-sm)' }}>
+              <div style={{ fontSize: 36, marginBottom: 10, opacity: 0.25 }}>🔍</div>
+              좌측에서 검사 항목을 선택하세요
+            </div>
+          ) : (
+            <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 6, overflow: 'hidden' }}>
+              {/* SAP 헤더 */}
+              <div style={{ background: '#0d1f3c', color: '#fff', padding: '10px 18px', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                <span style={{ fontSize: 11, opacity: 0.45, letterSpacing: 1 }}>입고검사</span>
+                <span style={{ fontWeight: 700, fontSize: 14, fontFamily: 'monospace' }}>{selectedInsp.gr_no}</span>
+                {selectedInsp.result === '검사대기'
+                  ? <span style={{ background: '#f97316', color: '#fff', borderRadius: 4, padding: '2px 8px', fontSize: 10, fontWeight: 700 }}>⚠ 검사대기</span>
+                  : <span className={`badge ${selectedInsp.result === '합격' ? 'badge-green' : selectedInsp.result === '불합격' ? 'badge-red' : 'badge-amber'}`} style={{ fontSize: 10 }}>{selectedInsp.result}</span>
+                }
+                <span className={`badge ${APPR_BADGE[selectedInsp.approval_status || '작성중']}`} style={{ fontSize: 10 }}>{selectedInsp.approval_status || '작성중'}</span>
+                {selectedInsp.result === '검사대기' && (
+                  <button className="btn btn-sm" style={{ marginLeft: 'auto', background: '#f97316', color: '#fff', border: 'none', fontWeight: 700 }}
+                    onClick={() => setShowInspModal({ gr_no: selectedInsp.gr_no, inspect_qty: selectedInsp.inspect_qty })}>
+                    ✍ 결과 입력
+                  </button>
+                )}
+              </div>
+
+              {/* SAP 탭 네비게이션 */}
+              <div style={{ display: 'flex', borderBottom: '2px solid #0d1f3c', background: '#f0f3f8' }}>
+                {[
+                  { id: 'info', label: '기본정보' },
+                  { id: 'result', label: '검사결과' },
+                  { id: 'approval', label: '승인이력' },
+                ].map(t => (
+                  <button key={t.id} onClick={() => setInspDetailTab(t.id)} style={{
+                    padding: '9px 22px', fontSize: 12, fontWeight: inspDetailTab === t.id ? 700 : 400,
+                    background: inspDetailTab === t.id ? '#fff' : 'transparent',
+                    border: 'none', borderBottom: inspDetailTab === t.id ? '2px solid #0d1f3c' : '2px solid transparent',
+                    cursor: 'pointer', color: inspDetailTab === t.id ? '#0d1f3c' : 'var(--text-sm)',
+                    marginBottom: '-2px', transition: 'all 0.1s',
+                  }}>{t.label}</button>
+                ))}
+              </div>
+
+              {/* 탭 콘텐츠 */}
+              <div style={{ padding: 22 }}>
+                {inspDetailTab === 'info' && (
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 48px' }}>
+                    {[
+                      { label: '입고번호', value: selectedInsp.gr_no },
+                      { label: '검사일', value: selectedInsp.inspect_date },
+                      { label: '로트 크기', value: selectedInsp.lot_size?.toLocaleString() || (selectedInsp.inspect_qty?.toLocaleString()) || '—' },
+                      { label: '샘플 크기', value: selectedInsp.sample_size?.toLocaleString() || '—' },
+                      { label: 'Ac / Re', value: selectedInsp.ac != null ? `${selectedInsp.ac} / ${selectedInsp.re}` : '—' },
+                      { label: '검사수량', value: selectedInsp.inspect_qty?.toLocaleString() || '—' },
+                    ].map(f => (
+                      <div key={f.label} style={{ display: 'flex', alignItems: 'center', borderBottom: '1px solid var(--border)', padding: '10px 0' }}>
+                        <span style={{ fontSize: 11, color: 'var(--text-sm)', width: 110, flexShrink: 0 }}>{f.label}</span>
+                        <span style={{ fontWeight: 500, fontSize: 12 }}>{f.value}</span>
+                      </div>
+                    ))}
+                    {/* 담당자 — 인라인 편집 */}
+                    <div style={{ display: 'flex', alignItems: 'center', borderBottom: '1px solid var(--border)', padding: '10px 0' }}>
+                      <span style={{ fontSize: 11, color: 'var(--text-sm)', width: 110, flexShrink: 0 }}>담당자</span>
+                      {editingInspector?.id === selectedInsp.id
+                        ? <input autoFocus value={editingInspector.value}
+                            onChange={e => setEditingInspector(p => ({ ...p, value: e.target.value }))}
+                            onBlur={async () => {
+                              const v = editingInspector.value.trim()
+                              if (v && v !== (selectedInsp.inspector_id || '')) {
+                                try {
+                                  await api.patch(`/inspections/${selectedInsp.id}/inspector`, { inspector_id: v })
+                                  load()
+                                } catch(e) { alert(e.response?.data?.detail || '저장 실패') }
+                              }
+                              setEditingInspector(null)
+                            }}
+                            onKeyDown={e => { if (e.key === 'Enter') e.target.blur(); if (e.key === 'Escape') setEditingInspector(null) }}
+                            style={{ padding: '2px 8px', fontSize: 12, border: '1px solid var(--primary)', borderRadius: 4, width: 180 }}
+                          />
+                        : <span onClick={() => setEditingInspector({ id: selectedInsp.id, value: selectedInsp.inspector_id || '' })}
+                            title="클릭하여 수정"
+                            style={{ cursor: 'pointer', fontSize: 12, fontWeight: 500, color: selectedInsp.inspector_id ? 'var(--text)' : 'var(--text-sm)', borderBottom: '1px dashed var(--border)', paddingBottom: 1 }}>
+                            {selectedInsp.inspector_id || '미지정 (클릭하여 입력)'}
+                          </span>
+                      }
+                    </div>
+                  </div>
+                )}
+
+                {inspDetailTab === 'result' && (
+                  <div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 48px', marginBottom: 16 }}>
+                      {[
+                        { label: '합격수량', value: selectedInsp.result === '검사대기' ? '—' : (selectedInsp.pass_qty?.toLocaleString() || '0'), color: (selectedInsp.pass_qty || 0) > 0 ? 'var(--success)' : undefined },
+                        { label: '불합격수량', value: selectedInsp.result === '검사대기' ? '—' : (selectedInsp.fail_qty?.toLocaleString() || '0'), color: (selectedInsp.fail_qty || 0) > 0 ? 'var(--danger)' : undefined },
+                        { label: '처리방법', value: selectedInsp.disposal || '—' },
+                      ].map(f => (
+                        <div key={f.label} style={{ display: 'flex', alignItems: 'center', borderBottom: '1px solid var(--border)', padding: '10px 0' }}>
+                          <span style={{ fontSize: 11, color: 'var(--text-sm)', width: 110, flexShrink: 0 }}>{f.label}</span>
+                          <span style={{ fontWeight: 600, fontSize: 13, color: f.color || 'var(--text)' }}>{f.value}</span>
+                        </div>
+                      ))}
+                      <div style={{ display: 'flex', alignItems: 'center', borderBottom: '1px solid var(--border)', padding: '10px 0' }}>
+                        <span style={{ fontSize: 11, color: 'var(--text-sm)', width: 110, flexShrink: 0 }}>판정</span>
+                        {selectedInsp.result === '검사대기'
+                          ? <span style={{ background: '#f97316', color: '#fff', borderRadius: 4, padding: '2px 8px', fontSize: 11, fontWeight: 700 }}>⚠ 검사대기</span>
+                          : <span className={`badge ${selectedInsp.result === '합격' ? 'badge-green' : selectedInsp.result === '불합격' ? 'badge-red' : 'badge-amber'}`} style={{ fontSize: 12 }}>{selectedInsp.result}</span>
+                        }
+                      </div>
+                    </div>
+                    {selectedInsp.defect_note && (
+                      <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 6, padding: '10px 14px', fontSize: 12, marginBottom: 16 }}>
+                        <span style={{ fontWeight: 700, color: '#991b1b', marginRight: 6 }}>불량 내용:</span>{selectedInsp.defect_note}
+                      </div>
+                    )}
+                    {selectedInsp.result === '검사대기' && (
+                      <div style={{ textAlign: 'center', padding: '20px 0' }}>
+                        <button className="btn btn-primary" style={{ background: '#f97316', border: 'none', fontWeight: 700, fontSize: 13, padding: '10px 24px' }}
+                          onClick={() => setShowInspModal({ gr_no: selectedInsp.gr_no, inspect_qty: selectedInsp.inspect_qty })}>
+                          ✍ 검사결과 입력하기
                         </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {inspDetailTab === 'approval' && (
+                  <div>
+                    {/* 승인 진행 타임라인 */}
+                    <div style={{ marginBottom: 24 }}>
+                      {[
+                        { step: '작성중', icon: '✏️', done: true, info: selectedInsp.inspector_id ? `담당자: ${selectedInsp.inspector_id}` : '담당자 미지정' },
+                        { step: '승인대기', icon: '📤', done: ['승인대기','승인완료','최종확정'].includes(selectedInsp.approval_status), info: selectedInsp.requested_at?.slice(0,10) },
+                        { step: '승인완료', icon: '✅', done: ['승인완료','최종확정'].includes(selectedInsp.approval_status), info: selectedInsp.approver_id ? `승인자: ${selectedInsp.approver_id}` : null },
+                        { step: '최종확정', icon: '🔒', done: selectedInsp.approval_status === '최종확정', info: selectedInsp.confirmer_id ? `확정자: ${selectedInsp.confirmer_id}` : null },
+                      ].map((s, i, arr) => (
+                        <div key={s.step} style={{ display: 'flex', gap: 14, marginBottom: 8 }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                            <div style={{ width: 34, height: 34, borderRadius: '50%', background: s.done ? '#0d1f3c' : 'var(--border)', color: s.done ? '#fff' : 'var(--text-sm)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, flexShrink: 0 }}>
+                              {s.done ? s.icon : i + 1}
+                            </div>
+                            {i < arr.length - 1 && <div style={{ width: 2, height: 20, background: s.done ? '#0d1f3c' : 'var(--border)', margin: '3px 0' }} />}
+                          </div>
+                          <div style={{ paddingTop: 6 }}>
+                            <div style={{ fontWeight: 600, fontSize: 12, color: s.done ? 'var(--text)' : 'var(--text-sm)' }}>{s.step}</div>
+                            {s.info && <div style={{ fontSize: 11, color: 'var(--text-sm)' }}>{s.info}</div>}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    {selectedInsp.rejection_reason && (
+                      <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 6, padding: '10px 14px', fontSize: 12, marginBottom: 16 }}>
+                        <span style={{ fontWeight: 700, color: '#991b1b' }}>반려 사유: </span>{selectedInsp.rejection_reason}
+                      </div>
+                    )}
+                    {/* 액션 버튼 */}
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                      {!isManager && (selectedInsp.approval_status === '작성중' || selectedInsp.approval_status === '반려' || !selectedInsp.approval_status) && selectedInsp.result !== '검사대기' && (
+                        <button className="btn btn-primary" onClick={() => requestApproval(selectedInsp.id)}>📤 승인 요청</button>
                       )}
-                      {/* 담당자: 승인요청 버튼 */}
-                      {!isPending && !isManager && (insp.approval_status==='작성중'||insp.approval_status==='반려'||!insp.approval_status) && (
-                        <button className="btn btn-sm btn-primary" onClick={()=>requestApproval(insp.id)}>승인요청</button>
-                      )}
-                      {/* 책임자: 승인/반려/최종확정 */}
-                      {isManager && insp.approval_status==='승인대기' && (<>
-                        <button className="btn btn-sm btn-success" onClick={()=>approve(insp.id)}>승인</button>
-                        <button className="btn btn-sm btn-danger" onClick={()=>setRejectTarget(insp.id)}>반려</button>
+                      {isManager && selectedInsp.approval_status === '승인대기' && (<>
+                        <button className="btn btn-success" onClick={() => approve(selectedInsp.id)}>✅ 승인</button>
+                        <button className="btn btn-danger" onClick={() => setRejectTarget(selectedInsp.id)}>❌ 반려</button>
                       </>)}
-                      {isManager && insp.approval_status==='승인완료' && (
-                        <button className="btn btn-sm btn-primary" onClick={()=>confirm(insp.id)}>최종확정</button>
+                      {isManager && selectedInsp.approval_status === '승인완료' && (
+                        <button className="btn btn-primary" onClick={() => confirm(selectedInsp.id)}>🔒 최종 확정</button>
                       )}
                     </div>
-                  </td>
-                </tr>
-              )})}
-            </tbody>
-          </table>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
-        </>
       )}
 
       {/* 반려 사유 모달 */}
@@ -1343,7 +1470,15 @@ export default function Quality() {
         <InspectionModal
           prefill={typeof showInspModal === 'object' ? showInspModal : null}
           onClose={() => setShowInspModal(false)}
-          onSaved={() => { setShowInspModal(false); load() }}
+          onSaved={(meta) => {
+            setShowInspModal(false)
+            load()
+            if (meta?.ncrCreated) {
+              setTimeout(() => {
+                alert(`✅ 검사결과가 저장됐습니다.\n\n불량 ${meta.failQty}개 / 처리방법 [${meta.disposal}] → 부적합관리(NCR)에 자동 등록됐습니다.\n\n부적합관리 탭에서 확인하세요.`)
+              }, 100)
+            }
+          }}
         />
       )}
 

@@ -87,6 +87,36 @@ def post_inspection(body: InspectionCreate, db: Session = Depends(get_db), user:
             receipt.return_qty = insp.fail_qty
             receipt.return_reason = insp.defect_note or "수입검사 불합격 반품"
 
+    # 처리방법이 반품/폐기/특채이면 NCR 자동 생성 (중복 방지)
+    NCR_AUTO_DISPOSALS = {"반품", "폐기", "특채"}
+    if (
+        insp.fail_qty > 0
+        and insp.disposal
+        and insp.disposal.value in NCR_AUTO_DISPOSALS
+    ):
+        existing_ncr = db.query(NonConformance).filter(
+            NonConformance.inspection_id == insp.id
+        ).first()
+        if not existing_ncr:
+            from app.models.quality import NcrOccurType, NcrDisposal as _NcrDisposal
+            _disposal_map = {"반품": _NcrDisposal.return_, "폐기": _NcrDisposal.scrap, "특채": _NcrDisposal.concession}
+            part_no = receipt.part_no if receipt else None
+            partner_id = receipt.partner_id if receipt else None
+            if part_no:
+                auto_ncr = NonConformance(
+                    ncr_no=_next_ncr_no(db),
+                    gr_no=insp.gr_no,
+                    inspection_id=insp.id,
+                    part_no=part_no,
+                    partner_id=partner_id,
+                    occur_type=NcrOccurType.receipt,
+                    defect_type=insp.defect_note or "수입검사 불합격",
+                    defect_qty=insp.fail_qty,
+                    disposal=_disposal_map.get(insp.disposal.value, _NcrDisposal.pending),
+                    notified_at=datetime.now(),
+                )
+                db.add(auto_ncr)
+
     db.commit()
     db.refresh(insp)
     return insp

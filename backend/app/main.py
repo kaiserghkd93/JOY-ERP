@@ -47,6 +47,8 @@ with engine.connect() as _conn:
         "ALTER TABLE bom_line ADD COLUMN IF NOT EXISTS actual_deduct_base NUMERIC(15,4)",
         # 외주 납품수량 추적 (거래명세표 기준)
         "ALTER TABLE receipt ADD COLUMN IF NOT EXISTS delivered_qty INTEGER DEFAULT 0",
+        # 포털 수동 납품(발주 없는 품목)을 위해 po_no nullable 허용
+        "ALTER TABLE receipt ALTER COLUMN po_no DROP NOT NULL",
         # 공정/출하 불량 — 발생경로 구분 (자체생산/외주)
         "ALTER TABLE process_outgoing_defect ADD COLUMN IF NOT EXISTS source_type VARCHAR(20) DEFAULT '자체생산'",
         "ALTER TABLE process_outgoing_defect ADD COLUMN IF NOT EXISTS partner_id VARCHAR(50)",

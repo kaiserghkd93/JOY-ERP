@@ -67,7 +67,7 @@ class Receipt(Base):
     __tablename__ = "receipt"
 
     gr_no: Mapped[str] = mapped_column(String(30), primary_key=True)
-    po_no: Mapped[str] = mapped_column(ForeignKey("purchase_order.po_no"), nullable=False)
+    po_no: Mapped[str | None] = mapped_column(ForeignKey("purchase_order.po_no"), nullable=True)
     part_no: Mapped[str] = mapped_column(ForeignKey("item.part_no"), nullable=False)
     qty: Mapped[int] = mapped_column(Integer, nullable=False)
     receipt_date: Mapped[date] = mapped_column(Date, nullable=False)
