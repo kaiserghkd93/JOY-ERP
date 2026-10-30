@@ -7,6 +7,8 @@ from io import BytesIO
 from calendar import monthrange
 from urllib.parse import quote
 from app.database import get_db
+from app.routers.auth import require_admin
+from app.models.auth import User
 from app.models.purchase import PurchaseOrder, Receipt, POStatus, ReceiptStatus, Carryover
 from app.schemas.purchase import POCreate, POOut, POSummary, ReceiptCreate, ReceiptOut
 from app.services.purchase_service import (
@@ -793,7 +795,7 @@ def cancel_receipt(gr_no: str, db: Session = Depends(get_db)):
 
 
 @router.delete("/receipts/{gr_no}/purge")
-def purge_receipt(gr_no: str, db: Session = Depends(get_db)):
+def purge_receipt(gr_no: str, db: Session = Depends(get_db), _: User = Depends(require_admin)):
     """관리자 전용: 입고전표 + 검사결과 + NCR + 재고원장 완전 삭제 (테스트 데이터 정리용)"""
     from app.models.quality import Inspection, NonConformance
     from app.models.ledger import StockLedger

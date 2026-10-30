@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import api from '../api'
-import { getRole } from '../auth'
+import { getRole, isMaster } from '../auth'
 import { SpcPanel, ControlPlanPanel, PfmeaPanel, CalibrationPanel, AuditPanel, PpapPanel, MsaPanel } from './QualityAdvanced'
 
 const AQL_OPTIONS = [0.065, 0.1, 0.15, 0.25, 0.4, 0.65, 1.0, 1.5, 2.5, 4.0, 6.5]
@@ -1024,12 +1024,30 @@ export default function Quality() {
                   : <span className={`badge ${selectedInsp.result === '합격' ? 'badge-green' : selectedInsp.result === '불합격' ? 'badge-red' : 'badge-amber'}`} style={{ fontSize: 10 }}>{selectedInsp.result}</span>
                 }
                 <span className={`badge ${APPR_BADGE[selectedInsp.approval_status || '작성중']}`} style={{ fontSize: 10 }}>{selectedInsp.approval_status || '작성중'}</span>
-                {selectedInsp.result === '검사대기' && (
-                  <button className="btn btn-sm" style={{ marginLeft: 'auto', background: '#f97316', color: '#fff', border: 'none', fontWeight: 700 }}
-                    onClick={() => setShowInspModal({ gr_no: selectedInsp.gr_no, inspect_qty: selectedInsp.inspect_qty })}>
-                    ✍ 결과 입력
-                  </button>
-                )}
+                <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
+                  {selectedInsp.result === '검사대기' && (
+                    <button className="btn btn-sm" style={{ background: '#f97316', color: '#fff', border: 'none', fontWeight: 700 }}
+                      onClick={() => setShowInspModal({ gr_no: selectedInsp.gr_no, inspect_qty: selectedInsp.inspect_qty })}>
+                      ✍ 결과 입력
+                    </button>
+                  )}
+                  {isMaster() && (
+                    <button className="btn btn-sm" style={{ background: '#7f1d1d', color: '#fff', border: 'none', fontSize: 10 }}
+                      onClick={async () => {
+                        if (!window.confirm(`[관리자] ${selectedInsp.gr_no} 및 연관 데이터를 완전 삭제하시겠습니까?\n확정된 재고도 삭제됩니다.`)) return
+                        try {
+                          await api.delete(`/purchase/receipts/${selectedInsp.gr_no}/purge`)
+                          setSelectedInsp(null)
+                          load()
+                          alert('삭제 완료')
+                        } catch (e) {
+                          alert('삭제 실패: ' + (e.response?.data?.detail || e.message))
+                        }
+                      }}>
+                      🗑 관리자 삭제
+                    </button>
+                  )}
+                </div>
               </div>
 
               {/* SAP 탭 네비게이션 */}
