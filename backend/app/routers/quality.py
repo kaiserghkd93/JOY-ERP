@@ -156,6 +156,20 @@ def _get_insp(insp_id: int, db: Session) -> Inspection:
     return insp
 
 
+class InspectorPatch(BaseModel):
+    inspector_id: str
+
+@router.patch("/inspections/{insp_id}/inspector")
+def patch_inspector(insp_id: int, body: InspectorPatch, db: Session = Depends(get_db), user: User = Depends(_require_quality)):
+    """담당자 이름 수정"""
+    insp = _get_insp(insp_id, db)
+    if insp.approval_status in (ApprovalStatus.approved, ApprovalStatus.confirmed):
+        raise HTTPException(400, "승인완료·확정 상태에서는 담당자를 변경할 수 없습니다")
+    insp.inspector_id = body.inspector_id.strip()
+    db.commit()
+    return {"ok": True, "inspector_id": insp.inspector_id}
+
+
 @router.post("/inspections/{insp_id}/request-approval")
 def request_approval(insp_id: int, db: Session = Depends(get_db), user: User = Depends(_require_quality)):
     """담당자 → 승인 요청"""

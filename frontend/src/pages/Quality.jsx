@@ -794,6 +794,7 @@ export default function Quality() {
   const [partAcList, setPartAcList] = useState([])
   const [partAcOpen, setPartAcOpen] = useState(false)
   const [partners, setPartners] = useState([])
+  const [editingInspector, setEditingInspector] = useState(null) // {id, value}
 
   const load = useCallback(() => {
     api.get('/quality/claims').then(r => setClaims(r.data)).catch(() => {})
@@ -896,7 +897,37 @@ export default function Quality() {
                     }
                   </td>
                   <td><span className={`badge ${APPR_BADGE[insp.approval_status||'작성중']}`}>{insp.approval_status||'작성중'}</span></td>
-                  <td style={{fontSize:11,color:'var(--text-sm)'}}>{insp.inspector_id||'—'}</td>
+                  <td style={{minWidth:90}}>
+                    {editingInspector?.id === insp.id
+                      ? <input
+                          autoFocus
+                          value={editingInspector.value}
+                          onChange={e=>setEditingInspector(p=>({...p,value:e.target.value}))}
+                          onBlur={async()=>{
+                            const v = editingInspector.value.trim()
+                            if(v && v !== (insp.inspector_id||'')) {
+                              try {
+                                await api.patch(`/inspections/${insp.id}/inspector`, {inspector_id:v})
+                                load()
+                              } catch(e) { alert(e.response?.data?.detail||'저장 실패') }
+                            }
+                            setEditingInspector(null)
+                          }}
+                          onKeyDown={e=>{
+                            if(e.key==='Enter') e.target.blur()
+                            if(e.key==='Escape') setEditingInspector(null)
+                          }}
+                          style={{width:'100%',padding:'2px 6px',fontSize:11,border:'1px solid var(--primary)',borderRadius:4}}
+                        />
+                      : <span
+                          title="클릭하여 수정"
+                          onClick={()=>setEditingInspector({id:insp.id,value:insp.inspector_id||''})}
+                          style={{cursor:'pointer',fontSize:11,color:insp.inspector_id?'var(--text)':'var(--text-sm)',borderBottom:'1px dashed var(--border)',paddingBottom:1}}
+                        >
+                          {insp.inspector_id||'미지정'}
+                        </span>
+                    }
+                  </td>
                   {isManager && <td style={{fontSize:11,color:'var(--danger)',maxWidth:120,overflow:'hidden',textOverflow:'ellipsis'}}>{insp.rejection_reason||'—'}</td>}
                   <td>
                     <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>
