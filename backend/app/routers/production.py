@@ -486,3 +486,44 @@ def feasibility_check(db: Session = Depends(get_db)):
         })
 
     return results
+
+
+# ── 생산 간트 데이터 ────────────────────────────────────────────────
+@router.get("/gantt")
+def gantt_data(year: int, month: int, db: Session = Depends(get_db)):
+    """호기별 작업지시 타임라인 — 간트 차트용"""
+    days_in = monthrange(year, month)[1]
+    first = date(year, month, 1)
+    last  = date(year, month, days_in)
+
+    from sqlalchemy import or_
+    orders = db.query(ProductionOrder).filter(
+        ProductionOrder.status != POrdStatus.cancelled,
+        or_(
+            (ProductionOrder.plan_date >= first) & (ProductionOrder.plan_date <= last),
+            (ProductionOrder.complete_date >= first) & (ProductionOrder.complete_date <= last),
+            (ProductionOrder.plan_date < first) & (
+                (ProductionOrder.complete_date >= first) | ProductionOrder.complete_date.is_(None)
+            ),
+        ),
+    ).order_by(ProductionOrder.mold_no, ProductionOrder.plan_date).all()
+
+    item_map = {i.part_no: i.name for i in db.query(Item).all()}
+
+    return {
+        "year": year,
+        "month": month,
+        "days": days_in,
+        "orders": [{
+            "pord_no": o.pord_no,
+            "part_no": o.part_no,
+            "part_name": item_map.get(o.part_no, o.part_no),
+            "mold_no": o.mold_no or "미지정",
+            "plan_date": o.plan_date.isoformat() if o.plan_date else None,
+            "complete_date": o.complete_date.isoformat() if o.complete_date else None,
+            "planned_qty": o.planned_qty,
+            "actual_qty": o.actual_qty,
+            "status": o.status.value if o.status else None,
+            "progress": round(o.actual_qty / o.planned_qty * 100, 1) if o.planned_qty > 0 else 0,
+        } for o in orders],
+    }

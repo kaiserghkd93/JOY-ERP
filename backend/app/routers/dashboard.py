@@ -859,6 +859,117 @@ def alerts(db: Session = Depends(get_db)):
     return result
 
 
+@router.get("/exceptions")
+def exceptions(db: Session = Depends(get_db)):
+    """예외 모니터링: 안전재고 이하, 납기초과 발주, 미결NCR, 생산목표 미달"""
+    from app.models.production import ProductionOrder, POrdStatus, MonthlyPlan, DailyActual
+    from calendar import monthrange
+    today = date.today()
+    y, m = today.year, today.month
+
+    item_map = {i.part_no: i.name for i in db.query(Item).all()}
+    partner_map = {p.partner_id: p.name for p in db.query(Partner).all()}
+
+    # ── 안전재고 이하 ──
+    items_ss = db.query(Item).filter(Item.active == True, Item.safety_stock > 0).all()
+    part_nos_ss = [i.part_no for i in items_ss]
+    stocks_ss = get_stock_bulk(db, part_nos_ss)
+    safety_stock_alerts = []
+    for item in items_ss:
+        stock = stocks_ss.get(item.part_no, 0)
+        if stock <= (item.safety_stock or 0):
+            shortage = (item.safety_stock or 0) - stock
+            safety_stock_alerts.append({
+                "part_no": item.part_no,
+                "name": item.name,
+                "current_stock": stock,
+                "safety_stock": item.safety_stock,
+                "shortage": shortage,
+                "severity": "critical" if stock <= 0 else "warn",
+            })
+    safety_stock_alerts.sort(key=lambda x: x["shortage"], reverse=True)
+
+    # ── 납기 초과 발주 ──
+    overdue_pos = db.query(PurchaseOrder).filter(
+        PurchaseOrder.due_date < today,
+        PurchaseOrder.status.in_([POStatus.open, POStatus.partial]),
+    ).order_by(PurchaseOrder.due_date).all()
+    overdue_po_list = []
+    for po in overdue_pos:
+        days = (today - po.due_date).days
+        overdue_po_list.append({
+            "po_no": po.po_no,
+            "part_no": po.part_no,
+            "part_name": item_map.get(po.part_no, po.part_no),
+            "partner": partner_map.get(po.partner_id, po.partner_id or "-"),
+            "due_date": po.due_date.isoformat(),
+            "days_overdue": days,
+            "severity": "critical" if days > 14 else "warn",
+        })
+
+    # ── 미결 NCR ──
+    open_ncrs = db.query(NonConformance).filter(
+        NonConformance.status.in_([NcrStatus.open, NcrStatus.processing])
+    ).order_by(NonConformance.created_at.asc()).all()
+    ncr_list = []
+    for ncr in open_ncrs:
+        days_open = (today - ncr.created_at.date()).days if ncr.created_at else 0
+        ncr_list.append({
+            "ncr_no": ncr.ncr_no,
+            "part_no": ncr.part_no,
+            "part_name": item_map.get(ncr.part_no, ncr.part_no) if ncr.part_no else "-",
+            "status": ncr.status.value,
+            "days_open": days_open,
+            "severity": "critical" if days_open > 30 else "warn" if days_open > 7 else "info",
+        })
+    ncr_list.sort(key=lambda x: x["days_open"], reverse=True)
+
+    # ── 생산 목표 미달 (이달, 경과일 대비 80% 미달) ──
+    days_in_month = monthrange(y, m)[1]
+    elapsed_ratio = today.day / days_in_month
+    plans = db.query(MonthlyPlan).filter(MonthlyPlan.year == y, MonthlyPlan.month == m).all()
+    plan_ids = [p.id for p in plans]
+    actual_sums = {}
+    if plan_ids:
+        rows = db.query(
+            DailyActual.plan_id, func.sum(DailyActual.actual_qty).label("total"),
+        ).filter(DailyActual.plan_id.in_(plan_ids)).group_by(DailyActual.plan_id).all()
+        actual_sums = {r.plan_id: int(r.total or 0) for r in rows}
+    shortfall_list = []
+    for p in plans:
+        actual = actual_sums.get(p.id, 0)
+        expected = round(p.planned_qty * elapsed_ratio)
+        if expected > 0 and actual < expected * 0.8:
+            shortfall_list.append({
+                "part_no": p.part_no,
+                "part_name": item_map.get(p.part_no, p.part_no),
+                "planned_qty": p.planned_qty,
+                "expected_by_now": expected,
+                "actual_qty": actual,
+                "shortfall": expected - actual,
+                "achievement_pct": round(actual / expected * 100, 1) if expected > 0 else 0,
+                "severity": "critical" if actual < expected * 0.5 else "warn",
+            })
+    shortfall_list.sort(key=lambda x: x["shortfall"], reverse=True)
+
+    total_critical = sum(
+        1 for lst in [safety_stock_alerts, overdue_po_list, ncr_list, shortfall_list]
+        for item in lst if item.get("severity") == "critical"
+    )
+    total_warn = sum(
+        1 for lst in [safety_stock_alerts, overdue_po_list, ncr_list, shortfall_list]
+        for item in lst if item.get("severity") == "warn"
+    )
+
+    return {
+        "summary": {"critical": total_critical, "warn": total_warn},
+        "safety_stock": safety_stock_alerts,
+        "overdue_po": overdue_po_list,
+        "open_ncr": ncr_list,
+        "production_shortfall": shortfall_list,
+    }
+
+
 @router.get("/sales-vs-target")
 def sales_vs_target(year: int | None = None, month: int | None = None, db: Session = Depends(get_db)):
     """거래처별 목표 vs 실적 매출 비교"""

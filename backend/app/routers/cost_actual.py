@@ -162,3 +162,119 @@ def monthly_cost_summary(
         "production_amount": round(prod_total, 0),
         "receipt_count": len(receipts),
     }
+
+
+# ── 생산원가 차이 분석 ────────────────────────────────────────────
+@router.get("/production-variance")
+def production_variance(
+    year: int,
+    month: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(_require_cost),
+):
+    """이달 완료 작업지시 기준 표준 vs 실원가 차이 분석"""
+    from app.models.production import ProductionOrder, POrdStatus
+    from app.models.cost import ProductCostStd, LaborRate
+    from sqlalchemy import extract as _ex
+
+    completed = db.query(ProductionOrder).filter(
+        ProductionOrder.status == POrdStatus.completed,
+        _ex("year",  ProductionOrder.complete_date) == year,
+        _ex("month", ProductionOrder.complete_date) == month,
+    ).all()
+
+    if not completed:
+        return {"year": year, "month": month, "items": [], "total": {"std_cost": 0, "actual_cost": 0, "variance": 0, "variance_pct": None}}
+
+    part_nos = list({o.part_no for o in completed})
+    item_map = {i.part_no: i for i in db.query(Item).filter(Item.part_no.in_(part_nos)).all()}
+
+    bom_map: dict[str, list] = {}
+    from app.models.master import BomLine
+    for bl in db.query(BomLine).filter(BomLine.product_part_no.in_(part_nos)).all():
+        bom_map.setdefault(bl.product_part_no, []).append(bl)
+
+    comp_parts = list({bl.component_part_no for bls in bom_map.values() for bl in bls})
+    comp_items = {i.part_no: i for i in db.query(Item).filter(Item.part_no.in_(comp_parts)).all()} if comp_parts else {}
+
+    cost_stds = {cs.part_no: cs for cs in db.query(ProductCostStd).filter(ProductCostStd.part_no.in_(part_nos)).all()}
+    labor_rates = {lr.id: lr for lr in db.query(LaborRate).all()}
+
+    pord_nos = [o.pord_no for o in completed]
+    consumption_rows = db.query(
+        StockLedger.ref_no,
+        StockLedger.part_no,
+        func.sum(func.abs(StockLedger.qty)).label("qty"),
+        func.avg(StockLedger.unit_price).label("avg_price"),
+    ).filter(
+        StockLedger.ledger_type == LedgerType.consumption,
+        StockLedger.ref_no.in_(pord_nos),
+    ).group_by(StockLedger.ref_no, StockLedger.part_no).all()
+    consumption_map: dict[str, dict] = {}
+    for r in consumption_rows:
+        consumption_map.setdefault(r.ref_no, {})[r.part_no] = (float(r.qty or 0), float(r.avg_price or 0))
+
+    result_items = []
+    for order in completed:
+        pno = order.part_no
+        actual_qty = order.actual_qty or 0
+        if actual_qty == 0:
+            continue
+        item = item_map.get(pno)
+
+        # 표준 재료비
+        std_material = sum(
+            float(bl.qty_per) * float(comp_items[bl.component_part_no].std_buy_price or 0)
+            for bl in bom_map.get(pno, [])
+            if bl.component_part_no in comp_items
+        )
+
+        # 표준 노무비
+        std_labor = 0.0
+        cs = cost_stds.get(pno)
+        if cs:
+            lr = labor_rates.get(cs.process_id)
+            if lr:
+                std_labor = float(cs.std_labor_min) / 60.0 * float(lr.rate_per_hour)
+
+        std_total = std_material + std_labor
+
+        # 실 재료비 (소모원장 기준)
+        consumed = consumption_map.get(order.pord_no, {})
+        actual_material_total = sum(qty * price for qty, price in consumed.values())
+        actual_material_per = actual_material_total / actual_qty if actual_qty > 0 else 0.0
+
+        variance = actual_material_per - std_total
+        variance_pct = round(variance / std_total * 100, 1) if std_total > 0 else None
+
+        result_items.append({
+            "pord_no": order.pord_no,
+            "part_no": pno,
+            "part_name": item.name if item else pno,
+            "actual_qty": actual_qty,
+            "std_material": round(std_material, 2),
+            "std_labor": round(std_labor, 2),
+            "std_total": round(std_total, 2),
+            "actual_material_per": round(actual_material_per, 2),
+            "variance": round(variance, 2),
+            "variance_pct": variance_pct,
+            "total_variance": round(variance * actual_qty, 0),
+        })
+
+    result_items.sort(key=lambda x: abs(x["total_variance"]), reverse=True)
+
+    total_std = sum(r["std_total"] * r["actual_qty"] for r in result_items)
+    total_actual = sum(r["actual_material_per"] * r["actual_qty"] for r in result_items)
+    variance_total = total_actual - total_std
+
+    return {
+        "year": year,
+        "month": month,
+        "items": result_items,
+        "total": {
+            "std_cost": round(total_std, 0),
+            "actual_cost": round(total_actual, 0),
+            "variance": round(variance_total, 0),
+            "variance_pct": round(variance_total / total_std * 100, 1) if total_std > 0 else None,
+        },
+    }

@@ -35,14 +35,23 @@ export default function CostActual() {
   useEffect(() => {
     if (tab === 'avg-cost') loadAvgCosts()
     else if (tab === 'monthly') loadMonthly()
+    else if (tab === 'variance') loadVariance()
   }, [tab, ym])
 
   useEffect(() => { if (tab === 'avg-cost') loadAvgCosts() }, [itemType])
+
+  const [variance, setVariance] = useState(null)
+
+  const loadVariance = () => {
+    const [y,m] = ym.split('-')
+    api.get(`/cost/actual/production-variance?year=${y}&month=${m}`).then(r => setVariance(r.data)).catch(()=>setVariance(null))
+  }
 
   const TABS = [
     ['avg-cost', '이동평균단가 현황'],
     ['rollup', '제품별 실원가 롤업'],
     ['monthly', '월별 실원가 집계'],
+    ['variance', '생산원가 차이 분석'],
   ]
 
   return (
@@ -227,6 +236,92 @@ export default function CostActual() {
             </div>
           )}
           {!monthly && <div style={{textAlign:'center',color:'#94a3b8',padding:'60px 0',fontSize:14}}>월을 선택하고 조회하세요</div>}
+        </>
+      )}
+
+      {/* 생산원가 차이 분석 */}
+      {tab === 'variance' && (
+        <>
+          <div className="erp-panel" style={{marginBottom:12}}>
+            <div style={{display:'flex',gap:8,alignItems:'center'}}>
+              <span style={{fontSize:12,color:'#64748b'}}>조회 월</span>
+              <input type="month" value={ym} onChange={e=>setYm(e.target.value)}
+                style={{padding:'5px 8px',border:'1px solid var(--border)',borderRadius:4,fontSize:13}}/>
+              <button className="btn btn-sm btn-primary" onClick={loadVariance}>조회</button>
+            </div>
+          </div>
+          {variance && (
+            <>
+              {/* 요약 */}
+              <div style={{display:'flex',gap:12,marginBottom:16,flexWrap:'wrap'}}>
+                {[
+                  {label:'표준원가 합계', val:fmtW(variance.total.std_cost), bg:'#eff6ff',border:'#bfdbfe',color:'#1d4ed8'},
+                  {label:'실원가 합계', val:fmtW(variance.total.actual_cost), bg:'#f0fdf4',border:'#bbf7d0',color:'#15803d'},
+                  {label:'원가 차이', val:(variance.total.variance > 0 ? '+' : '') + fmtW(variance.total.variance),
+                    bg: variance.total.variance > 0 ? '#fef2f2' : '#f0fdf4',
+                    border: variance.total.variance > 0 ? '#fecaca' : '#bbf7d0',
+                    color: variance.total.variance > 0 ? '#dc2626' : '#15803d'},
+                  {label:'차이율', val: variance.total.variance_pct != null ? `${variance.total.variance_pct > 0 ? '+' : ''}${variance.total.variance_pct}%` : '—',
+                    bg:'#fefce8',border:'#fde68a',color:'#92400e'},
+                ].map(({label,val,bg,border,color})=>(
+                  <div key={label} style={{background:bg,border:`1px solid ${border}`,borderRadius:8,padding:'12px 18px',minWidth:160}}>
+                    <div style={{fontSize:11,color:'#64748b',fontWeight:600,marginBottom:4}}>{label}</div>
+                    <div style={{fontSize:16,fontWeight:800,color}}>{val}</div>
+                  </div>
+                ))}
+              </div>
+              {variance.items.length === 0 ? (
+                <div style={{textAlign:'center',color:'#94a3b8',padding:'40px 0',fontSize:14}}>
+                  해당 월 완료된 작업지시 없음
+                </div>
+              ) : (
+                <div className="table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>작업지시번호</th><th>품목명</th>
+                        <th style={{textAlign:'right'}}>완료수량</th>
+                        <th style={{textAlign:'right'}}>표준 재료비</th>
+                        <th style={{textAlign:'right'}}>표준 노무비</th>
+                        <th style={{textAlign:'right'}}>표준원가 합계</th>
+                        <th style={{textAlign:'right'}}>실원가(EA)</th>
+                        <th style={{textAlign:'right'}}>차이(EA)</th>
+                        <th style={{textAlign:'right'}}>차이율</th>
+                        <th style={{textAlign:'right'}}>총 차이금액</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {variance.items.map(item => (
+                        <tr key={item.pord_no}>
+                          <td style={{fontFamily:'monospace',fontSize:11}}>{item.pord_no}</td>
+                          <td style={{fontWeight:500,fontSize:12}}>{item.part_name}</td>
+                          <td style={{textAlign:'right',fontSize:12}}>{fmt(item.actual_qty)}</td>
+                          <td style={{textAlign:'right',fontSize:12}}>{fmtW(item.std_material)}</td>
+                          <td style={{textAlign:'right',fontSize:12}}>{fmtW(item.std_labor)}</td>
+                          <td style={{textAlign:'right',fontSize:12,fontWeight:600}}>{fmtW(item.std_total)}</td>
+                          <td style={{textAlign:'right',fontSize:12,color:'#1d4ed8',fontWeight:600}}>{fmtW(item.actual_material_per)}</td>
+                          <td style={{textAlign:'right',fontSize:12,
+                            color: item.variance > 0 ? '#dc2626' : item.variance < 0 ? '#16a34a' : '#64748b',
+                            fontWeight:600}}>
+                            {item.variance > 0 ? '+' : ''}{fmtW(item.variance)}
+                          </td>
+                          <td style={{textAlign:'right',fontSize:12,
+                            color: item.variance_pct == null ? '#94a3b8' : item.variance_pct > 5 ? '#dc2626' : item.variance_pct < -5 ? '#16a34a' : '#64748b'}}>
+                            {item.variance_pct != null ? `${item.variance_pct > 0 ? '+' : ''}${item.variance_pct}%` : '—'}
+                          </td>
+                          <td style={{textAlign:'right',fontSize:12,fontWeight:700,
+                            color: item.total_variance > 0 ? '#dc2626' : item.total_variance < 0 ? '#16a34a' : '#64748b'}}>
+                            {item.total_variance > 0 ? '+' : ''}{fmtW(item.total_variance)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </>
+          )}
+          {!variance && <div style={{textAlign:'center',color:'#94a3b8',padding:'60px 0',fontSize:14}}>월을 선택하고 조회하세요</div>}
         </>
       )}
     </div>

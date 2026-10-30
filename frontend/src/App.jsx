@@ -26,6 +26,9 @@ const Mrp            = lazy(() => import('./pages/Mrp'))
 const CostActual     = lazy(() => import('./pages/CostActual'))
 const InvAdjust      = lazy(() => import('./pages/InvAdjust'))
 const Management     = lazy(() => import('./pages/Management'))
+const ProductionGantt = lazy(() => import('./pages/ProductionGantt'))
+const Exceptions     = lazy(() => import('./pages/Exceptions'))
+const LotTrace       = lazy(() => import('./pages/LotTrace'))
 
 // GNB: 대분류 / LNB: 소분류
 const allMenus = [
@@ -53,9 +56,10 @@ const allMenus = [
     { to: '/quality', label: '품질·클레임' },
   ]},
   { id: 'production', label: '생산', items: [
-    { to: '/production',      label: '생산 관리' },
-    { to: '/production-plan', label: '월 생산계획' },
-    { to: '/production-mrp',  label: 'MRP 발주제안' },
+    { to: '/production',       label: '생산 관리' },
+    { to: '/production-plan',  label: '월 생산계획' },
+    { to: '/production-gantt', label: '생산 스케줄러' },
+    { to: '/production-mrp',   label: 'MRP 발주제안' },
   ]},
   { id: 'cost', label: '원가', items: [
     { to: '/cost',        label: '원가 관리' },
@@ -66,6 +70,10 @@ const allMenus = [
   ]},
   { id: 'management', label: '경영관리', items: [
     { to: '/management', label: '경영 코크핏' },
+    { to: '/exceptions', label: '예외 모니터링' },
+  ]},
+  { id: 'traceability', label: '추적', items: [
+    { to: '/lot-trace', label: 'LOT / 배치 추적' },
   ]},
   { id: 'master', label: '기준정보', items: [
     { to: '/master',     label: '품목·거래처' },
@@ -279,6 +287,15 @@ export default function App() {
             } />
             <Route path="/management" element={
               <ProtectedRoute path="/management"><Management /></ProtectedRoute>
+            } />
+            <Route path="/production-gantt" element={
+              <ProtectedRoute path="/production-gantt"><ProductionGantt /></ProtectedRoute>
+            } />
+            <Route path="/exceptions" element={
+              <ProtectedRoute path="/exceptions"><Exceptions /></ProtectedRoute>
+            } />
+            <Route path="/lot-trace" element={
+              <ProtectedRoute path="/lot-trace"><LotTrace /></ProtectedRoute>
             } />
           </Routes>
         </Suspense>

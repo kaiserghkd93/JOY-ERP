@@ -10,6 +10,7 @@ from app.routers import auth, portal, admin_import, monthly_sales, monthly_purch
 from app.routers import material, mrp, cost_actual
 from app.routers import inventory_adj
 from app.routers import quality_advanced
+from app.routers import lot
 from app.models import quality_advanced as _qa_models  # noqa: ensure tables
 from app.models import inventory_adj as _inv_adj_models  # noqa: ensure tables registered
 
@@ -149,6 +150,7 @@ app.include_router(sales_target.router)
 app.include_router(material.router)
 app.include_router(mrp.router)
 app.include_router(cost_actual.router)
+app.include_router(lot.router)
 
 
 @app.on_event("startup")
