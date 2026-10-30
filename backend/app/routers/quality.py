@@ -471,6 +471,8 @@ def review_appeal(ncr_no: str, appeal_id: int, body: ReviewBody, db: Session = D
 class DefectRegCreate(BaseModel):
     defect_date: date
     inspect_type: str
+    source_type: str = "자체생산"   # 자체생산 | 외주
+    partner_id: str | None = None
     part_no: str
     part_name: str | None = None
     defect_type: str
@@ -482,11 +484,40 @@ class DefectRegCreate(BaseModel):
     note: str | None = None
 
 
+def _defect_row(r) -> dict:
+    from app.models.master import Partner
+    partner_name = None
+    if r.partner_id and r.partner:
+        partner_name = r.partner.name
+    return {
+        "id": r.id,
+        "defect_date": str(r.defect_date),
+        "inspect_type": r.inspect_type,
+        "source_type": r.source_type if r.source_type else "자체생산",
+        "partner_id": r.partner_id,
+        "partner_name": partner_name,
+        "part_no": r.part_no,
+        "part_name": r.part_name,
+        "defect_type": r.defect_type,
+        "defect_qty": r.defect_qty,
+        "inspect_qty": r.inspect_qty,
+        "defect_rate": round(r.defect_qty / r.inspect_qty * 100, 2) if r.inspect_qty else None,
+        "line_no": r.line_no,
+        "cause": r.cause,
+        "action_taken": r.action_taken,
+        "registered_by": r.registered_by,
+        "note": r.note,
+        "created_at": str(r.created_at),
+    }
+
+
 @router.get("/quality/defect-reg")
 def list_defect_reg(
     start: date | None = None,
     end: date | None = None,
     inspect_type: str | None = None,
+    source_type: str | None = None,
+    partner_id: str | None = None,
     db: Session = Depends(get_db),
 ):
     q = db.query(ProcessOutgoingDefect)
@@ -496,34 +527,22 @@ def list_defect_reg(
         q = q.filter(ProcessOutgoingDefect.defect_date <= end)
     if inspect_type:
         q = q.filter(ProcessOutgoingDefect.inspect_type == inspect_type)
+    if source_type:
+        q = q.filter(ProcessOutgoingDefect.source_type == source_type)
+    if partner_id:
+        q = q.filter(ProcessOutgoingDefect.partner_id == partner_id)
     rows = q.order_by(ProcessOutgoingDefect.defect_date.desc(), ProcessOutgoingDefect.id.desc()).all()
-    return [
-        {
-            "id": r.id,
-            "defect_date": str(r.defect_date),
-            "inspect_type": r.inspect_type,
-            "part_no": r.part_no,
-            "part_name": r.part_name,
-            "defect_type": r.defect_type,
-            "defect_qty": r.defect_qty,
-            "inspect_qty": r.inspect_qty,
-            "defect_rate": round(r.defect_qty / r.inspect_qty * 100, 2) if r.inspect_qty else None,
-            "line_no": r.line_no,
-            "cause": r.cause,
-            "action_taken": r.action_taken,
-            "registered_by": r.registered_by,
-            "note": r.note,
-            "created_at": str(r.created_at),
-        }
-        for r in rows
-    ]
+    return [_defect_row(r) for r in rows]
 
 
 @router.post("/quality/defect-reg", status_code=201)
 def create_defect_reg(body: DefectRegCreate, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    from app.models.quality import DefectSourceType
     row = ProcessOutgoingDefect(
         defect_date=body.defect_date,
         inspect_type=body.inspect_type,
+        source_type=DefectSourceType(body.source_type),
+        partner_id=body.partner_id if body.source_type == "외주" else None,
         part_no=body.part_no,
         part_name=body.part_name,
         defect_type=body.defect_type,
@@ -539,6 +558,54 @@ def create_defect_reg(body: DefectRegCreate, current_user: User = Depends(get_cu
     db.commit()
     db.refresh(row)
     return {"id": row.id}
+
+
+@router.get("/quality/defect-reg/monthly-summary")
+def defect_monthly_summary(
+    year: int,
+    month: int,
+    db: Session = Depends(get_db),
+):
+    """월말 집계 — 외주업체별 불량 현황 (업체 통보용)"""
+    from datetime import date as date_cls
+    import calendar
+    first_day = date_cls(year, month, 1)
+    last_day = date_cls(year, month, calendar.monthrange(year, month)[1])
+
+    rows = db.query(ProcessOutgoingDefect).filter(
+        ProcessOutgoingDefect.defect_date >= first_day,
+        ProcessOutgoingDefect.defect_date <= last_day,
+    ).all()
+
+    # 자체생산 집계
+    inhouse = [r for r in rows if (r.source_type or "자체생산") == "자체생산"]
+    # 외주 집계 — 업체별 그룹
+    outsource_map: dict = {}
+    for r in rows:
+        if (r.source_type or "자체생산") != "외주":
+            continue
+        pid = r.partner_id or "미지정"
+        pname = (r.partner.name if r.partner else None) or pid
+        if pid not in outsource_map:
+            outsource_map[pid] = {"partner_id": pid, "partner_name": pname, "total_inspect": 0, "total_defect": 0, "items": []}
+        g = outsource_map[pid]
+        g["total_inspect"] += r.inspect_qty
+        g["total_defect"] += r.defect_qty
+        g["items"].append(_defect_row(r))
+
+    for g in outsource_map.values():
+        g["defect_rate"] = round(g["total_defect"] / g["total_inspect"] * 100, 2) if g["total_inspect"] else None
+
+    return {
+        "year": year,
+        "month": month,
+        "inhouse": {
+            "total_inspect": sum(r.inspect_qty for r in inhouse),
+            "total_defect": sum(r.defect_qty for r in inhouse),
+            "items": [_defect_row(r) for r in inhouse],
+        },
+        "outsource": sorted(outsource_map.values(), key=lambda x: x["total_defect"], reverse=True),
+    }
 
 
 @router.delete("/quality/defect-reg/{row_id}", status_code=204)

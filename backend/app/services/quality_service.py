@@ -28,7 +28,7 @@ def register_inspection(
         raise HTTPException(400, "취소 입고는 검사 불가")
 
     existing = db.query(Inspection).filter(Inspection.gr_no == gr_no).first()
-    if existing:
+    if existing and existing.result != InspectionResult.pending_insp:
         raise HTTPException(409, "이미 검사 등록된 입고")
 
     inspect_qty = pass_qty + fail_qty
@@ -44,12 +44,23 @@ def register_inspection(
     else:
         result = InspectionResult.pass_
 
-    insp = Inspection(
-        gr_no=gr_no, inspect_date=inspect_date,
-        inspect_qty=inspect_qty, pass_qty=pass_qty, fail_qty=fail_qty,
-        result=result, disposal=disposal, defect_note=defect_note,
-    )
-    db.add(insp)
+    if existing:
+        # 포털 자동생성된 "검사대기" 레코드 → 결과로 업데이트
+        existing.inspect_date = inspect_date
+        existing.inspect_qty = inspect_qty
+        existing.pass_qty = pass_qty
+        existing.fail_qty = fail_qty
+        existing.result = result
+        existing.disposal = disposal
+        existing.defect_note = defect_note
+        insp = existing
+    else:
+        insp = Inspection(
+            gr_no=gr_no, inspect_date=inspect_date,
+            inspect_qty=inspect_qty, pass_qty=pass_qty, fail_qty=fail_qty,
+            result=result, disposal=disposal, defect_note=defect_note,
+        )
+        db.add(insp)
     db.flush()
 
     # 합격수량만 재고원장에 입고(+) — 핵심 게이트

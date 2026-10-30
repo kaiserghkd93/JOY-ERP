@@ -6,6 +6,7 @@ import enum
 
 
 class InspectionResult(str, enum.Enum):
+    pending_insp = "검사대기"  # 포털 납품 자동 생성 — QC 미입력 상태
     pass_ = "합격"
     fail = "불합격"
     partial = "부분합격"
@@ -239,6 +240,11 @@ class InspectType(str, enum.Enum):
     outgoing = "출하검사"
 
 
+class DefectSourceType(str, enum.Enum):
+    inhouse   = "자체생산"   # 자사 공정 불량
+    outsource = "외주"       # 외주업체 제품 불량
+
+
 class ProcessOutgoingDefect(Base):
     """공정/출하 불량 등록"""
     __tablename__ = "process_outgoing_defect"
@@ -246,6 +252,10 @@ class ProcessOutgoingDefect(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     defect_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
     inspect_type: Mapped[InspectType] = mapped_column(SAEnum(InspectType), nullable=False)
+    source_type: Mapped[DefectSourceType] = mapped_column(
+        SAEnum(DefectSourceType), nullable=False, default=DefectSourceType.inhouse
+    )
+    partner_id: Mapped[str | None] = mapped_column(ForeignKey("partner.partner_id"), nullable=True)
     part_no: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
     part_name: Mapped[str | None] = mapped_column(String(200))
     defect_type: Mapped[str] = mapped_column(String(100), nullable=False)
@@ -257,3 +267,5 @@ class ProcessOutgoingDefect(Base):
     registered_by: Mapped[str | None] = mapped_column(ForeignKey("user.username"), nullable=True)
     note: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+
+    partner: Mapped["Partner | None"] = relationship(foreign_keys=[partner_id])

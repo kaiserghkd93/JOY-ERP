@@ -47,6 +47,10 @@ with engine.connect() as _conn:
         "ALTER TABLE bom_line ADD COLUMN IF NOT EXISTS actual_deduct_base NUMERIC(15,4)",
         # 외주 납품수량 추적 (거래명세표 기준)
         "ALTER TABLE receipt ADD COLUMN IF NOT EXISTS delivered_qty INTEGER DEFAULT 0",
+        # 공정/출하 불량 — 발생경로 구분 (자체생산/외주)
+        "ALTER TABLE process_outgoing_defect ADD COLUMN IF NOT EXISTS source_type VARCHAR(20) DEFAULT '자체생산'",
+        "ALTER TABLE process_outgoing_defect ADD COLUMN IF NOT EXISTS partner_id VARCHAR(50)",
+        # 수입검사 결과 Enum에 검사대기 추가는 DDL AUTOCOMMIT 블록에서 처리
         # NCR / 이의신청 (Base.metadata.create_all로 테이블 자동 생성)
     ]:
         try:
@@ -61,6 +65,16 @@ with engine.connect().execution_options(isolation_level="AUTOCOMMIT") as _ddl:
                   'shipping','quality','quality_manager','production','material','manufacturing','supplier','owner']:
         try:
             _ddl.execute(_text(f"ALTER TYPE userrole ADD VALUE IF NOT EXISTS '{_role}'"))
+        except Exception:
+            pass
+    for _dst in ['자체생산','외주']:
+        try:
+            _ddl.execute(_text(f"ALTER TYPE defectsourcetype ADD VALUE IF NOT EXISTS '{_dst}'"))
+        except Exception:
+            pass
+    for _ir in ['검사대기','합격','불합격','부분합격']:
+        try:
+            _ddl.execute(_text(f"ALTER TYPE inspectionresult ADD VALUE IF NOT EXISTS '{_ir}'"))
         except Exception:
             pass
     for _lt in ['퍼지손실','시동로스','러너폐기','재분쇄재입고','재분쇄재소모','원재료폐기']:

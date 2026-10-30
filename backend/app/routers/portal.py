@@ -145,6 +145,7 @@ def deliver(body: DeliveryReq, user: User = Depends(get_current_user), db: Sessi
             po_no=line.po_no,
             part_no=actual_part_no,
             qty=line.qty,
+            delivered_qty=line.qty,   # 거래명세표 기준 납품수량 자동 기록
             receipt_date=body.delivery_date,
             unit_price=unit_price,
             status=ReceiptStatus.pending,
@@ -153,6 +154,23 @@ def deliver(body: DeliveryReq, user: User = Depends(get_current_user), db: Sessi
         )
         db.add(receipt)
         db.flush()
+
+        # ── 수입검사 레코드 자동 생성 (검사대기 상태) ──────────────────
+        from app.models.quality import Inspection, InspectionResult, DisposalType, ApprovalStatus
+        existing_insp = db.query(Inspection).filter(Inspection.gr_no == gr_no).first()
+        if not existing_insp:
+            auto_insp = Inspection(
+                gr_no=gr_no,
+                inspect_date=body.delivery_date,
+                inspect_qty=line.qty,
+                pass_qty=0,
+                fail_qty=0,
+                result=InspectionResult.pending_insp,
+                disposal=DisposalType.pending,
+                defect_note="포털 납품 자동 생성 — 수입검사 결과 입력 필요",
+                approval_status=ApprovalStatus.draft,
+            )
+            db.add(auto_insp)
 
         created.append({
             "gr_no": gr_no,

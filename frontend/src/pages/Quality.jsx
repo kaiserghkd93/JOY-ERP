@@ -241,13 +241,14 @@ function NcrDetailModal({ ncr, isManager, onClose, onSaved }) {
   )
 }
 
-function InspectionModal({ onClose, onSaved }) {
+function InspectionModal({ onClose, onSaved, prefill }) {
   const [receipts, setReceipts] = useState([])
   const [standards, setStandards] = useState([])
   const [form, setForm] = useState({
-    gr_no: '', inspect_date: new Date().toISOString().slice(0,10),
-    pass_qty: '', fail_qty: '', disposal: '보류', defect_note: '',
-    standard_id: '', lot_size: '',
+    gr_no: prefill?.gr_no || '', inspect_date: new Date().toISOString().slice(0,10),
+    pass_qty: prefill?.inspect_qty ? String(prefill.inspect_qty) : '',
+    fail_qty: '', disposal: '보류', defect_note: '',
+    standard_id: '', lot_size: prefill?.inspect_qty ? String(prefill.inspect_qty) : '',
   })
   const [plan, setPlan] = useState(null)
   const [autoJudge, setAutoJudge] = useState(null)
@@ -786,10 +787,13 @@ export default function Quality() {
   const [rejectReason, setRejectReason] = useState('')
   const [defRegList, setDefRegList] = useState([])
   const [showDefRegModal, setShowDefRegModal] = useState(false)
-  const [defRegForm, setDefRegForm] = useState({ defect_date: new Date().toISOString().slice(0,10), inspect_type:'공정검사', part_no:'', part_name:'', defect_type:'', defect_qty:0, inspect_qty:0, line_no:'', cause:'', action_taken:'', note:'' })
+  const [defRegForm, setDefRegForm] = useState({ defect_date: new Date().toISOString().slice(0,10), inspect_type:'공정검사', source_type:'자체생산', partner_id:'', part_no:'', part_name:'', defect_type:'', defect_qty:0, inspect_qty:0, line_no:'', cause:'', action_taken:'', note:'' })
+  const [defRegMonthly, setDefRegMonthly] = useState(null)
+  const [defRegMonth, setDefRegMonth] = useState(new Date().toISOString().slice(0,7))
   const [itemMaster, setItemMaster] = useState([])
   const [partAcList, setPartAcList] = useState([])
   const [partAcOpen, setPartAcOpen] = useState(false)
+  const [partners, setPartners] = useState([])
 
   const load = useCallback(() => {
     api.get('/quality/claims').then(r => setClaims(r.data)).catch(() => {})
@@ -798,6 +802,7 @@ export default function Quality() {
     api.get('/quality/standards').then(r => setStandards(r.data)).catch(() => {})
     api.get('/quality/ncr').then(r => setNcrList(r.data)).catch(() => {})
     api.get('/quality/defect-reg').then(r => setDefRegList(Array.isArray(r.data) ? r.data : [])).catch(() => {})
+    api.get('/master/partners').then(r => setPartners(r.data)).catch(() => {})
   }, [])
 
   useEffect(() => { load() }, [load])
@@ -869,27 +874,41 @@ export default function Quality() {
             </tr></thead>
             <tbody>
               {inspections.length === 0 && <tr><td colSpan={10} className="empty">검사결과 없음</td></tr>}
-              {inspections.map(insp => (
-                <tr key={insp.id}>
+              {inspections.map(insp => {
+                const isPending = insp.result === '검사대기'
+                return (
+                <tr key={insp.id} style={{ background: isPending ? '#fff7ed' : '' }}>
                   <td style={{fontFamily:'monospace',fontSize:11}}>{insp.gr_no}</td>
                   <td>{insp.inspect_date}</td>
-                  <td style={{color:'var(--text-sm)',fontSize:12}}>{insp.lot_size?.toLocaleString() || '—'}</td>
+                  <td style={{color:'var(--text-sm)',fontSize:12}}>{insp.lot_size?.toLocaleString() || (isPending ? insp.inspect_qty?.toLocaleString() : '—')}</td>
                   <td style={{fontWeight:insp.sample_size?600:'normal',color:insp.sample_size?'var(--primary)':'var(--text-sm)',fontSize:12}}>
                     {insp.sample_size?.toLocaleString() || '—'}
                   </td>
                   <td style={{fontSize:11,color:'var(--text-sm)'}}>
                     {insp.ac != null ? `${insp.ac}/${insp.re}` : '—'}
                   </td>
-                  <td style={{color:'var(--success)'}}>{insp.pass_qty?.toLocaleString()}</td>
-                  <td style={{color:'var(--danger)'}}>{insp.fail_qty?.toLocaleString()}</td>
-                  <td><span className={`badge ${insp.result==='합격'?'badge-green':insp.result==='불합격'?'badge-red':'badge-amber'}`}>{insp.result}</span></td>
+                  <td style={{color:'var(--success)'}}>{isPending ? '—' : insp.pass_qty?.toLocaleString()}</td>
+                  <td style={{color:'var(--danger)'}}>{isPending ? '—' : insp.fail_qty?.toLocaleString()}</td>
+                  <td>
+                    {isPending
+                      ? <span style={{background:'#f97316',color:'#fff',borderRadius:4,padding:'2px 8px',fontSize:11,fontWeight:700,animation:'pulse 1.5s infinite'}}>⚠ 검사대기</span>
+                      : <span className={`badge ${insp.result==='합격'?'badge-green':insp.result==='불합격'?'badge-red':'badge-amber'}`}>{insp.result}</span>
+                    }
+                  </td>
                   <td><span className={`badge ${APPR_BADGE[insp.approval_status||'작성중']}`}>{insp.approval_status||'작성중'}</span></td>
                   <td style={{fontSize:11,color:'var(--text-sm)'}}>{insp.inspector_id||'—'}</td>
                   {isManager && <td style={{fontSize:11,color:'var(--danger)',maxWidth:120,overflow:'hidden',textOverflow:'ellipsis'}}>{insp.rejection_reason||'—'}</td>}
                   <td>
                     <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>
+                      {/* 검사대기 → 결과입력 버튼 (포털 자동생성 레코드) */}
+                      {isPending && (
+                        <button className="btn btn-sm" style={{background:'#f97316',color:'#fff',border:'none',fontWeight:700}}
+                          onClick={()=>setShowInspModal({gr_no: insp.gr_no, inspect_qty: insp.inspect_qty})}>
+                          ✍ 결과 입력
+                        </button>
+                      )}
                       {/* 담당자: 승인요청 버튼 */}
-                      {!isManager && (insp.approval_status==='작성중'||insp.approval_status==='반려'||!insp.approval_status) && (
+                      {!isPending && !isManager && (insp.approval_status==='작성중'||insp.approval_status==='반려'||!insp.approval_status) && (
                         <button className="btn btn-sm btn-primary" onClick={()=>requestApproval(insp.id)}>승인요청</button>
                       )}
                       {/* 책임자: 승인/반려/최종확정 */}
@@ -903,7 +922,7 @@ export default function Quality() {
                     </div>
                   </td>
                 </tr>
-              ))}
+              )})}
             </tbody>
           </table>
         </div>
@@ -1065,18 +1084,60 @@ export default function Quality() {
           <span className="result-bar-count">{defRegList.length}건</span>
         </div>
         <div className="table-wrap">
+          <div style={{display:'flex',gap:8,marginBottom:8,alignItems:'center'}}>
+            <input type="month" value={defRegMonth} onChange={e=>setDefRegMonth(e.target.value)}
+              style={{padding:'4px 8px',border:'1px solid var(--border)',borderRadius:4,fontSize:13}} />
+            <button className="btn btn-sm btn-outline" onClick={async()=>{
+              const [y,m] = defRegMonth.split('-')
+              const res = await api.get(`/quality/defect-reg/monthly-summary?year=${y}&month=${m}`)
+              setDefRegMonthly(res.data)
+            }}>📊 월말 집계</button>
+            {defRegMonthly && <button className="btn btn-sm btn-outline" onClick={()=>setDefRegMonthly(null)}>✕ 닫기</button>}
+          </div>
+
+          {defRegMonthly && (
+            <div style={{marginBottom:16,border:'1px solid var(--border)',borderRadius:8,padding:16,background:'var(--bg-card)'}}>
+              <strong>{defRegMonthly.year}년 {defRegMonthly.month}월 불량 월말 집계</strong>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:16,marginTop:12}}>
+                <div>
+                  <div style={{fontWeight:600,marginBottom:6,color:'var(--primary)'}}>🏭 자체생산</div>
+                  <div style={{fontSize:13}}>검사 {defRegMonthly.inhouse.total_inspect?.toLocaleString()}개 / 불량 <span style={{color:'var(--danger)',fontWeight:600}}>{defRegMonthly.inhouse.total_defect?.toLocaleString()}개</span>
+                    {defRegMonthly.inhouse.total_inspect > 0 && <span style={{marginLeft:6,color:'var(--text-sm)'}}>({(defRegMonthly.inhouse.total_defect/defRegMonthly.inhouse.total_inspect*100).toFixed(1)}%)</span>}
+                  </div>
+                </div>
+                <div>
+                  <div style={{fontWeight:600,marginBottom:6,color:'#d97706'}}>🚚 외주업체별</div>
+                  {defRegMonthly.outsource.length === 0 && <div style={{fontSize:13,color:'var(--text-sm)'}}>외주 불량 없음</div>}
+                  {defRegMonthly.outsource.map(g=>(
+                    <div key={g.partner_id} style={{fontSize:13,marginBottom:4,display:'flex',justifyContent:'space-between'}}>
+                      <span>{g.partner_name}</span>
+                      <span>불량 <strong style={{color:'var(--danger)'}}>{g.total_defect}</strong>개
+                        {g.defect_rate!=null && <span style={{color:'var(--text-sm)',marginLeft:4}}>({g.defect_rate}%)</span>}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
           <table>
             <thead><tr>
-              <th>발생일</th><th>검사유형</th><th>품번</th><th>품명</th>
+              <th>발생일</th><th>검사유형</th><th>출처</th><th>품번</th><th>품명</th>
               <th>불량유형</th><th>검사수량</th><th>불량수량</th><th>불량율</th>
               <th>라인/공정</th><th>불량원인</th><th>처리조치</th><th>등록자</th><th>삭제</th>
             </tr></thead>
             <tbody>
-              {defRegList.length === 0 && <tr><td colSpan={13} className="empty">등록된 불량 없음</td></tr>}
+              {defRegList.length === 0 && <tr><td colSpan={14} className="empty">등록된 불량 없음</td></tr>}
               {defRegList.map(r => (
                 <tr key={r.id}>
                   <td>{r.defect_date}</td>
                   <td><span className={`badge ${r.inspect_type==='공정검사'?'badge-blue':'badge-amber'}`}>{r.inspect_type}</span></td>
+                  <td>
+                    {r.source_type === '외주'
+                      ? <span className="badge badge-orange" title={r.partner_name||r.partner_id}>🚚 {r.partner_name||r.partner_id||'외주'}</span>
+                      : <span className="badge badge-blue">🏭 자체</span>}
+                  </td>
                   <td style={{fontFamily:'monospace',fontSize:11}}>{r.part_no}</td>
                   <td>{r.part_name||'—'}</td>
                   <td>{r.defect_type}</td>
@@ -1115,6 +1176,28 @@ export default function Quality() {
                   <option>공정검사</option><option>출하검사</option>
                 </select>
               </div>
+            </div>
+            <div className="grid-2">
+              <div className="form-group">
+                <label>발생경로 *</label>
+                <select value={defRegForm.source_type}
+                  onChange={e=>setDefRegForm(p=>({...p,source_type:e.target.value,partner_id:''}))}>
+                  <option value="자체생산">🏭 자체생산</option>
+                  <option value="외주">🚚 외주업체</option>
+                </select>
+              </div>
+              {defRegForm.source_type === '외주' && (
+                <div className="form-group">
+                  <label>외주업체 *</label>
+                  <select value={defRegForm.partner_id}
+                    onChange={e=>setDefRegForm(p=>({...p,partner_id:e.target.value}))}>
+                    <option value="">-- 업체 선택 --</option>
+                    {partners.filter(p=>p.partner_type==='외주처'||p.partner_type==='공용').map(p=>(
+                      <option key={p.partner_id} value={p.partner_id}>{p.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
             </div>
             <div className="grid-2">
               <div className="form-group">
@@ -1205,9 +1288,10 @@ export default function Quality() {
               <button className="btn btn-primary" onClick={async()=>{
                 if(!defRegForm.part_no||!defRegForm.defect_type) return alert('품번과 불량유형은 필수입니다')
                 try {
+                  if(defRegForm.source_type==='외주'&&!defRegForm.partner_id) return alert('외주 선택 시 업체를 선택해주세요')
                   await api.post('/quality/defect-reg', defRegForm)
                   setShowDefRegModal(false)
-                  setDefRegForm({defect_date:new Date().toISOString().slice(0,10),inspect_type:'공정검사',part_no:'',part_name:'',defect_type:'',defect_qty:0,inspect_qty:0,line_no:'',cause:'',action_taken:'',note:''})
+                  setDefRegForm({defect_date:new Date().toISOString().slice(0,10),inspect_type:'공정검사',source_type:'자체생산',partner_id:'',part_no:'',part_name:'',defect_type:'',defect_qty:0,inspect_qty:0,line_no:'',cause:'',action_taken:'',note:''})
                   load()
                 } catch(e) { alert(e.response?.data?.detail||'저장 실패') }
               }}>저장</button>
@@ -1226,6 +1310,7 @@ export default function Quality() {
 
       {showInspModal && (
         <InspectionModal
+          prefill={typeof showInspModal === 'object' ? showInspModal : null}
           onClose={() => setShowInspModal(false)}
           onSaved={() => { setShowInspModal(false); load() }}
         />
