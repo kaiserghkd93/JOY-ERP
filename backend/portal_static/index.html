@@ -214,7 +214,7 @@ header {
 .tab.active { color: var(--navy); border-bottom-color: var(--blue); }
 
 /* Content */
-.content { padding: 24px 28px; max-width: 1200px; margin: 0 auto; }
+.content { padding: 24px 28px; max-width: 1400px; margin: 0 auto; }
 .section { display: none; }
 .section.active { display: block; }
 
@@ -358,23 +358,53 @@ tbody tr:hover { background: #f8fafc; }
 }
 .month-count { font-size: 11px; color: var(--text-xs); margin-left: auto; }
 
-/* ── Deliver form ── */
-.deliver-form {
-  background: var(--surface);
+/* ── Deliver split layout ── */
+.deliver-panel {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0;
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   overflow: hidden;
+  background: var(--surface);
+  min-height: 600px;
 }
-.deliver-form-header {
+.deliver-panel-left {
+  border-right: 2px solid var(--border-md);
+  display: flex;
+  flex-direction: column;
+}
+.deliver-panel-right {
+  display: flex;
+  flex-direction: column;
+}
+.panel-head {
   background: var(--navy);
   border-bottom: 2px solid var(--blue);
-  padding: 13px 20px;
+  padding: 11px 18px;
   color: #fff;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 700;
-  letter-spacing: 0.3px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
 }
-.deliver-form-body { padding: 20px 22px; }
+.panel-head .ph-count {
+  background: rgba(255,255,255,0.15);
+  border-radius: 20px;
+  padding: 2px 10px;
+  font-size: 11px;
+  margin-left: auto;
+}
+.panel-body { padding: 16px 18px; flex: 1; overflow-y: auto; }
+.panel-footer {
+  padding: 14px 18px;
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+}
 .section-label {
   font-size: 10px;
   font-weight: 700;
@@ -383,32 +413,48 @@ tbody tr:hover { background: #f8fafc; }
   letter-spacing: 1px;
   margin-bottom: 7px;
 }
-.po-list {
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  max-height: 250px;
-  overflow-y: auto;
-  margin-bottom: 14px;
-  background: #fafbfd;
-}
+/* Left — 발주 목록 */
+.po-search-wrap { margin-bottom: 10px; }
+.po-list { flex: 1; overflow-y: auto; }
 .po-item {
-  padding: 9px 14px;
+  padding: 10px 14px;
   border-bottom: 1px solid var(--border);
   cursor: pointer;
   transition: background 0.1s;
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 .po-item:last-child { border-bottom: none; }
 .po-item:hover { background: #f1f4fa; }
 .po-item.selected { background: var(--blue-lt); border-left: 3px solid var(--blue); }
-.po-item-name { font-weight: 600; font-size: 12px; color: var(--text); }
+.po-item-check {
+  width: 16px; height: 16px;
+  border: 2px solid var(--border-md);
+  border-radius: 3px;
+  flex-shrink: 0;
+  background: #fff;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 10px; color: var(--blue);
+  transition: border-color 0.1s, background 0.1s;
+}
+.po-item.selected .po-item-check { background: var(--blue); border-color: var(--blue); color: #fff; }
+.po-item-detail { flex: 1; min-width: 0; }
+.po-item-name { font-weight: 600; font-size: 12px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .po-item-info { font-size: 11px; color: var(--text-sm); margin-top: 2px; }
-
-.qty-table { width: 100%; border-collapse: collapse; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
-.qty-table th { background: #f5f7fb; padding: 8px 11px; text-align: left; font-size: 10px; font-weight: 700; color: var(--text-sm); letter-spacing: 0.5px; text-transform: uppercase; border-bottom: 1px solid var(--border); }
-.qty-table td { padding: 7px 11px; border-bottom: 1px solid var(--border); font-size: 12px; }
+.po-item-remain { font-size: 12px; font-weight: 700; color: var(--danger); flex-shrink: 0; text-align: right; }
+/* Right — 명세표 */
+.qty-table { width: 100%; border-collapse: collapse; }
+.qty-table th { background: #f5f7fb; padding: 7px 10px; text-align: left; font-size: 10px; font-weight: 700; color: var(--text-sm); letter-spacing: 0.5px; text-transform: uppercase; border-bottom: 1px solid var(--border); border-top: 1px solid var(--border); }
+.qty-table td { padding: 8px 10px; border-bottom: 1px solid var(--border); font-size: 12px; }
 .qty-table tr:last-child td { border-bottom: none; }
-.qty-input { width: 100px; padding: 4px 8px; border: 1px solid var(--border-md); border-radius: var(--radius); font-size: 12px; text-align: right; font-family: inherit; }
+.qty-input { width: 88px; padding: 5px 7px; border: 1px solid var(--border-md); border-radius: var(--radius); font-size: 12px; text-align: right; font-family: inherit; }
+.qty-input:focus { outline: none; border-color: var(--blue); box-shadow: 0 0 0 2px rgba(30,86,200,0.1); }
 .remove-btn { background: #fdf2f1; color: var(--danger); border: none; border-radius: var(--radius); padding: 3px 9px; cursor: pointer; font-size: 11px; font-weight: 700; }
+.empty-cart { text-align: center; padding: 48px 20px; color: var(--text-sm); }
+.empty-cart-icon { font-size: 36px; margin-bottom: 10px; opacity: 0.3; }
+.total-row { display: flex; align-items: center; justify-content: flex-end; gap: 8px; padding: 6px 0; font-size: 12px; color: var(--text-sm); border-top: 2px solid var(--border-md); margin-top: 8px; }
+.total-row strong { font-size: 16px; color: var(--navy); font-variant-numeric: tabular-nums; }
 
 /* ── Autocomplete ── */
 .ac-wrap { position: relative; display: inline-block; }
@@ -546,48 +592,83 @@ tbody tr:hover { background: #f8fafc; }
 
     <!-- 납품 입력 -->
     <div id="tab-deliver" class="section">
-      <div class="deliver-form">
-        <div class="deliver-form-header">납품 입력 / 거래명세서 발행</div>
-        <div class="deliver-form-body">
-          <div id="deliver-alert"></div>
+      <div id="deliver-alert" style="margin-bottom:10px"></div>
+      <div class="deliver-panel">
 
-          <div class="form-group" style="max-width:220px">
-            <label>납품일 <span style="font-size:10px;font-weight:400;color:var(--text-xs);text-transform:none;letter-spacing:0">(자동 — 당일 기준)</span></label>
-            <input type="date" id="deliver-date" readonly style="background:#f5f7fb;color:var(--text-sm);cursor:not-allowed;pointer-events:none;" tabindex="-1" />
+        <!-- 좌: 발주 목록 -->
+        <div class="deliver-panel-left">
+          <div class="panel-head">
+            발주 목록
+            <span class="ph-count" id="po-count">0건</span>
           </div>
-
-          <div class="form-group">
-            <p class="section-label">발주 선택 <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--text-xs)">(복수 선택 가능)</span></p>
-            <input type="text" id="po-search" placeholder="품목명 또는 발주번호 검색" oninput="filterPoList()" style="max-width:380px;margin-bottom:8px" />
-            <div id="po-list" class="po-list"><div style="padding:20px;text-align:center;color:var(--text-sm)">로딩 중...</div></div>
-          </div>
-
-          <div id="qty-section" style="display:none;margin-bottom:16px">
-            <p class="section-label">납품 수량 / 단가</p>
-            <table class="qty-table">
-              <thead><tr><th>품목</th><th>발주번호</th><th>잔여수량</th><th>납품수량</th><th>단가(원)</th><th></th></tr></thead>
-              <tbody id="qty-tbody"></tbody>
-            </table>
-          </div>
-
-          <div style="margin-bottom:16px">
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-              <p class="section-label" style="margin:0">발주 없는 품목 직접 입력</p>
-              <button class="btn btn-light" style="font-size:11px;padding:4px 13px" onclick="addManualRow()">+ 품목 추가</button>
+          <div class="panel-body">
+            <div class="po-search-wrap">
+              <input type="text" id="po-search" placeholder="품목명 또는 발주번호 검색" oninput="filterPoList()" style="width:100%" />
             </div>
-            <table class="qty-table" id="manual-table" style="display:none">
-              <thead><tr><th>품목명</th><th>규격/단위</th><th>수량</th><th>단가(원)</th><th></th></tr></thead>
-              <tbody id="manual-tbody"></tbody>
-            </table>
+            <div id="po-list" class="po-list">
+              <div style="padding:30px;text-align:center;color:var(--text-sm)">로딩 중...</div>
+            </div>
           </div>
-
-          <div class="form-group" style="max-width:480px">
-            <label>비고</label>
-            <input type="text" id="deliver-note" placeholder="비고 (선택 입력)" />
-          </div>
-
-          <button class="btn btn-print" style="width:100%;padding:11px;font-size:13px" onclick="submitAndPrint()">거래명세서 출력</button>
         </div>
+
+        <!-- 우: 명세표 작성 -->
+        <div class="deliver-panel-right">
+          <div class="panel-head">
+            명세표 작성
+            <span class="ph-count" id="cart-count">0개 품목</span>
+          </div>
+          <div class="panel-body">
+            <!-- 납품일 -->
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+              <label style="margin:0;white-space:nowrap">납품일</label>
+              <input type="date" id="deliver-date" readonly style="background:#f5f7fb;color:var(--text-sm);cursor:not-allowed;pointer-events:none;width:160px" tabindex="-1" />
+            </div>
+
+            <!-- 선택 품목 테이블 -->
+            <div id="qty-section">
+              <div id="cart-empty" class="empty-cart">
+                <div class="empty-cart-icon">📋</div>
+                <div style="font-size:13px;font-weight:600;margin-bottom:4px">납품 품목 없음</div>
+                <div style="font-size:11px">왼쪽 발주 목록에서 납품할 품목을 클릭하세요</div>
+              </div>
+              <table class="qty-table" id="cart-table" style="display:none">
+                <thead><tr><th>품목</th><th>납품수량</th><th>단가(원)</th><th></th></tr></thead>
+                <tbody id="qty-tbody"></tbody>
+              </table>
+            </div>
+
+            <!-- 합계 -->
+            <div class="total-row" id="total-row" style="display:none">
+              <span>공급가액 합계</span>
+              <strong id="total-amt">￦0</strong>
+            </div>
+
+            <!-- 발주 없는 품목 -->
+            <div style="margin-top:16px;border-top:1px solid var(--border);padding-top:12px">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+                <p class="section-label" style="margin:0">발주 없는 품목 직접 입력</p>
+                <button class="btn btn-light" style="font-size:11px;padding:4px 13px" onclick="addManualRow()">+ 품목 추가</button>
+              </div>
+              <table class="qty-table" id="manual-table" style="display:none">
+                <thead><tr><th>품목명</th><th>단위</th><th>수량</th><th>단가(원)</th><th></th></tr></thead>
+                <tbody id="manual-tbody"></tbody>
+              </table>
+            </div>
+
+            <!-- 비고 -->
+            <div class="form-group" style="margin-top:14px;margin-bottom:0">
+              <label>비고</label>
+              <input type="text" id="deliver-note" placeholder="비고 (선택 입력)" />
+            </div>
+          </div>
+
+          <div class="panel-footer">
+            <button class="btn btn-print" style="width:100%;padding:11px;font-size:13px" onclick="submitAndPrint()">
+              거래명세서 출력
+            </button>
+          </div>
+        </div>
+
       </div>
     </div>
 
@@ -903,16 +984,23 @@ function filterPoList() {
   const filtered = allOrders.filter(o =>
     !q || o.item_name.toLowerCase().includes(q) || o.po_no.toLowerCase().includes(q)
   );
+  const cnt = document.getElementById('po-count');
+  if (cnt) cnt.textContent = filtered.length + '건';
   if (!filtered.length) {
-    document.getElementById('po-list').innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-sm)">' + (q ? '검색 결과 없음' : '발주 없음') + '</div>';
+    document.getElementById('po-list').innerHTML = '<div style="padding:30px;text-align:center;color:var(--text-sm)">' + (q ? '검색 결과 없음' : '발주 없음') + '</div>';
     return;
   }
-  document.getElementById('po-list').innerHTML = filtered.map(o=>`
-    <div class="po-item${selectedPOs[o.po_no] ? ' selected' : ''}" id="po-${o.po_no.replace(/[^a-z0-9]/gi,'-')}" onclick="togglePO('${o.po_no}')">
-      <div class="po-item-name">${o.item_name} <span style="color:var(--text-sm);font-size:11px;font-weight:400">${o.po_no}</span></div>
-      <div class="po-item-info">잔여: ${o.remaining_qty.toLocaleString()} ${o.item_unit} | 납기: ${o.due_date}</div>
-    </div>
-  `).join('');
+  document.getElementById('po-list').innerHTML = filtered.map(o=>{
+    const sel = !!selectedPOs[o.po_no];
+    return `<div class="po-item${sel ? ' selected' : ''}" id="po-${o.po_no.replace(/[^a-z0-9]/gi,'-')}" onclick="togglePO('${o.po_no}')">
+      <div class="po-item-check">${sel ? '✓' : ''}</div>
+      <div class="po-item-detail">
+        <div class="po-item-name">${o.item_name}</div>
+        <div class="po-item-info">${o.po_no} · 납기 ${o.due_date}</div>
+      </div>
+      <div class="po-item-remain">${o.remaining_qty.toLocaleString()}<br><span style="font-size:10px;font-weight:400;color:var(--text-sm)">${o.item_unit}</span></div>
+    </div>`;
+  }).join('');
 }
 
 function showTab(tab) {
@@ -1170,19 +1258,46 @@ function togglePO(poNo) {
 
 function renderQtyTable() {
   const keys = Object.keys(selectedPOs);
-  if (!keys.length) { document.getElementById('qty-section').style.display = 'none'; return; }
-  document.getElementById('qty-section').style.display = 'block';
+  const cartEmpty = document.getElementById('cart-empty');
+  const cartTable = document.getElementById('cart-table');
+  const totalRow = document.getElementById('total-row');
+  const cartCount = document.getElementById('cart-count');
+  if (cartCount) cartCount.textContent = (keys.length + manualRows.filter(r=>r.item_name.trim()).length) + '개 품목';
+  if (!keys.length) {
+    cartEmpty.style.display = 'block';
+    cartTable.style.display = 'none';
+    if (totalRow) totalRow.style.display = 'none';
+    return;
+  }
+  cartEmpty.style.display = 'none';
+  cartTable.style.display = 'table';
+  let total = 0;
   document.getElementById('qty-tbody').innerHTML = keys.map(k => {
     const p = selectedPOs[k];
+    const amt = (p.qty||0) * (p.unit_price||0);
+    total += amt;
     return `<tr>
-      <td><strong>${p.item_name}</strong></td>
-      <td style="color:var(--text-sm);font-size:11px">${p.po_no}</td>
-      <td>${p.remaining_qty.toLocaleString()} ${p.item_unit}</td>
-      <td><input class="qty-input" type="number" value="${p.qty}" min="1" onchange="selectedPOs['${k}'].qty=parseInt(this.value)||0" /></td>
-      <td><input class="qty-input" type="number" value="${Math.round(p.unit_price)}" min="0" onchange="selectedPOs['${k}'].unit_price=parseFloat(this.value)||0" /></td>
+      <td>
+        <div style="font-weight:600;font-size:12px">${p.item_name}</div>
+        <div style="font-size:11px;color:var(--text-sm)">${p.po_no}</div>
+      </td>
+      <td><input class="qty-input" type="number" value="${p.qty}" min="1" oninput="selectedPOs['${k}'].qty=parseInt(this.value)||0;recalcTotal()" /></td>
+      <td><input class="qty-input" type="number" value="${Math.round(p.unit_price)}" min="0" oninput="selectedPOs['${k}'].unit_price=parseFloat(this.value)||0;recalcTotal()" /></td>
       <td><button class="remove-btn" onclick="togglePO('${k}')">✕</button></td>
     </tr>`;
   }).join('');
+  if (totalRow) {
+    totalRow.style.display = 'flex';
+    document.getElementById('total-amt').textContent = '￦' + Math.round(total).toLocaleString();
+  }
+}
+
+function recalcTotal() {
+  let total = 0;
+  Object.values(selectedPOs).forEach(p => total += (p.qty||0)*(p.unit_price||0));
+  manualRows.forEach(r => total += (r.qty||0)*(r.unit_price||0));
+  const el = document.getElementById('total-amt');
+  if (el) el.textContent = '￦' + Math.round(total).toLocaleString();
 }
 
 async function submitAndPrint() {
