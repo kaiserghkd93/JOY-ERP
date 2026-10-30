@@ -183,3 +183,34 @@ def import_data(data: dict, db: Session = Depends(get_db), _: User = Depends(req
             results[table] = f"오류: {str(e)[:150]}"
 
     return results
+
+
+@router.post("/purge-portal-test-receipts")
+def purge_portal_test_receipts(db: Session = Depends(get_db), _: User = Depends(require_admin)):
+    """포털 실수납품 정리: GR-20261030-001 ~ 007 및 연관 검사·NCR 일괄 삭제"""
+    from app.models.purchase import Receipt, ReceiptStatus
+    from app.models.quality import Inspection, NonConformance
+
+    targets = [f"GR-20261030-{i:03d}" for i in range(1, 8)]
+    deleted = []
+    skipped = []
+
+    for gr_no in targets:
+        r = db.get(Receipt, gr_no)
+        if not r:
+            skipped.append(gr_no)
+            continue
+        if r.status == ReceiptStatus.confirmed:
+            skipped.append(f"{gr_no}(확정입고-스킵)")
+            continue
+        insp = db.query(Inspection).filter(Inspection.gr_no == gr_no).first()
+        if insp:
+            db.delete(insp)
+        ncrs = db.query(NonConformance).filter(NonConformance.gr_no == gr_no).all()
+        for ncr in ncrs:
+            db.delete(ncr)
+        db.delete(r)
+        deleted.append(gr_no)
+
+    db.commit()
+    return {"deleted": deleted, "skipped": skipped, "total_deleted": len(deleted)}
