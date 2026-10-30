@@ -6,7 +6,10 @@ import { getRole } from '../auth'
 
 // ── 역할별 노출 섹션 정의 ─────────────────────────────────────────
 // true = 보임 / false = 숨김
+// 역할별 노출 섹션. 없는 역할은 admin과 동일하게 처리됨.
+// supplier_scorecard = 외주처 스코어카드 (총입고금액 포함) → 구매 담당만 표시
 const ROLE_SECTIONS = {
+  // ── 관리·경영 ──────────────────────────────────────────────────
   admin: {
     summary: true, kpi_delivery: true, kpi_quality: true, kpi_inventory: true, kpi_profit: true,
     target: true, closing: true, stock_chart: true, monthly_trend: true,
@@ -14,76 +17,92 @@ const ROLE_SECTIONS = {
     quality_dashboard: true, supplier_scorecard: true,
   },
   executive: {
+    // 대표/전무: 매출·이익·품질 요약. 구매·재고 세부 제외
     summary: true, kpi_delivery: true, kpi_quality: true, kpi_inventory: false, kpi_profit: true,
     target: true, closing: true, stock_chart: false, monthly_trend: true,
     sales_table: false, purchase_table: false, customer_scorecard: false,
     quality_dashboard: true, supplier_scorecard: false,
   },
-  owner: {
-    summary: false, kpi_delivery: false, kpi_quality: false, kpi_inventory: false, kpi_profit: false,
-    target: true, closing: false, stock_chart: false, monthly_trend: false,
-    sales_table: false, purchase_table: false, customer_scorecard: false,
-    quality_dashboard: true, supplier_scorecard: false,
-  },
   manager: {
+    // 상무: 전체에 준하되 외주처 세부 포함
     summary: true, kpi_delivery: true, kpi_quality: true, kpi_inventory: true, kpi_profit: true,
     target: true, closing: true, stock_chart: false, monthly_trend: true,
     sales_table: false, purchase_table: false, customer_scorecard: true,
     quality_dashboard: true, supplier_scorecard: true,
   },
+  owner: {
+    // 오너: 목표달성률 + 품질 현황만
+    summary: false, kpi_delivery: false, kpi_quality: false, kpi_inventory: false, kpi_profit: false,
+    target: true, closing: false, stock_chart: false, monthly_trend: false,
+    sales_table: false, purchase_table: false, customer_scorecard: false,
+    quality_dashboard: true, supplier_scorecard: false,
+  },
+  // ── 재무·영업 ──────────────────────────────────────────────────
   accounting: {
+    // 경리: 매출·매입·이익·트렌드. 품질·외주처 제외
     summary: true, kpi_delivery: false, kpi_quality: false, kpi_inventory: true, kpi_profit: true,
     target: true, closing: true, stock_chart: false, monthly_trend: true,
     sales_table: true, purchase_table: true, customer_scorecard: false,
     quality_dashboard: false, supplier_scorecard: false,
   },
   sales: {
+    // 영업: 매출·납기·고객사 현황. 구매·품질 제외
     summary: true, kpi_delivery: true, kpi_quality: false, kpi_inventory: false, kpi_profit: false,
     target: true, closing: false, stock_chart: false, monthly_trend: true,
     sales_table: true, purchase_table: false, customer_scorecard: true,
     quality_dashboard: false, supplier_scorecard: false,
   },
+  shipping: {
+    // 출하: 납기·매출·고객사 납기. 구매·품질 제외
+    summary: true, kpi_delivery: true, kpi_quality: false, kpi_inventory: false, kpi_profit: false,
+    target: true, closing: false, stock_chart: false, monthly_trend: false,
+    sales_table: true, purchase_table: false, customer_scorecard: true,
+    quality_dashboard: false, supplier_scorecard: false,
+  },
+  // ── 구매·자재 ──────────────────────────────────────────────────
   purchase: {
+    // 외주구매: 발주·입고·재고·불량률·외주처 스코어카드
     summary: true, kpi_delivery: false, kpi_quality: true, kpi_inventory: true, kpi_profit: false,
     target: false, closing: false, stock_chart: true, monthly_trend: false,
     sales_table: false, purchase_table: true, customer_scorecard: false,
     quality_dashboard: false, supplier_scorecard: true,
   },
   material: {
+    // 자재구매: 재고 현황만
     summary: false, kpi_delivery: false, kpi_quality: false, kpi_inventory: true, kpi_profit: false,
     target: false, closing: false, stock_chart: true, monthly_trend: false,
     sales_table: false, purchase_table: false, customer_scorecard: false,
     quality_dashboard: false, supplier_scorecard: false,
   },
+  // ── 품질 ───────────────────────────────────────────────────────
   quality: {
+    // 품질검사 담당자: 품질 KPI + 품질 대시보드만. 구매·매출 전면 제외
     summary: false, kpi_delivery: false, kpi_quality: true, kpi_inventory: false, kpi_profit: false,
     target: false, closing: false, stock_chart: false, monthly_trend: false,
     sales_table: false, purchase_table: false, customer_scorecard: false,
-    quality_dashboard: true, supplier_scorecard: true,
+    quality_dashboard: true, supplier_scorecard: false,
   },
   quality_manager: {
+    // 품질책임자: 품질 KPI + 납기준수율 + 고객사 납기 스코어카드. 구매·매출 제외
     summary: false, kpi_delivery: true, kpi_quality: true, kpi_inventory: false, kpi_profit: false,
     target: false, closing: false, stock_chart: false, monthly_trend: false,
     sales_table: false, purchase_table: false, customer_scorecard: true,
-    quality_dashboard: true, supplier_scorecard: true,
+    quality_dashboard: true, supplier_scorecard: false,
   },
+  // ── 생산 ───────────────────────────────────────────────────────
   production: {
+    // 생산관리: 불량률 + 품질 대시보드. 구매·매출 제외
     summary: false, kpi_delivery: false, kpi_quality: true, kpi_inventory: false, kpi_profit: false,
     target: false, closing: false, stock_chart: false, monthly_trend: false,
     sales_table: false, purchase_table: false, customer_scorecard: false,
     quality_dashboard: true, supplier_scorecard: false,
   },
   manufacturing: {
+    // 제조관리 총괄: 불량률 + 재고 + 품질 대시보드. 매출·구매금액 제외
     summary: false, kpi_delivery: false, kpi_quality: true, kpi_inventory: true, kpi_profit: false,
     target: false, closing: false, stock_chart: true, monthly_trend: false,
     sales_table: false, purchase_table: false, customer_scorecard: false,
     quality_dashboard: true, supplier_scorecard: false,
-  },
-  shipping: {
-    summary: true, kpi_delivery: true, kpi_quality: false, kpi_inventory: false, kpi_profit: false,
-    target: true, closing: false, stock_chart: false, monthly_trend: false,
-    sales_table: true, purchase_table: false, customer_scorecard: true,
-    quality_dashboard: false, supplier_scorecard: false,
   },
 }
 
