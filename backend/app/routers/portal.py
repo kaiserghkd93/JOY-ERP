@@ -66,7 +66,7 @@ def my_orders(user: User = Depends(get_current_user), db: Session = Depends(get_
     return result
 
 
-# ── 내 업체 품목 목록 (자동완성용) ──────────────────────────────
+# ── 내 업체 품목 목록 (발주 기준, 발주목록 자동완성용) ───────────
 @router.get("/my-items")
 def my_items(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     partner_id = _supplier_partner(user)
@@ -86,10 +86,32 @@ def my_items(user: User = Depends(get_current_user), db: Session = Depends(get_d
                 "unit_price": float(po.unit_price or 0),
             }
         else:
-            # 최신 단가로 갱신
             if po.unit_price:
                 seen[po.part_no]["unit_price"] = float(po.unit_price)
     return sorted(seen.values(), key=lambda x: x["item_name"])
+
+
+# ── 전체 기준정보 품목 목록 (수동 추가 자동완성용) ───────────────
+@router.get("/all-items")
+def all_items(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    _supplier_partner(user)  # 협력사 계정 확인
+    items = db.query(Item).order_by(Item.name).all()
+    # 이 업체의 최신 발주 단가 맵
+    price_map: dict = {}
+    partner_id = user.partner_id
+    pos = db.query(PurchaseOrder).filter(PurchaseOrder.partner_id == partner_id).all()
+    for po in pos:
+        if po.unit_price:
+            price_map[po.part_no] = float(po.unit_price)
+    return [
+        {
+            "part_no": it.part_no,
+            "item_name": it.name,
+            "item_unit": it.unit or "EA",
+            "unit_price": price_map.get(it.part_no, 0.0),
+        }
+        for it in items
+    ]
 
 
 # ── 납품명세서 발행 ──────────────────────────────────────────────

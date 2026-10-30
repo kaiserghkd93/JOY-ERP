@@ -838,6 +838,7 @@ const API = '';
 let token = localStorage.getItem('portal_token');
 let allOrders = [];
 let myItems = [];
+let allMasterItems = [];  // 전체 기준정보 품목 (수동 추가 자동완성용)
 let selectedPOs = {};
 let currentUser = null;
 let currentMonth = '';   // 'YYYY-MM'
@@ -926,6 +927,7 @@ async function initMain() {
   document.getElementById('main-page').style.display = 'block';
   await loadOrders();
   myItems = await api('GET', '/portal/my-items') || [];
+  allMasterItems = await api('GET', '/portal/all-items') || [];
   // 관리자 요약카드
   if (me.role === 'admin') {
     const summary = document.getElementById('admin-summary');
@@ -1124,22 +1126,25 @@ function updateManual(id, field, val) {
 
 function filterAc(id, q) {
   const dd = document.getElementById('ac-' + id);
-  const matches = myItems.filter(it =>
-    !q || it.item_name.toLowerCase().includes(q.toLowerCase()) || it.part_no.toLowerCase().includes(q.toLowerCase())
-  ).slice(0, 20);
+  const src = allMasterItems.length ? allMasterItems : myItems;
+  const ql = (q || '').toLowerCase();
+  const matches = ql.length === 0
+    ? src.slice(0, 30)
+    : src.filter(it =>
+        it.item_name.toLowerCase().includes(ql) || it.part_no.toLowerCase().includes(ql)
+      ).slice(0, 30);
   if (!matches.length) { dd.style.display = 'none'; return; }
   dd.innerHTML = matches.map(it => `
-    <div class="ac-item" onmousedown="selectAc(${id},'${it.item_name.replace(/'/g,"\\'")}','${it.item_unit}',${it.unit_price})">
+    <div class="ac-item" onmousedown="selectAc(${id},'${it.item_name.replace(/'/g,"\\'")}','${it.part_no.replace(/'/g,"\\'")}','${it.item_unit}',${it.unit_price})">
       <div class="ac-name">${it.item_name}</div>
-      <div class="ac-sub">${it.part_no} | ${it.item_unit} | ₩${Math.round(it.unit_price).toLocaleString()}</div>
+      <div class="ac-sub">${it.part_no} | ${it.item_unit}${it.unit_price > 0 ? ' | ₩' + Math.round(it.unit_price).toLocaleString() : ''}</div>
     </div>`).join('');
   dd.style.display = 'block';
 }
 
-function selectAc(id, name, unit, price) {
+function selectAc(id, name, partNo, unit, price) {
   const r = manualRows.find(x => x.id === id);
-  if (r) { r.item_name = name; r.item_unit = unit; r.unit_price = price; }
-  // 입력칸 직접 업데이트
+  if (r) { r.item_name = name; r.part_no = partNo; r.item_unit = unit; r.unit_price = price; }
   const row = document.getElementById('mrow-' + id);
   if (row) {
     row.querySelector('input[type=text]').value = name;
