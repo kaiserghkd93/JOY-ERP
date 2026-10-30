@@ -380,7 +380,7 @@ export default function Master() {
             <div className="erp-value">
               <div className="qdate-bar">
                 {['','제품','외주품','원자재','부자재'].map(t=>(
-                  <button key={t} className={`qdate-btn${typeFilter===t?' active':''}`} onClick={()=>setTypeFilter(t)}>
+                  <button key={t} className={`qdate-btn${typeFilter===t?' active':''}`} onClick={()=>{setTypeFilter(t);resetItemPage()}}>
                     {t||'전체'}{t&&` (${items.filter(i=>(TYPE_GROUPS[t]||[t]).includes(i.item_type)).length})`}
                   </button>
                 ))}
@@ -388,7 +388,7 @@ export default function Master() {
             </div>
             <div className="erp-label">고객사</div>
             <div className="erp-value">
-              <select value={customerFilter} onChange={e=>setCustomerFilter(e.target.value)} style={{border:'none',background:'transparent',fontSize:13}}>
+              <select value={customerFilter} onChange={e=>{setCustomerFilter(e.target.value);resetItemPage()}} style={{border:'none',background:'transparent',fontSize:13}}>
                 <option value="">전체</option>
                 {partners.filter(p=>customerParts[p.partner_id]).map(p=>(
                   <option key={p.partner_id} value={p.partner_id}>{p.name} ({(customerParts[p.partner_id]||[]).length})</option>
@@ -397,7 +397,7 @@ export default function Master() {
             </div>
             <div className="erp-label">외주처</div>
             <div className="erp-value">
-              <select value={supplierFilter} onChange={e=>setSupplierFilter(e.target.value)} style={{border:'none',background:'transparent',fontSize:13}}>
+              <select value={supplierFilter} onChange={e=>{setSupplierFilter(e.target.value);resetItemPage()}} style={{border:'none',background:'transparent',fontSize:13}}>
                 <option value="">전체</option>
                 {suppliers.map(s=><option key={s.partner_id} value={s.partner_id}>{s.name}</option>)}
                 <option value="__none__">미지정</option>
