@@ -66,8 +66,8 @@ export default function InvAdjust() {
   // 품번 선택 시 현재고 조회
   useEffect(() => {
     if (!adjForm.part_no) { setBookQty(null); return }
-    api.get(`/ledger/stock/${adjForm.part_no}`).then(r => {
-      setBookQty(r.data?.qty ?? r.data ?? null)
+    api.get(`/stock/snapshot/${encodeURIComponent(adjForm.part_no)}`).then(r => {
+      setBookQty(r.data?.current_stock ?? null)
     }).catch(()=> setBookQty(null))
   }, [adjForm.part_no])
 
