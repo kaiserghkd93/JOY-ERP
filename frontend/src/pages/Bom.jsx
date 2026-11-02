@@ -123,6 +123,7 @@ export default function Bom() {
   const [showInjection, setShowInjection] = useState(false)
   const [editId, setEditId] = useState(null)
   const [saving, setSaving] = useState(false)
+  const [draftLines, setDraftLines] = useState([])   // 임시 추가 목록
 
   // MRP 상태
   const now = new Date()
@@ -143,40 +144,66 @@ export default function Bom() {
   const selectProd = (item) => {
     setSelectedProd(item)
     loadBom(item.part_no)
-    setForm({
-      component_part_no: '', qty_per: '', unit: 'kg', note: '',
-      net_weight_g: '', runner_weight_g: '', std_defect_rate: '',
-      std_purge_loss_kg: '', std_startup_loss_kg: '', regrind_ratio: '',
-    })
+    resetForm()
     setEditId(null)
+    setDraftLines([])
   }
 
+  const resetForm = () => setForm({
+    component_part_no: '', qty_per: '', unit: 'kg', note: '',
+    net_weight_g: '', runner_weight_g: '', std_defect_rate: '',
+    std_purge_loss_kg: '', std_startup_loss_kg: '', regrind_ratio: '',
+  })
+
+  const buildPayload = (f) => ({
+    component_part_no: f.component_part_no,
+    qty_per: parseFloat(f.qty_per),
+    unit: f.unit,
+    note: f.note || '',
+    net_weight_g: f.net_weight_g ? parseFloat(f.net_weight_g) : 0,
+    runner_weight_g: f.runner_weight_g ? parseFloat(f.runner_weight_g) : 0,
+    std_defect_rate: f.std_defect_rate ? parseFloat(f.std_defect_rate) : 0,
+    std_purge_loss_kg: f.std_purge_loss_kg ? parseFloat(f.std_purge_loss_kg) : 0,
+    std_startup_loss_kg: f.std_startup_loss_kg ? parseFloat(f.std_startup_loss_kg) : 0,
+    regrind_ratio: f.regrind_ratio ? parseFloat(f.regrind_ratio) : 0,
+  })
+
+  // 임시추가: 로컬 draft에만 쌓기
+  const addToDraft = () => {
+    if (!form.component_part_no) { alert('품번을 드롭다운에서 선택해 주세요'); return }
+    if (!form.qty_per) { alert('소요량을 입력해 주세요'); return }
+    const compItem = items.find(i => i.part_no === form.component_part_no)
+    setDraftLines(d => [...d, { ...buildPayload(form), _id: Date.now(), component_name: compItem?.name || '' }])
+    resetForm()
+  }
+
+  // 전체 저장
+  const saveAllDraft = async () => {
+    if (draftLines.length === 0) return
+    setSaving(true)
+    try {
+      for (const line of draftLines) {
+        const { _id, component_name, ...payload } = line
+        await api.post(`/bom/${selectedProd.part_no}`, payload)
+      }
+      setDraftLines([])
+      loadBom(selectedProd.part_no)
+    } catch (err) {
+      alert('저장 실패: ' + (err.response?.data?.detail || err.message))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  // 기존 BOM 라인 수정 저장 (editId 모드에서만 직접 저장)
   const saveLine = async () => {
     if (!form.component_part_no) { alert('품번을 드롭다운에서 선택해 주세요'); return }
     if (!form.qty_per) { alert('소요량을 입력해 주세요'); return }
     setSaving(true)
     try {
-      const payload = {
-        ...form,
-        qty_per: parseFloat(form.qty_per),
-        net_weight_g: form.net_weight_g ? parseFloat(form.net_weight_g) : 0,
-        runner_weight_g: form.runner_weight_g ? parseFloat(form.runner_weight_g) : 0,
-        std_defect_rate: form.std_defect_rate ? parseFloat(form.std_defect_rate) : 0,
-        std_purge_loss_kg: form.std_purge_loss_kg ? parseFloat(form.std_purge_loss_kg) : 0,
-        std_startup_loss_kg: form.std_startup_loss_kg ? parseFloat(form.std_startup_loss_kg) : 0,
-        regrind_ratio: form.regrind_ratio ? parseFloat(form.regrind_ratio) : 0,
-      }
-      if (editId) {
-        await api.put(`/bom/line/${editId}`, payload)
-      } else {
-        await api.post(`/bom/${selectedProd.part_no}`, payload)
-      }
+      await api.put(`/bom/line/${editId}`, buildPayload(form))
       loadBom(selectedProd.part_no)
-      setForm({
-        component_part_no: '', qty_per: '', unit: 'kg', note: '',
-        net_weight_g: '', runner_weight_g: '', std_defect_rate: '',
-        std_purge_loss_kg: '', std_startup_loss_kg: '', regrind_ratio: '',
-      })
+      resetForm()
       setEditId(null)
     } finally {
       setSaving(false)
@@ -324,10 +351,59 @@ export default function Bom() {
                   </table>
                 </div>
 
+                {/* 임시 추가 목록 (draft) */}
+                {draftLines.length > 0 && (
+                  <div style={{ background: '#fffbeb', border: '1px solid #fcd34d', borderRadius: 8, padding: 12, marginBottom: 12 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                      <span style={{ fontWeight: 700, fontSize: 13, color: '#92400e' }}>
+                        📋 저장 대기 중 {draftLines.length}건 — 아직 저장되지 않았습니다
+                      </span>
+                      <button
+                        className="btn btn-primary"
+                        onClick={saveAllDraft}
+                        disabled={saving}
+                        style={{ background: '#16a34a', borderColor: '#15803d' }}
+                      >
+                        {saving ? '저장 중...' : `✓ 전체 저장 (${draftLines.length}건)`}
+                      </button>
+                    </div>
+                    <table style={{ fontSize: 12, width: '100%' }}>
+                      <thead>
+                        <tr style={{ background: '#fef3c7' }}>
+                          <th style={{ textAlign: 'left', padding: '4px 8px' }}>품번</th>
+                          <th style={{ textAlign: 'left', padding: '4px 8px' }}>품명</th>
+                          <th style={{ textAlign: 'right', padding: '4px 8px' }}>소요량</th>
+                          <th style={{ padding: '4px 8px' }}>단위</th>
+                          <th style={{ padding: '4px 8px' }}>비고</th>
+                          <th style={{ padding: '4px 8px' }}></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {draftLines.map((d, idx) => (
+                          <tr key={d._id} style={{ borderTop: '1px solid #fde68a' }}>
+                            <td style={{ padding: '4px 8px', fontFamily: 'monospace', fontSize: 11, color: '#1d4ed8' }}>{d.component_part_no}</td>
+                            <td style={{ padding: '4px 8px' }}>{d.component_name}</td>
+                            <td style={{ padding: '4px 8px', textAlign: 'right', fontWeight: 700 }}>{d.qty_per}</td>
+                            <td style={{ padding: '4px 8px' }}>{d.unit}</td>
+                            <td style={{ padding: '4px 8px', color: '#64748b' }}>{d.note}</td>
+                            <td style={{ padding: '4px 8px' }}>
+                              <button
+                                style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: 14 }}
+                                onClick={() => setDraftLines(d => d.filter((_, i) => i !== idx))}
+                              >✕</button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+
                 {/* 추가/수정 폼 */}
                 <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: 14 }}>
                   <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 10 }}>
                     {editId ? '구성품 수정' : '구성품 추가'}
+                    {!editId && <span style={{ fontSize: 11, fontWeight: 400, color: '#94a3b8', marginLeft: 8 }}>품번 선택 → 소요량 입력 → 임시추가 반복, 완료 후 전체 저장</span>}
                   </div>
                   <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end' }}>
                     <div className="form-group" style={{ margin: 0, flex: '2 1 200px' }}>
@@ -336,7 +412,7 @@ export default function Bom() {
                         value={form.component_part_no}
                         items={items}
                         onChange={v => setForm(f => ({ ...f, component_part_no: v }))}
-                        placeholder="품번/품명 검색"
+                        placeholder="품번/품명 검색 후 클릭 선택"
                       />
                     </div>
                     <div className="form-group" style={{ margin: 0, flex: '1 1 90px' }}>
@@ -367,23 +443,23 @@ export default function Bom() {
                         style={{ fontSize: 12 }}
                       />
                     </div>
-                    <button
-                      className="btn btn-primary"
-                      onClick={saveLine}
-                      disabled={saving || !form.component_part_no || !form.qty_per}
-                      style={{ height: 36, opacity: (!form.component_part_no || !form.qty_per) ? 0.45 : 1 }}
-                    >
-                      {saving ? '저장 중...' : editId ? '수정' : '추가'}
-                    </button>
-                    {editId && (
-                      <button className="btn btn-outline" onClick={() => {
-                        setEditId(null)
-                        setForm({ component_part_no: '', qty_per: '', unit: 'kg', note: '',
-                          net_weight_g: '', runner_weight_g: '', std_defect_rate: '',
-                          std_purge_loss_kg: '', std_startup_loss_kg: '', regrind_ratio: '' })
-                        setShowInjection(false)
-                      }} style={{ height: 36 }}>
-                        취소
+                    {editId ? (
+                      <>
+                        <button className="btn btn-primary" onClick={saveLine} disabled={saving || !form.component_part_no || !form.qty_per} style={{ height: 36 }}>
+                          {saving ? '저장 중...' : '수정 저장'}
+                        </button>
+                        <button className="btn btn-outline" onClick={() => { setEditId(null); resetForm(); setShowInjection(false) }} style={{ height: 36 }}>
+                          취소
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        className="btn btn-primary"
+                        onClick={addToDraft}
+                        disabled={!form.component_part_no || !form.qty_per}
+                        style={{ height: 36, opacity: (!form.component_part_no || !form.qty_per) ? 0.45 : 1 }}
+                      >
+                        ＋ 임시추가
                       </button>
                     )}
                   </div>
