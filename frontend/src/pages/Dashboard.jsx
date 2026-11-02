@@ -199,7 +199,7 @@ export default function Dashboard() {
       calls.push(api.get(`/dashboard/kpi?year=${year}&month=${month}`).then(r => setKpi(r.data)).catch(() => {}))
     calls.push(api.get(`/kpi-targets?year=${year}&month=${month}`).then(r => { setKpiTargets(r.data); setKpiDraft({}) }).catch(() => {}))
     if (show.supplier_scorecard)
-      calls.push(api.get('/dashboard/supplier-scorecard').then(r => setScorecard(r.data)).catch(() => {}))
+      calls.push(api.get(`/dashboard/supplier-scorecard?year=${year}`).then(r => setScorecard(r.data)).catch(() => {}))
     if (show.customer_scorecard)
       calls.push(api.get(`/dashboard/customer-scorecard?year=${year}&month=${month}`).then(r => setCustomerScorecard(r.data)).catch(() => {}))
     if (show.closing)
@@ -1007,7 +1007,7 @@ export default function Dashboard() {
       {/* ── 외주처 스코어카드 ── */}
       {show.supplier_scorecard && (
         <>
-          <div className="section-title mt-16">외주처 스코어카드</div>
+          <div className="section-title mt-16">외주처 스코어카드 — {year}년 납기 기준</div>
           {scorecard.length > 0 ? (
             <div className="table-wrap" style={{ marginBottom: 24 }}>
               <table>

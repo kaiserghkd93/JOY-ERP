@@ -199,12 +199,10 @@ def customer_scorecard(
 
 @router.get("/supplier-scorecard")
 def supplier_scorecard(year: int = None, month: int = None, db: Session = Depends(get_db)):
-    """외주처별 납기준수율·불량률·총매입 스코어카드"""
+    """외주처별 납기준수율·불량률·총매입 스코어카드 (month 없으면 연간 누계)"""
     from datetime import date as _date
     if year is None:
         year = _date.today().year
-    if month is None:
-        month = _date.today().month
 
     partners = db.query(Partner).filter(Partner.partner_type.in_(["외주처", "공용"])).all()
     if not partners:
@@ -212,24 +210,29 @@ def supplier_scorecard(year: int = None, month: int = None, db: Session = Depend
     pids = [p.partner_id for p in partners]
     pname = {p.partner_id: p.name for p in partners}
 
-    # 발주 건수 — 해당 월
+    # 납기일 기준 필터 (due_date 기준 — month 없으면 연간 누계)
+    def _due_date_filter():
+        f = [PurchaseOrder.due_date.isnot(None), extract("year", PurchaseOrder.due_date) == year]
+        if month:
+            f.append(extract("month", PurchaseOrder.due_date) == month)
+        return f
+
+    # 발주 건수 (납기일이 해당 기간인 PO)
     po_cnt = db.query(
         PurchaseOrder.partner_id,
         func.count(PurchaseOrder.po_no).label("cnt"),
     ).filter(
         PurchaseOrder.partner_id.in_(pids),
         PurchaseOrder.status != POStatus.cancelled,
-        extract("year", PurchaseOrder.order_date) == year,
-        extract("month", PurchaseOrder.order_date) == month,
+        *_due_date_filter(),
     ).group_by(PurchaseOrder.partner_id).all()
     po_cnt_map = {r.partner_id: int(r.cnt) for r in po_cnt}
 
-    # 완료 PO 납기준수율 — 해당 월 발주건만
+    # 납기준수율 — 납기일이 해당 기간인 완료 PO
     closed_po = db.query(PurchaseOrder).filter(
         PurchaseOrder.partner_id.in_(pids),
         PurchaseOrder.status == POStatus.closed,
-        extract("year", PurchaseOrder.order_date) == year,
-        extract("month", PurchaseOrder.order_date) == month,
+        *_due_date_filter(),
     ).all()
     closed_po_nos = [po.po_no for po in closed_po]
     closed_po_map = {po.po_no: po for po in closed_po}
@@ -251,14 +254,11 @@ def supplier_scorecard(year: int = None, month: int = None, db: Session = Depend
         flag = bool(ld and (po.due_date is None or ld <= po.due_date))
         on_time_by_partner.setdefault(po.partner_id, []).append(flag)
 
-    # 불량률 — 해당 월 발주건만
-    insp_filter = [PurchaseOrder.partner_id.in_(pids)]
-    if closed_po_nos:
-        insp_filter.append(PurchaseOrder.po_no.in_(closed_po_nos))
-    else:
-        # 해당 월 발주건 없으면 빈 결과
-        insp_filter.append(extract("year", PurchaseOrder.order_date) == year)
-        insp_filter.append(extract("month", PurchaseOrder.order_date) == month)
+    # 불량률 — 납기일 기준 해당 기간 발주건
+    insp_filter = [PurchaseOrder.partner_id.in_(pids), PurchaseOrder.due_date.isnot(None),
+                   extract("year", PurchaseOrder.due_date) == year]
+    if month:
+        insp_filter.append(extract("month", PurchaseOrder.due_date) == month)
 
     insp_agg = db.query(
         PurchaseOrder.partner_id,
@@ -279,7 +279,7 @@ def supplier_scorecard(year: int = None, month: int = None, db: Session = Depend
         PurchaseOrder.partner_id.in_(pids),
         Receipt.status == ReceiptStatus.confirmed,
         extract("year", Receipt.receipt_date) == year,
-        extract("month", Receipt.receipt_date) == month,
+        *([extract("month", Receipt.receipt_date) == month] if month else []),
     ).group_by(PurchaseOrder.partner_id).all()
     buy_map = {r.partner_id: float(r.amt or 0) for r in buy_agg}
 
