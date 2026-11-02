@@ -152,7 +152,8 @@ export default function Bom() {
   }
 
   const saveLine = async () => {
-    if (!form.component_part_no || !form.qty_per) return
+    if (!form.component_part_no) { alert('품번을 드롭다운에서 선택해 주세요'); return }
+    if (!form.qty_per) { alert('소요량을 입력해 주세요'); return }
     setSaving(true)
     try {
       const payload = {
@@ -366,7 +367,12 @@ export default function Bom() {
                         style={{ fontSize: 12 }}
                       />
                     </div>
-                    <button className="btn btn-primary" onClick={saveLine} disabled={saving} style={{ height: 36 }}>
+                    <button
+                      className="btn btn-primary"
+                      onClick={saveLine}
+                      disabled={saving || !form.component_part_no || !form.qty_per}
+                      style={{ height: 36, opacity: (!form.component_part_no || !form.qty_per) ? 0.45 : 1 }}
+                    >
                       {saving ? '저장 중...' : editId ? '수정' : '추가'}
                     </button>
                     {editId && (
