@@ -134,7 +134,7 @@ const addLine = () => setLines(prev => [...prev, { part_no: '', qty: '', unit_pr
     setLines(prev => prev.map((l, idx) => idx === i ? { ...l, part_no, unit_price: item?.std_sell_price ? String(item.std_sell_price) : l.unit_price } : l))
   }
 
-  const total = lines.reduce((s, l) => s + (Number(l.qty) || 0) * (Number(l.unit_price) || 0), 0)
+  const total = lines.reduce((s, l) => s + Math.round((Number(l.qty) || 0) * (Number(l.unit_price) || 0)), 0)
 
   const submit = async () => {
     if (!partner_id) return alert('고객사를 선택해주세요')
@@ -206,7 +206,7 @@ const addLine = () => setLines(prev => [...prev, { part_no: '', qty: '', unit_pr
                   <input type="number" value={l.unit_price} onChange={e => setLine(i, 'unit_price', e.target.value)} style={{ width: '100%', textAlign: 'right' }} />
                 </td>
                 <td style={{ padding: '4px 8px', border: '1px solid #eee', textAlign: 'right', fontWeight: 600 }}>
-                  ₩{((Number(l.qty) || 0) * (Number(l.unit_price) || 0)).toLocaleString()}
+                  ₩{Math.round((Number(l.qty) || 0) * (Number(l.unit_price) || 0)).toLocaleString()}
                 </td>
                 <td style={{ padding: '4px 6px', border: '1px solid #eee', textAlign: 'center' }}>
                   <button className="btn btn-sm btn-danger" onClick={() => removeLine(i)}>✕</button>

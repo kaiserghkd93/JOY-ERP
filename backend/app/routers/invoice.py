@@ -40,7 +40,7 @@ def _enrich(inv: Invoice, db: Session) -> dict:
             unit_price=float(ln.unit_price),
             item_name=item.name if item else ln.part_no,
         ))
-        total += int(ln.qty * float(ln.unit_price))  # 라인별 절사 후 합산
+        total += round(ln.qty * float(ln.unit_price))
 
     return InvoiceOut(
         inv_no=inv.inv_no,
@@ -228,7 +228,7 @@ def summary_by_partner_month(db: Session = Depends(get_db)):
         else:
             ym = d.strftime("%Y-%m")
 
-        total = sum(int(ln.qty * float(ln.unit_price)) for ln in inv.lines)
+        total = sum(round(ln.qty * float(ln.unit_price)) for ln in inv.lines)
 
         if p_name not in result:
             result[p_name] = {}
