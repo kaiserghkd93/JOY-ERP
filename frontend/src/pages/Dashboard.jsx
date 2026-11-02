@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, CartesianGrid } from 'recharts'
 import * as XLSX from 'xlsx'
 import api from '../api'
-import { getRole } from '../auth'
+import { getRole, isMaster } from '../auth'
 
 // ── 역할별 노출 섹션 정의 ─────────────────────────────────────────
 // true = 보임 / false = 숨김
@@ -181,6 +181,9 @@ export default function Dashboard() {
   const [qualityKpi, setQualityKpi] = useState(null)
   const [productionStatus, setProductionStatus] = useState(null)
   const [loading, setLoading] = useState(false)
+  const [kpiTargets, setKpiTargets] = useState([])
+  const [kpiEditMode, setKpiEditMode] = useState(false)
+  const [kpiDraft, setKpiDraft] = useState({})
 
   const load = () => {
     setLoading(true)
@@ -194,6 +197,7 @@ export default function Dashboard() {
       calls.push(api.get(`/dashboard/quality-summary?year=${year}&month=${month}`).then(r => setQualityKpi(r.data)).catch(() => {}))
     if (needsKpi)
       calls.push(api.get(`/dashboard/kpi?year=${year}&month=${month}`).then(r => setKpi(r.data)).catch(() => {}))
+    calls.push(api.get(`/kpi-targets?year=${year}&month=${month}`).then(r => { setKpiTargets(r.data); setKpiDraft({}) }).catch(() => {}))
     if (show.supplier_scorecard)
       calls.push(api.get('/dashboard/supplier-scorecard').then(r => setScorecard(r.data)).catch(() => {}))
     if (show.customer_scorecard)
@@ -331,49 +335,167 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* ── KPI 카드 (역할별 표시) ── */}
-      {(show.kpi_delivery || show.kpi_quality || show.kpi_inventory || show.kpi_profit) && (
-        <div className="kpi-grid" style={{ marginBottom: 18 }}>
-          {show.kpi_delivery && (
-            <KpiCard
-              icon="📦" label="납기준수율 (On-time)"
-              value={kpi != null ? kpi.delivery_rate.toFixed(1) : null} unit=" %"
-              sub="고객사 출하 기준"
-              accent={kpi != null && kpi.delivery_rate >= 90 ? 'var(--success)' : kpi != null && kpi.delivery_rate >= 70 ? 'var(--warn)' : 'var(--danger)'}
-              trend={kpi != null && kpi.delivery_rate >= 90 ? '양호' : '주의 필요'}
-              trendDir={kpi != null && kpi.delivery_rate >= 90 ? 'up' : kpi != null ? 'down' : null}
-            />
-          )}
-          {show.kpi_quality && (
-            <KpiCard
-              icon="🔍" label="불량율"
-              value={kpi != null ? kpi.defect_rate.toFixed(2) : null} unit=" %"
-              sub="수입검사 기준"
-              accent={kpi != null && kpi.defect_rate <= 1 ? 'var(--success)' : kpi != null && kpi.defect_rate <= 5 ? 'var(--warn)' : 'var(--danger)'}
-              trend={kpi != null && kpi.defect_rate <= 1 ? '양호' : '관리 필요'}
-              trendDir={kpi != null && kpi.defect_rate <= 1 ? 'up' : kpi != null ? 'down' : null}
-            />
-          )}
-          {show.kpi_inventory && (
-            <KpiCard
-              icon="🔄" label="재고회전율"
-              value={kpi != null ? kpi.inventory_turnover.toFixed(2) : null} unit=" 회"
-              sub={`${year}년 ${month}월 누계`}
-              accent="var(--primary)"
-            />
-          )}
-          {show.kpi_profit && (
-            <KpiCard
-              icon="💹" label="매출총이익 / 마진율"
-              value={kpi != null ? `₩${Number(kpi.gross_profit).toLocaleString()}` : null}
-              sub={kpi != null ? `마진율 ${kpi.margin_rate.toFixed(1)}%` : ''}
-              accent={kpi != null && kpi.margin_rate > 0 ? 'var(--success)' : 'var(--danger)'}
-              trend={kpi != null ? `${kpi.margin_rate.toFixed(1)}% 마진` : null}
-              trendDir={kpi != null && kpi.margin_rate > 0 ? 'up' : kpi != null ? 'down' : null}
-            />
-          )}
+      {/* ── 전사 KPI 목표 설정 (관리자 전용) ── */}
+      {isMaster() && kpiTargets.length > 0 && (
+        <div className="erp-panel" style={{ marginBottom: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+            <span style={{ fontWeight: 700, fontSize: 13, color: '#1e3a5f' }}>⚙️ 전사 KPI 목표 설정</span>
+            <span style={{ fontSize: 11, color: '#94a3b8' }}>{year}년 {month}월 — 관리자 전용</span>
+            <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
+              {!kpiEditMode ? (
+                <button className="btn btn-sm btn-outline" onClick={() => {
+                  const draft = {}
+                  kpiTargets.forEach(t => { draft[t.kpi_key] = t.target_value })
+                  setKpiDraft(draft)
+                  setKpiEditMode(true)
+                }}>목표 수정</button>
+              ) : (
+                <>
+                  <button className="btn btn-sm btn-primary" onClick={async () => {
+                    try {
+                      await Promise.all(
+                        Object.entries(kpiDraft).map(([key, val]) =>
+                          api.put(`/kpi-targets/${key}?year=${year}&month=${month}`, { target_value: parseFloat(val) })
+                        )
+                      )
+                      setKpiEditMode(false)
+                      api.get(`/kpi-targets?year=${year}&month=${month}`).then(r => setKpiTargets(r.data)).catch(() => {})
+                    } catch { alert('저장 실패') }
+                  }}>저장</button>
+                  <button className="btn btn-sm btn-outline" onClick={() => setKpiEditMode(false)}>취소</button>
+                </>
+              )}
+            </div>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 10 }}>
+            {kpiTargets.map(t => (
+              <div key={t.kpi_key} style={{
+                background: '#f8fafc', border: '1px solid #e2e8f0',
+                borderRadius: 6, padding: '10px 12px',
+              }}>
+                <div style={{ fontSize: 11, color: '#475569', marginBottom: 6, fontWeight: 600 }}>
+                  {t.icon} {t.kpi_label}
+                </div>
+                {kpiEditMode ? (
+                  <input type="number" step="0.1"
+                    value={kpiDraft[t.kpi_key] ?? t.target_value}
+                    onChange={e => setKpiDraft(d => ({ ...d, [t.kpi_key]: e.target.value }))}
+                    style={{ width: '100%', fontSize: 18, fontWeight: 700, border: '1px solid #93c5fd', borderRadius: 4, padding: '4px 8px', color: '#1d4ed8' }}
+                  />
+                ) : (
+                  <div style={{ fontSize: 22, fontWeight: 800, color: '#1e3a5f' }}>
+                    {t.target_value}<span style={{ fontSize: 11, fontWeight: 400, marginLeft: 2 }}>{t.unit}</span>
+                  </div>
+                )}
+                <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 4 }}>
+                  {t.higher_better ? '▲ 높을수록 좋음' : '▼ 낮을수록 좋음'}
+                  {!t.is_set && <span style={{ color: '#f97316', marginLeft: 4 }}>(기본값)</span>}
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
+
+      {/* ── KPI 전사 타일 (SAP 스타일) ── */}
+      {(show.kpi_delivery || show.kpi_quality || show.kpi_inventory || show.kpi_profit) && kpi && (() => {
+        const actualMap = {
+          delivery_rate: kpi.delivery_rate,
+          defect_rate: kpi.defect_rate,
+          inventory_turnover: kpi.inventory_turnover,
+          margin_rate: kpi.margin_rate,
+        }
+        const showMap = {
+          delivery_rate: show.kpi_delivery,
+          defect_rate: show.kpi_quality,
+          inventory_turnover: show.kpi_inventory,
+          margin_rate: show.kpi_profit,
+        }
+        const visibleDefs = kpiTargets.filter(t => showMap[t.kpi_key])
+        if (!visibleDefs.length) return null
+
+        return (
+          <div style={{ marginBottom: 18 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: '#475569', marginBottom: 8 }}>
+              📊 전사 KPI 현황 — {year}년 {month}월
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: `repeat(${visibleDefs.length}, 1fr)`, gap: 12 }}>
+              {visibleDefs.map(def => {
+                const actual = actualMap[def.kpi_key]
+                if (actual == null) return null
+                const target = def.target_value
+                const higher = def.higher_better
+
+                let achievement
+                if (higher) {
+                  achievement = target > 0 ? (actual / target) * 100 : 100
+                } else {
+                  achievement = actual <= target ? 100 : (target / actual) * 100
+                }
+                achievement = Math.min(999, Math.round(achievement * 10) / 10)
+
+                let statusLabel, statusColor, statusBg, stripColor
+                if (achievement >= 95) {
+                  statusLabel = '달성'; statusColor = '#166534'; statusBg = '#f0fdf4'; stripColor = '#22c55e'
+                } else if (achievement >= 80) {
+                  statusLabel = '주의'; statusColor = '#92400e'; statusBg = '#fffbeb'; stripColor = '#f59e0b'
+                } else {
+                  statusLabel = '미달'; statusColor = '#991b1b'; statusBg = '#fef2f2'; stripColor = '#ef4444'
+                }
+
+                const variance = higher ? actual - target : target - actual
+                const varStr = `${variance >= 0 ? '+' : ''}${variance.toFixed(1)}${def.unit}`
+
+                const actualStr = def.kpi_key === 'inventory_turnover'
+                  ? actual.toFixed(2)
+                  : actual.toFixed(1)
+
+                return (
+                  <div key={def.kpi_key} style={{
+                    position: 'relative', background: statusBg,
+                    border: `1px solid ${stripColor}33`,
+                    borderLeft: `4px solid ${stripColor}`,
+                    borderRadius: 8, padding: '14px 14px 12px 16px',
+                    overflow: 'hidden',
+                  }}>
+                    {/* KPI 라벨 + 상태 뱃지 */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                      <span style={{ fontSize: 11, color: '#475569', fontWeight: 600 }}>
+                        {def.icon} {def.kpi_label}
+                      </span>
+                      <span style={{
+                        fontSize: 10, fontWeight: 700, padding: '2px 7px',
+                        background: stripColor, color: '#fff', borderRadius: 10,
+                      }}>{statusLabel}</span>
+                    </div>
+                    {/* 실적값 */}
+                    <div style={{ fontSize: 30, fontWeight: 900, color: '#1e3a5f', lineHeight: 1.1, marginBottom: 6 }}>
+                      {actualStr}
+                      <span style={{ fontSize: 13, fontWeight: 400, color: '#64748b', marginLeft: 3 }}>{def.unit}</span>
+                    </div>
+                    {/* 목표 / 차이 */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#64748b', marginBottom: 6 }}>
+                      <span>목표 <strong>{target}{def.unit}</strong></span>
+                      <span style={{ color: variance >= 0 ? statusColor : '#991b1b', fontWeight: 700 }}>{varStr}</span>
+                    </div>
+                    {/* 달성률 프로그레스 바 */}
+                    <div style={{ background: '#e2e8f0', borderRadius: 3, height: 7, overflow: 'hidden', marginBottom: 4 }}>
+                      <div style={{
+                        width: `${Math.min(100, achievement)}%`,
+                        height: '100%', background: stripColor, borderRadius: 3,
+                        transition: 'width .5s ease',
+                      }} />
+                    </div>
+                    <div style={{ fontSize: 11, color: statusColor, fontWeight: 700, textAlign: 'right' }}>
+                      달성률 {achievement.toFixed(1)}%
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )
+      })()}
 
       {/* ── 매출 목표 달성률 ── */}
       {show.target && vsTarget && (

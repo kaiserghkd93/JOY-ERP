@@ -8,6 +8,8 @@ from app.routers import master, purchase, ledger, sales, quality, production, da
 from app.routers import purchase_group, invoice, auto_order, import_ls, bom, reports, cost, mold, mes_sync
 from app.routers import auth, portal, admin_import, monthly_sales, monthly_purchase, sales_target
 from app.routers import material, mrp, cost_actual
+from app.routers import kpi_target
+from app.models import kpi as _kpi_models  # noqa: ensure kpi_target table
 from app.routers import inventory_adj
 from app.routers import quality_advanced
 from app.routers import lot
@@ -131,6 +133,7 @@ app.include_router(monthly_purchase.router)
 app.include_router(master.router)
 app.include_router(purchase.router)
 app.include_router(ledger.router)
+app.include_router(kpi_target.router)
 app.include_router(sales.router)
 app.include_router(quality.router)
 app.include_router(production.router)
