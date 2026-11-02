@@ -238,7 +238,7 @@ def post_direct_receipt(body: dict, db: Session = Depends(get_db)):
 
     gr_no = next_doc_no(db, "GR", "receipt", "gr_no")
     receipt = Receipt(
-        gr_no=gr_no, po_no=gr_no, part_no=part_no,
+        gr_no=gr_no, po_no=None, part_no=part_no,
         qty=qty, receipt_date=receipt_date, unit_price=unit_price,
         status=ReceiptStatus.confirmed, note=note, partner_id=partner_id,
         outsource_price=outsource_price,
