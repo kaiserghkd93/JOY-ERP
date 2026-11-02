@@ -233,10 +233,11 @@ def post_direct_receipt(body: dict, db: Session = Depends(get_db)):
 
     if not db.get(Item, part_no):
         raise HTTPException(404, f"품목 없음: {part_no}")
-    if qty <= 0:
-        raise HTTPException(400, "수량은 1 이상이어야 합니다")
+    if qty == 0:
+        raise HTTPException(400, "수량은 0이 될 수 없습니다")
 
-    gr_no = next_doc_no(db, "GR", "receipt", "gr_no")
+    prefix = "GR" if qty > 0 else "RV"  # 취소전표는 RV 채번
+    gr_no = next_doc_no(db, prefix, "receipt", "gr_no")
     receipt = Receipt(
         gr_no=gr_no, po_no=None, part_no=part_no,
         qty=qty, receipt_date=receipt_date, unit_price=unit_price,
@@ -246,8 +247,8 @@ def post_direct_receipt(body: dict, db: Session = Depends(get_db)):
     db.add(receipt)
     db.flush()
 
-    post_ledger(db, part_no, receipt_date, LedgerType.receipt, +qty, unit_price,
-                ref_type="GR", ref_no=gr_no, note=note)
+    post_ledger(db, part_no, receipt_date, LedgerType.receipt, qty, unit_price,
+                ref_type=prefix, ref_no=gr_no, note=note)
     db.commit()
     db.refresh(receipt)
     return receipt
