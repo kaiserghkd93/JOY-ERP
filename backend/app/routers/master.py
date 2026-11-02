@@ -3,6 +3,8 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.master import Item, Partner
 from app.schemas.master import ItemCreate, ItemUpdate, ItemOut, PartnerCreate, PartnerUpdate, PartnerOut
+from app.models.auth import User
+from app.routers.auth import require_admin
 import openpyxl, io
 
 router = APIRouter(prefix="/master", tags=["기준정보"])
@@ -67,6 +69,38 @@ def update_item(part_no: str, body: ItemUpdate, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(item)
     return item
+
+
+@router.delete("/items/{part_no:path}")
+def delete_item(part_no: str, db: Session = Depends(get_db), _: User = Depends(require_admin)):
+    """품목 삭제 (관리자 전용) — 거래 이력 있는 품목은 삭제 불가"""
+    item = db.get(Item, part_no)
+    if not item:
+        raise HTTPException(404, "품목 없음")
+
+    from app.models.purchase import PurchaseOrder, Receipt
+    from app.models.sales import SalesOrder, Shipment
+    from app.models.ledger import StockLedger
+    from app.models.master import BomLine
+
+    if db.query(PurchaseOrder).filter(PurchaseOrder.part_no == part_no).first():
+        raise HTTPException(409, "발주 이력이 있어 삭제 불가")
+    if db.query(Receipt).filter(Receipt.part_no == part_no).first():
+        raise HTTPException(409, "입고 이력이 있어 삭제 불가")
+    if db.query(SalesOrder).filter(SalesOrder.part_no == part_no).first():
+        raise HTTPException(409, "수주 이력이 있어 삭제 불가")
+    if db.query(Shipment).filter(Shipment.part_no == part_no).first():
+        raise HTTPException(409, "출하 이력이 있어 삭제 불가")
+    if db.query(StockLedger).filter(StockLedger.part_no == part_no).first():
+        raise HTTPException(409, "재고 원장 이력이 있어 삭제 불가")
+    if db.query(BomLine).filter(
+        (BomLine.product_part_no == part_no) | (BomLine.component_part_no == part_no)
+    ).first():
+        raise HTTPException(409, "BOM에 등록된 품목이라 삭제 불가")
+
+    db.delete(item)
+    db.commit()
+    return {"ok": True, "deleted": part_no}
 
 
 @router.post("/bulk-upload")

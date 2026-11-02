@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import api from '../api'
 import Pagination from '../components/Pagination'
+import { isMaster } from '../auth'
 
 const PAGE_SIZE = 50
 
@@ -317,6 +318,16 @@ export default function Master() {
   const resetItemPage    = () => setItemPage(1)
   const resetPartnerPage = () => setPartnerPage(1)
 
+  const deleteItem = async (partNo) => {
+    if (!window.confirm(`[${partNo}] 품목을 삭제하시겠습니까?\n거래 이력이 있으면 삭제되지 않습니다.`)) return
+    try {
+      await api.delete(`/master/items/${encodeURIComponent(partNo)}`)
+      load()
+    } catch (err) {
+      alert('삭제 불가: ' + (err.response?.data?.detail || err.message))
+    }
+  }
+
   return (
     <div>
       {/* 통합 업로드 배너 */}
@@ -442,7 +453,7 @@ export default function Master() {
         <div className="table-wrap">
           <table>
             <thead>
-              <tr><th>품번</th><th>품명</th><th>규격</th><th>Unit</th><th>품목구분</th><th>외주처</th><th>창고</th><th>표준입고가</th><th>표준판매가</th><th>안전재고</th><th>수정</th></tr>
+              <tr><th>품번</th><th>품명</th><th>규격</th><th>Unit</th><th>품목구분</th><th>외주처</th><th>창고</th><th>표준입고가</th><th>표준판매가</th><th>안전재고</th><th>관리</th></tr>
             </thead>
             <tbody>
               {pagedItems.length === 0 && <tr><td colSpan={11} className="empty">품목 없음</td></tr>}
@@ -468,7 +479,15 @@ export default function Master() {
                   <td style={{textAlign:'right'}}>{i.std_buy_price ? `₩${Number(i.std_buy_price).toLocaleString()}` : '—'}</td>
                   <td style={{textAlign:'right'}}>{i.std_sell_price ? `₩${Number(i.std_sell_price).toLocaleString()}` : '—'}</td>
                   <td style={{textAlign:'right', color: i.safety_stock > 0 ? '#b45309' : '#94a3b8'}}>{i.safety_stock > 0 ? i.safety_stock.toLocaleString() : '—'}</td>
-                  <td><button className="btn btn-sm btn-outline" onClick={() => setItemModal(i)}>수정</button></td>
+                  <td>
+                    <div style={{ display: 'flex', gap: 4 }}>
+                      <button className="btn btn-sm btn-outline" onClick={() => setItemModal(i)}>수정</button>
+                      {isMaster() && (
+                        <button className="btn btn-sm" style={{ background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca' }}
+                          onClick={() => deleteItem(i.part_no)}>삭제</button>
+                      )}
+                    </div>
+                  </td>
                 </tr>
               ))}
 
