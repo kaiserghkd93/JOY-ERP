@@ -146,7 +146,7 @@ def defect_rate(
 
 
 @router.post("/claims", response_model=ClaimOut)
-def post_claim(body: ClaimCreate, db: Session = Depends(get_db)):
+def post_claim(body: ClaimCreate, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     return create_claim(db, **body.model_dump())
 
 
@@ -173,7 +173,7 @@ def get_claim(claim_no: str, db: Session = Depends(get_db)):
 
 
 @router.patch("/claims/{claim_no}", response_model=ClaimOut)
-def patch_claim(claim_no: str, body: ClaimUpdate, db: Session = Depends(get_db)):
+def patch_claim(claim_no: str, body: ClaimUpdate, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     return update_claim(db, claim_no, **body.model_dump())
 
 
@@ -662,7 +662,7 @@ def defect_monthly_summary(
 
 
 @router.delete("/quality/defect-reg/{row_id}", status_code=204)
-def delete_defect_reg(row_id: int, db: Session = Depends(get_db)):
+def delete_defect_reg(row_id: int, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     row = db.get(ProcessOutgoingDefect, row_id)
     if not row:
         raise HTTPException(404, "not found")

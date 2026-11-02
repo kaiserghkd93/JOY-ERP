@@ -7,7 +7,7 @@ from io import BytesIO
 from calendar import monthrange
 from urllib.parse import quote
 from app.database import get_db
-from app.routers.auth import require_admin
+from app.routers.auth import require_admin, get_current_user
 from app.models.auth import User
 from app.models.purchase import PurchaseOrder, Receipt, POStatus, ReceiptStatus, Carryover
 from app.schemas.purchase import POCreate, POOut, POSummary, ReceiptCreate, ReceiptOut
@@ -22,7 +22,7 @@ router = APIRouter(prefix="/purchase", tags=["구매·외주"])
 
 
 @router.post("/orders", response_model=POOut)
-def post_order(body: POCreate, db: Session = Depends(get_db)):
+def post_order(body: POCreate, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     return create_po(db, **body.model_dump())
 
 
@@ -138,7 +138,7 @@ def partner_delivery_rate(db: Session = Depends(get_db)):
 
 
 @router.post("/receipts", response_model=ReceiptOut)
-def post_receipt(body: ReceiptCreate, db: Session = Depends(get_db)):
+def post_receipt(body: ReceiptCreate, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     return create_receipt(db, **body.model_dump())
 
 
@@ -160,7 +160,7 @@ def list_receipts(
 
 
 @router.patch("/receipts/{gr_no}/delivered-qty")
-def set_delivered_qty(gr_no: str, body: dict, db: Session = Depends(get_db)):
+def set_delivered_qty(gr_no: str, body: dict, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     """거래명세표 납품수량 기록 (외주처 발행 기준)"""
     r = db.get(Receipt, gr_no)
     if not r:

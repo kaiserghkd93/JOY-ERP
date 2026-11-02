@@ -70,7 +70,8 @@ def get_bom(product_part_no: str, db: Session = Depends(get_db)):
 
 
 @router.post("/{product_part_no}", response_model=BomLineOut)
-def add_bom_line(product_part_no: str, body: BomLineIn, db: Session = Depends(get_db)):
+def add_bom_line(product_part_no: str, body: BomLineIn, db: Session = Depends(get_db),
+                 _: User = Depends(get_current_user)):
     line = BomLine(product_part_no=product_part_no, **body.model_dump())
     db.add(line)
     db.commit()
@@ -116,7 +117,7 @@ def get_bom_history(line_id: int, db: Session = Depends(get_db)):
 
 
 @router.delete("/line/{line_id}")
-def delete_bom_line(line_id: int, db: Session = Depends(get_db)):
+def delete_bom_line(line_id: int, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     line = db.get(BomLine, line_id)
     if not line:
         raise HTTPException(404)

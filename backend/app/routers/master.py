@@ -11,7 +11,7 @@ router = APIRouter(prefix="/master", tags=["기준정보"])
 
 
 @router.post("/items", response_model=ItemOut)
-def create_item(body: ItemCreate, db: Session = Depends(get_db)):
+def create_item(body: ItemCreate, db: Session = Depends(get_db), _: User = Depends(require_admin)):
     if db.get(Item, body.part_no):
         raise HTTPException(409, f"이미 존재: {body.part_no}")
     item = Item(**body.model_dump())
@@ -60,7 +60,7 @@ def get_item(part_no: str, db: Session = Depends(get_db)):
 
 
 @router.patch("/items/{part_no:path}", response_model=ItemOut)
-def update_item(part_no: str, body: ItemUpdate, db: Session = Depends(get_db)):
+def update_item(part_no: str, body: ItemUpdate, db: Session = Depends(get_db), _: User = Depends(require_admin)):
     item = db.get(Item, part_no)
     if not item:
         raise HTTPException(404)
@@ -104,7 +104,7 @@ def delete_item(part_no: str, db: Session = Depends(get_db), _: User = Depends(r
 
 
 @router.post("/bulk-upload")
-def bulk_upload_all(file: UploadFile = File(...), db: Session = Depends(get_db)):
+def bulk_upload_all(file: UploadFile = File(...), db: Session = Depends(get_db), _: User = Depends(require_admin)):
     """
     통합 엑셀 업로드 (시트 3개):
       Sheet1 '품목' : 품번, 품명, 규격, 단위, 품목구분, 표준입고가, 표준판매가, 안전재고, MOQ
@@ -231,7 +231,7 @@ def bulk_upload_all(file: UploadFile = File(...), db: Session = Depends(get_db))
 
 
 @router.post("/items/import-ls")
-def import_ls_items(file: UploadFile = File(...), db: Session = Depends(get_db)):
+def import_ls_items(file: UploadFile = File(...), db: Session = Depends(get_db), _: User = Depends(require_admin)):
     """
     LS Electric 납품 Excel 업로드 — 세 가지 포맷 자동 감지:
       [A] LS 납품 포맷 (7열): 품번, 품명(or Category+품명), 수량, 단가, 날짜
@@ -455,7 +455,7 @@ def import_ls_items(file: UploadFile = File(...), db: Session = Depends(get_db))
 
 
 @router.post("/items/bulk-upload")
-def bulk_upload_items(file: UploadFile = File(...), db: Session = Depends(get_db)):
+def bulk_upload_items(file: UploadFile = File(...), db: Session = Depends(get_db), _: User = Depends(require_admin)):
     """하위호환: 품목만 단독 업로드 (열: 품번, 품명, 규격, 단위, 품목구분, 표준입고가, 표준판매가, 안전재고, MOQ)"""
     wb = openpyxl.load_workbook(io.BytesIO(file.file.read()))
     ws = wb.active
@@ -492,7 +492,7 @@ def bulk_upload_items(file: UploadFile = File(...), db: Session = Depends(get_db
 
 
 @router.post("/partners", response_model=PartnerOut)
-def create_partner(body: PartnerCreate, db: Session = Depends(get_db)):
+def create_partner(body: PartnerCreate, db: Session = Depends(get_db), _: User = Depends(require_admin)):
     if db.get(Partner, body.partner_id):
         raise HTTPException(409, f"이미 존재: {body.partner_id}")
     partner = Partner(**body.model_dump())
@@ -516,7 +516,7 @@ def get_partner(partner_id: str, db: Session = Depends(get_db)):
 
 
 @router.patch("/partners/{partner_id}", response_model=PartnerOut)
-def update_partner(partner_id: str, body: PartnerUpdate, db: Session = Depends(get_db)):
+def update_partner(partner_id: str, body: PartnerUpdate, db: Session = Depends(get_db), _: User = Depends(require_admin)):
     p = db.get(Partner, partner_id)
     if not p:
         raise HTTPException(404)

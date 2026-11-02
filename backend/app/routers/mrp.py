@@ -251,20 +251,19 @@ def run_mrp(
         purchase_demand: dict[str, float] = {}
         prod_demand: dict[str, float] = {}
         demand_source: dict[str, list] = {}
-        visited: set[str] = set()
 
         for product_part_no, need_qty in demand.items():
-            visited.add(product_part_no)
             item = all_item_map.get(product_part_no)
             itype = item.item_type if item else "raw"
             # 완제품/반제품 수요는 생산오더 대상으로 직접 추가
             if itype in MAKE_TYPES:
                 prod_demand[product_part_no] = prod_demand.get(product_part_no, 0) + float(need_qty)
+            # visited를 제품별로 새로 생성 — 공유 시 반제품 하위 BOM이 첫 제품만 전개되는 버그 방지
             _explode_bom(
                 product_part_no, float(need_qty),
                 all_bom_map, all_item_map,
                 purchase_demand, prod_demand, demand_source,
-                product_part_no, visited,
+                product_part_no, {product_part_no},
             )
 
         # 4. 현재고 / 오픈 공급 일괄 조회

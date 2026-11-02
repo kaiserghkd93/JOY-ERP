@@ -6,16 +6,18 @@ from datetime import date
 from app.database import get_db
 from app.models.sales import SalesOrder, Shipment, SOStatus, ShipmentStatus
 from app.models.master import Partner, Item
+from app.models.auth import User
 from app.schemas.sales import SOCreate, SOOut, SOSummary, ShipmentCreate, ShipmentOut
 from app.services.sales_service import (
     create_so, create_shipment, cancel_shipment, get_so_remaining
 )
+from app.routers.auth import get_current_user
 
 router = APIRouter(prefix="/sales", tags=["영업·출하"])
 
 
 @router.post("/orders", response_model=SOOut)
-def post_so(body: SOCreate, db: Session = Depends(get_db)):
+def post_so(body: SOCreate, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     return create_so(db, **body.model_dump())
 
 
@@ -113,7 +115,7 @@ def all_so_remaining(partner_id: str | None = None, db: Session = Depends(get_db
 
 
 @router.post("/orders/{so_no}/cancel")
-def cancel_so(so_no: str, db: Session = Depends(get_db)):
+def cancel_so(so_no: str, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     so = db.get(SalesOrder, so_no)
     if not so:
         raise HTTPException(404, f"수주 없음: {so_no}")
@@ -126,7 +128,7 @@ def cancel_so(so_no: str, db: Session = Depends(get_db)):
 
 
 @router.post("/shipments/direct")
-def post_direct_shipment(body: dict, db: Session = Depends(get_db)):
+def post_direct_shipment(body: dict, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     """수주 없이 바로 출하 등록 — SO 자동 생성 후 즉시 출하확정"""
     from app.services.doc_no import next_doc_no
     from app.models.sales import SOStatus, ShipmentStatus
