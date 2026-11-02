@@ -111,18 +111,23 @@ def auto_from_erp(year_month: str, partner_id: str, db: Session = Depends(get_db
     if nm > 12: nm = 1; ny += 1
     end = f"{ny}-{nm:02d}-01"
 
+    # 날짜+품번+단가 기준으로 합산 → 취소전표(RV)와 상쇄된 항목은 0이 되어 제외됨
     receipts = db.execute(text("""
-        SELECT r.receipt_date, COALESCE(i.name, r.part_no) AS item_name,
-               r.part_no AS spec, r.qty,
-               COALESCE(r.unit_price, i.std_buy_price, 0) AS unit_price,
-               COALESCE(p.name, r.partner_id) AS partner_name
+        SELECT r.receipt_date,
+               MIN(COALESCE(i.name, r.part_no)) AS item_name,
+               r.part_no AS spec,
+               SUM(r.qty) AS qty,
+               COALESCE(MAX(r.unit_price), 0) AS unit_price,
+               MIN(COALESCE(p.name, r.partner_id)) AS partner_name
         FROM receipt r
         LEFT JOIN item i    ON i.part_no    = r.part_no
         LEFT JOIN partner p ON p.partner_id = r.partner_id
         WHERE r.partner_id = :pid
           AND r.receipt_date >= :s AND r.receipt_date < :e
           AND r.status = 'confirmed'
-        ORDER BY r.receipt_date, r.gr_no
+        GROUP BY r.receipt_date, r.part_no, r.unit_price
+        HAVING SUM(r.qty) > 0
+        ORDER BY r.receipt_date, r.part_no
     """), {"pid": partner_id, "s": start, "e": end}).fetchall()
 
     partner_name = receipts[0].partner_name if receipts else partner_id
