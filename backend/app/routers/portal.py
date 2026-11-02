@@ -25,7 +25,7 @@ def _supplier_partner(user: User) -> str:
     return user.partner_id
 
 
-# ── 내 발주 목록 ────────────────────────────────────────────────
+# ── 내 발주 목록 (잔량 > 0인 미납 건) ──────────────────────────
 @router.get("/orders")
 def my_orders(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     partner_id = _supplier_partner(user)
@@ -49,6 +49,9 @@ def my_orders(user: User = Depends(get_current_user), db: Session = Depends(get_
             r.qty for r in po.receipts
             if r.status == ReceiptStatus.confirmed
         )
+        remaining = po.qty - delivered
+        if remaining <= 0:  # 실납품 완료 → 납품완료 탭으로
+            continue
         result.append({
             "po_no": po.po_no,
             "part_no": po.part_no,
@@ -56,7 +59,7 @@ def my_orders(user: User = Depends(get_current_user), db: Session = Depends(get_
             "item_unit": item.unit if item else "EA",
             "qty": po.qty,
             "delivered_qty": delivered,
-            "remaining_qty": po.qty - delivered,
+            "remaining_qty": remaining,
             "unit_price": float(po.unit_price or 0),
             "order_date": str(po.order_date),
             "due_date": str(po.due_date),
@@ -66,7 +69,7 @@ def my_orders(user: User = Depends(get_current_user), db: Session = Depends(get_
     return result
 
 
-# ── 납품 완료 발주 목록 ──────────────────────────────────────────
+# ── 납품 완료 발주 목록 (잔량 = 0 or closed) ────────────────────
 @router.get("/orders/completed")
 def my_completed_orders(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     partner_id = _supplier_partner(user)
@@ -74,7 +77,6 @@ def my_completed_orders(user: User = Depends(get_current_user), db: Session = De
         db.query(PurchaseOrder)
         .filter(
             PurchaseOrder.partner_id == partner_id,
-            PurchaseOrder.status == POStatus.closed,
             PurchaseOrder.po_type == "outsource",
         )
         .order_by(PurchaseOrder.due_date.desc())
@@ -87,6 +89,10 @@ def my_completed_orders(user: User = Depends(get_current_user), db: Session = De
             r.qty for r in po.receipts
             if r.status == ReceiptStatus.confirmed
         )
+        remaining = po.qty - delivered
+        # closed 상태이거나 실납품이 발주량 이상인 경우
+        if po.status != POStatus.closed and remaining > 0:
+            continue
         result.append({
             "po_no": po.po_no,
             "part_no": po.part_no,
@@ -94,7 +100,7 @@ def my_completed_orders(user: User = Depends(get_current_user), db: Session = De
             "item_unit": item.unit if item else "EA",
             "qty": po.qty,
             "delivered_qty": delivered,
-            "remaining_qty": po.qty - delivered,
+            "remaining_qty": remaining,
             "unit_price": float(po.unit_price or 0),
             "order_date": str(po.order_date),
             "due_date": str(po.due_date),
