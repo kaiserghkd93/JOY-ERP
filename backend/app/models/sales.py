@@ -51,6 +51,7 @@ class Shipment(Base):
     ship_date: Mapped[date] = mapped_column(Date, nullable=False)
     unit_price: Mapped[float] = mapped_column(Numeric(15, 2), nullable=False)
     status: Mapped[ShipmentStatus] = mapped_column(SAEnum(ShipmentStatus), default=ShipmentStatus.confirmed)
+    lot_no: Mapped[str | None] = mapped_column(String(50), nullable=True)
     note: Mapped[str | None] = mapped_column(String(500))
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
 

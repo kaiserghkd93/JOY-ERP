@@ -47,6 +47,7 @@ def create_shipment(
     qty: int,
     ship_date: date,
     unit_price: float,
+    lot_no: str | None = None,
     note: str | None = None,
 ) -> Shipment:
     so = db.get(SalesOrder, so_no)
@@ -64,7 +65,7 @@ def create_shipment(
     sh = Shipment(
         sh_no=sh_no, so_no=so_no, part_no=so.part_no,
         qty=qty, ship_date=ship_date, unit_price=unit_price,
-        status=ShipmentStatus.confirmed, note=note,
+        status=ShipmentStatus.confirmed, lot_no=lot_no, note=note,
     )
     db.add(sh)
     db.flush()
@@ -81,7 +82,7 @@ def create_shipment(
     post_ledger(
         db, so.part_no, ship_date,
         LedgerType.shipment, -qty, avg,
-        ref_type="SH", ref_no=sh_no, note="출하확정",
+        ref_type="SH", ref_no=sh_no, lot_no=lot_no, note="출하확정",
     )
     _update_so_status(db, so)
     db.commit()

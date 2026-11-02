@@ -5,17 +5,19 @@ from app.models.master import Item, Partner
 from app.schemas.master import ItemCreate, ItemUpdate, ItemOut, PartnerCreate, PartnerUpdate, PartnerOut
 from app.models.auth import User
 from app.routers.auth import require_admin
+from app.services.audit_service import audit_create, audit_update, audit_delete
 import openpyxl, io
 
 router = APIRouter(prefix="/master", tags=["기준정보"])
 
 
 @router.post("/items", response_model=ItemOut)
-def create_item(body: ItemCreate, db: Session = Depends(get_db), _: User = Depends(require_admin)):
+def create_item(body: ItemCreate, db: Session = Depends(get_db), current_user: User = Depends(require_admin)):
     if db.get(Item, body.part_no):
         raise HTTPException(409, f"이미 존재: {body.part_no}")
     item = Item(**body.model_dump())
     db.add(item)
+    audit_create(db, "item", body.part_no, current_user.username, note=body.name)
     db.commit()
     db.refresh(item)
     return item
@@ -60,19 +62,22 @@ def get_item(part_no: str, db: Session = Depends(get_db)):
 
 
 @router.patch("/items/{part_no:path}", response_model=ItemOut)
-def update_item(part_no: str, body: ItemUpdate, db: Session = Depends(get_db), _: User = Depends(require_admin)):
+def update_item(part_no: str, body: ItemUpdate, db: Session = Depends(get_db), current_user: User = Depends(require_admin)):
     item = db.get(Item, part_no)
     if not item:
         raise HTTPException(404)
+    changes = {}
     for k, v in body.model_dump(exclude_none=True).items():
+        changes[k] = (getattr(item, k), v)
         setattr(item, k, v)
+    audit_update(db, "item", part_no, changes, current_user.username)
     db.commit()
     db.refresh(item)
     return item
 
 
 @router.delete("/items/{part_no:path}")
-def delete_item(part_no: str, db: Session = Depends(get_db), _: User = Depends(require_admin)):
+def delete_item(part_no: str, db: Session = Depends(get_db), current_user: User = Depends(require_admin)):
     """품목 삭제 (관리자 전용) — 거래 이력 있는 품목은 삭제 불가"""
     item = db.get(Item, part_no)
     if not item:
@@ -98,6 +103,7 @@ def delete_item(part_no: str, db: Session = Depends(get_db), _: User = Depends(r
     ).first():
         raise HTTPException(409, "BOM에 등록된 품목이라 삭제 불가")
 
+    audit_delete(db, "item", part_no, current_user.username, note=item.name)
     db.delete(item)
     db.commit()
     return {"ok": True, "deleted": part_no}
@@ -492,11 +498,12 @@ def bulk_upload_items(file: UploadFile = File(...), db: Session = Depends(get_db
 
 
 @router.post("/partners", response_model=PartnerOut)
-def create_partner(body: PartnerCreate, db: Session = Depends(get_db), _: User = Depends(require_admin)):
+def create_partner(body: PartnerCreate, db: Session = Depends(get_db), current_user: User = Depends(require_admin)):
     if db.get(Partner, body.partner_id):
         raise HTTPException(409, f"이미 존재: {body.partner_id}")
     partner = Partner(**body.model_dump())
     db.add(partner)
+    audit_create(db, "partner", body.partner_id, current_user.username, note=body.name)
     db.commit()
     db.refresh(partner)
     return partner
@@ -516,12 +523,15 @@ def get_partner(partner_id: str, db: Session = Depends(get_db)):
 
 
 @router.patch("/partners/{partner_id}", response_model=PartnerOut)
-def update_partner(partner_id: str, body: PartnerUpdate, db: Session = Depends(get_db), _: User = Depends(require_admin)):
+def update_partner(partner_id: str, body: PartnerUpdate, db: Session = Depends(get_db), current_user: User = Depends(require_admin)):
     p = db.get(Partner, partner_id)
     if not p:
         raise HTTPException(404)
+    changes = {}
     for k, v in body.model_dump(exclude_none=True).items():
+        changes[k] = (getattr(p, k), v)
         setattr(p, k, v)
+    audit_update(db, "partner", partner_id, changes, current_user.username)
     db.commit()
     db.refresh(p)
     return p

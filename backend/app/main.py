@@ -13,8 +13,10 @@ from app.models import kpi as _kpi_models  # noqa: ensure kpi_target table
 from app.routers import inventory_adj
 from app.routers import quality_advanced
 from app.routers import lot
+from app.routers import supplier_score, audit as audit_router
 from app.models import quality_advanced as _qa_models  # noqa: ensure tables
 from app.models import inventory_adj as _inv_adj_models  # noqa: ensure tables registered
+from app.models import audit as _audit_models  # noqa: ensure audit_log table
 
 Base.metadata.create_all(bind=engine)
 
@@ -57,6 +59,27 @@ with engine.connect() as _conn:
         "ALTER TABLE process_outgoing_defect ADD COLUMN IF NOT EXISTS partner_id VARCHAR(50)",
         # 수입검사 결과 Enum에 검사대기 추가는 DDL AUTOCOMMIT 블록에서 처리
         # NCR / 이의신청 (Base.metadata.create_all로 테이블 자동 생성)
+        # LOT 번호 관리
+        "ALTER TABLE receipt ADD COLUMN IF NOT EXISTS lot_no VARCHAR(50)",
+        "ALTER TABLE stock_ledger ADD COLUMN IF NOT EXISTS lot_no VARCHAR(50)",
+        "ALTER TABLE shipment ADD COLUMN IF NOT EXISTS lot_no VARCHAR(50)",
+        # 클레임 8D 필드
+        "ALTER TABLE quality_claim ADD COLUMN IF NOT EXISTS d1_team TEXT",
+        "ALTER TABLE quality_claim ADD COLUMN IF NOT EXISTS d2_desc TEXT",
+        "ALTER TABLE quality_claim ADD COLUMN IF NOT EXISTS d3_containment TEXT",
+        "ALTER TABLE quality_claim ADD COLUMN IF NOT EXISTS d4_root_cause TEXT",
+        "ALTER TABLE quality_claim ADD COLUMN IF NOT EXISTS d5_corrective TEXT",
+        "ALTER TABLE quality_claim ADD COLUMN IF NOT EXISTS d6_implemented TEXT",
+        "ALTER TABLE quality_claim ADD COLUMN IF NOT EXISTS d7_preventive TEXT",
+        "ALTER TABLE quality_claim ADD COLUMN IF NOT EXISTS d8_verification TEXT",
+        "ALTER TABLE quality_claim ADD COLUMN IF NOT EXISTS d1_date DATE",
+        "ALTER TABLE quality_claim ADD COLUMN IF NOT EXISTS d2_date DATE",
+        "ALTER TABLE quality_claim ADD COLUMN IF NOT EXISTS d3_date DATE",
+        "ALTER TABLE quality_claim ADD COLUMN IF NOT EXISTS d4_date DATE",
+        "ALTER TABLE quality_claim ADD COLUMN IF NOT EXISTS d5_date DATE",
+        "ALTER TABLE quality_claim ADD COLUMN IF NOT EXISTS d6_date DATE",
+        "ALTER TABLE quality_claim ADD COLUMN IF NOT EXISTS d7_date DATE",
+        "ALTER TABLE quality_claim ADD COLUMN IF NOT EXISTS d8_date DATE",
     ]:
         try:
             _conn.execute(_text(_sql))
@@ -154,6 +177,8 @@ app.include_router(material.router)
 app.include_router(mrp.router)
 app.include_router(cost_actual.router)
 app.include_router(lot.router)
+app.include_router(supplier_score.router)
+app.include_router(audit_router.router)
 
 
 @app.on_event("startup")

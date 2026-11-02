@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from 'react'
+import React, { useEffect, useState, useCallback, useRef } from 'react'
 import api from '../api'
 import { getRole, isMaster } from '../auth'
 import { SpcPanel, ControlPlanPanel, PfmeaPanel, CalibrationPanel, AuditPanel, PpapPanel, MsaPanel } from './QualityAdvanced'
@@ -1606,28 +1606,92 @@ export default function Quality() {
       {showModal && <ClaimModal onClose={() => setShowModal(false)} onSaved={() => { setShowModal(false); load() }} />}
 
       {detailClaim && (
-        <div className="modal-overlay">
-          <div className="modal modal-lg">
-            <h3>클레임 상세 — {detailClaim.claim_no}</h3>
-            <table>
-              <tbody>
-                <tr><td style={{ width: 120, color: 'var(--text-sm)', fontSize: 12 }}>불량유형</td><td>{detailClaim.defect_type}</td></tr>
-                <tr><td>4M 구분</td><td>{detailClaim.m4_category}</td></tr>
-                <tr><td>WHY 1</td><td>{detailClaim.why1 || '—'}</td></tr>
-                <tr><td>WHY 2</td><td>{detailClaim.why2 || '—'}</td></tr>
-                <tr><td>WHY 3</td><td>{detailClaim.why3 || '—'}</td></tr>
-                <tr><td>WHY 4</td><td>{detailClaim.why4 || '—'}</td></tr>
-                <tr><td>WHY 5</td><td>{detailClaim.why5 || '—'}</td></tr>
-                <tr><td>시정조치</td><td>{detailClaim.corrective_action || '—'}</td></tr>
-                <tr><td>재발방지</td><td>{detailClaim.preventive_action || '—'}</td></tr>
-              </tbody>
-            </table>
-            <div className="modal-footer">
-              <button className="btn btn-outline" onClick={() => setDetailClaim(null)}>닫기</button>
-            </div>
-          </div>
-        </div>
+        <ClaimDetailModal claim={detailClaim} onClose={() => setDetailClaim(null)} onSaved={() => { setDetailClaim(null); load() }} />
       )}
+    </div>
+  )
+}
+
+function ClaimDetailModal({ claim, onClose, onSaved }) {
+  const D8_STEPS = [
+    { key: 'd1', label: 'D1 팀 구성', dateKey: 'd1_date' },
+    { key: 'd2', label: 'D2 문제 기술', dateKey: 'd2_date' },
+    { key: 'd3', label: 'D3 봉쇄조치', dateKey: 'd3_date' },
+    { key: 'd4', label: 'D4 근본원인', dateKey: 'd4_date' },
+    { key: 'd5', label: 'D5 시정조치', dateKey: 'd5_date' },
+    { key: 'd6', label: 'D6 실행확인', dateKey: 'd6_date' },
+    { key: 'd7', label: 'D7 재발방지', dateKey: 'd7_date' },
+    { key: 'd8', label: 'D8 효과검증', dateKey: 'd8_date' },
+  ]
+  const fieldKey = s => `${s.key}_${s.key === 'd1' ? 'team' : s.key === 'd2' ? 'desc' : s.key === 'd3' ? 'containment' : s.key === 'd4' ? 'root_cause' : s.key === 'd5' ? 'corrective' : s.key === 'd6' ? 'implemented' : s.key === 'd7' ? 'preventive' : 'verification'}`
+  const [form, setForm] = React.useState(() => {
+    const init = {}
+    D8_STEPS.forEach(s => { init[fieldKey(s)] = claim[fieldKey(s)] || ''; init[s.dateKey] = claim[s.dateKey] || '' })
+    return init
+  })
+  const [saving, setSaving] = React.useState(false)
+
+  const save = async () => {
+    setSaving(true)
+    try {
+      await api.patch(`/quality/claims/${claim.claim_no}`, form)
+      onSaved()
+    } catch (e) { alert('저장 실패: ' + (e.response?.data?.detail || e.message)) }
+    finally { setSaving(false) }
+  }
+
+  const completedCount = D8_STEPS.filter(s => form[s.dateKey]).length
+
+  return (
+    <div className="modal-overlay">
+      <div className="modal modal-lg" style={{ maxWidth: 700 }}>
+        <h3 style={{ marginBottom: 4 }}>클레임 8D — {claim.claim_no}</h3>
+        <div style={{ fontSize: 12, color: '#64748b', marginBottom: 16 }}>
+          {claim.defect_type} | {claim.partner_id} | {claim.occur_date} | 불량수: {claim.defect_qty}
+        </div>
+
+        {/* 진행도 */}
+        <div style={{ display: 'flex', gap: 4, marginBottom: 16 }}>
+          {D8_STEPS.map((s, i) => (
+            <div key={s.key} style={{
+              flex: 1, textAlign: 'center', padding: '4px 2px', borderRadius: 4, fontSize: 10,
+              background: form[s.dateKey] ? '#16a34a' : '#e2e8f0',
+              color: form[s.dateKey] ? '#fff' : '#64748b', fontWeight: 600
+            }}>{s.key.toUpperCase()}</div>
+          ))}
+        </div>
+        <div style={{ fontSize: 11, color: '#64748b', marginBottom: 12 }}>완료 {completedCount}/8 단계</div>
+
+        {/* 5-WHY 요약 */}
+        <table style={{ width: '100%', fontSize: 12, marginBottom: 16 }}>
+          <tbody>
+            <tr><td style={{ width: 100, color: '#64748b' }}>4M</td><td>{claim.m4_category || '—'}</td></tr>
+            {[1,2,3,4,5].map(n => claim[`why${n}`] && <tr key={n}><td>WHY {n}</td><td>{claim[`why${n}`]}</td></tr>)}
+          </tbody>
+        </table>
+
+        {/* 8D 입력 */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, maxHeight: 400, overflowY: 'auto' }}>
+          {D8_STEPS.map(s => (
+            <div key={s.key} style={{ background: '#f8fafc', borderRadius: 8, padding: 12, border: '1px solid #e2e8f0' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                <span style={{ fontWeight: 600, fontSize: 13, color: '#1e3a5f' }}>{s.label}</span>
+                <input type="date" value={form[s.dateKey]}
+                  onChange={e => setForm(f => ({ ...f, [s.dateKey]: e.target.value }))}
+                  style={{ fontSize: 11, padding: '2px 6px', border: '1px solid var(--border)', borderRadius: 4 }} />
+              </div>
+              <textarea rows={2} value={form[fieldKey(s)]}
+                onChange={e => setForm(f => ({ ...f, [fieldKey(s)]: e.target.value }))}
+                style={{ width: '100%', fontSize: 12, border: '1px solid var(--border)', borderRadius: 4, padding: '4px 8px', resize: 'vertical' }} />
+            </div>
+          ))}
+        </div>
+
+        <div className="modal-footer" style={{ marginTop: 16 }}>
+          <button className="btn btn-outline" onClick={onClose}>닫기</button>
+          <button className="btn btn-primary" onClick={save} disabled={saving}>{saving ? '저장 중...' : '저장'}</button>
+        </div>
+      </div>
     </div>
   )
 }

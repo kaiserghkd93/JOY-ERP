@@ -40,6 +40,7 @@ class ShipmentCreate(BaseModel):
     qty: int
     ship_date: date
     unit_price: float
+    lot_no: str | None = None
     note: str | None = None
 
 
@@ -52,6 +53,7 @@ class ShipmentOut(BaseModel):
     ship_date: date
     unit_price: float
     status: ShipmentStatus
+    lot_no: str | None = None
     note: str | None
     partner_id: str | None = None
     partner_name: str | None = None

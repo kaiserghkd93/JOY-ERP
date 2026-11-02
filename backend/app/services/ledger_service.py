@@ -15,6 +15,7 @@ def post_ledger(
     unit_price: float,
     ref_type: str | None = None,
     ref_no: str | None = None,
+    lot_no: str | None = None,
     note: str | None = None,
 ) -> StockLedger:
     entry = StockLedger(
@@ -25,6 +26,7 @@ def post_ledger(
         unit_price=unit_price,
         ref_type=ref_type,
         ref_no=ref_no,
+        lot_no=lot_no,
         note=note,
     )
     db.add(entry)

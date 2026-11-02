@@ -69,7 +69,7 @@ def register_inspection(
         post_ledger(
             db, receipt.part_no, inspect_date,
             LedgerType.receipt, +pass_qty, float(receipt.unit_price),
-            ref_type="GR", ref_no=gr_no, note=f"검사합격 {pass_qty}/{inspect_qty}",
+            ref_type="GR", ref_no=gr_no, lot_no=receipt.lot_no, note=f"검사합격 {pass_qty}/{inspect_qty}",
         )
     else:
         # 전량 불합격 — 입고 상태를 cancelled로

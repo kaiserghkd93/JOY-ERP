@@ -591,7 +591,7 @@ function MatOrderModal({ partners, allItems, onClose, onSaved }) {
 
 /* ── 자재 입고 등록 모달 ── */
 function MatReceiveModal({ orders, onClose, onSaved }) {
-  const [form, setForm] = useState({ po_no: '', part_no: '', qty: '', unit_price: '', receipt_date: today(), note: '' })
+  const [form, setForm] = useState({ po_no: '', part_no: '', qty: '', unit_price: '', receipt_date: today(), lot_no: '', note: '' })
   const [saving, setSaving] = useState(false)
   const selPO = orders.find(o => o.po_no === form.po_no)
 
@@ -605,6 +605,7 @@ function MatReceiveModal({ orders, onClose, onSaved }) {
         qty: parseInt(form.qty),
         unit_price: parseFloat(form.unit_price || 0),
         receipt_date: form.receipt_date,
+        lot_no: form.lot_no || null,
         note: form.note,
       })
       onSaved(); onClose()
@@ -644,10 +645,18 @@ function MatReceiveModal({ orders, onClose, onSaved }) {
                 style={{width:'100%',padding:'6px 8px',border:'1px solid var(--border)',borderRadius:4,fontSize:13}}/>
             </div>
           </div>
-          <div>
-            <div style={{fontSize:11,color:'#64748b',marginBottom:4}}>입고일 *</div>
-            <input type="date" value={form.receipt_date} onChange={e=>setForm(f=>({...f,receipt_date:e.target.value}))}
-              style={{width:'100%',padding:'6px 8px',border:'1px solid var(--border)',borderRadius:4,fontSize:13}}/>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+            <div>
+              <div style={{fontSize:11,color:'#64748b',marginBottom:4}}>입고일 *</div>
+              <input type="date" value={form.receipt_date} onChange={e=>setForm(f=>({...f,receipt_date:e.target.value}))}
+                style={{width:'100%',padding:'6px 8px',border:'1px solid var(--border)',borderRadius:4,fontSize:13}}/>
+            </div>
+            <div>
+              <div style={{fontSize:11,color:'#64748b',marginBottom:4}}>LOT번호 (공급사 LOT#)</div>
+              <input value={form.lot_no} onChange={e=>setForm(f=>({...f,lot_no:e.target.value}))}
+                placeholder="예: LOT-2026-001"
+                style={{width:'100%',padding:'6px 8px',border:'1px solid var(--border)',borderRadius:4,fontSize:13}}/>
+            </div>
           </div>
         </div>
         <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>

@@ -38,6 +38,7 @@ class ReceiptCreate(BaseModel):
     qty: int
     receipt_date: date
     unit_price: float
+    lot_no: str | None = None
     note: str | None = None
 
 
@@ -51,6 +52,7 @@ class ReceiptOut(BaseModel):
     receipt_date: date
     unit_price: float
     status: ReceiptStatus
+    lot_no: str | None = None
     note: str | None
     partner_id: str | None = None
     outsource_price: float | None = None

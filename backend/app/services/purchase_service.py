@@ -37,6 +37,7 @@ def create_receipt(
     qty: int,
     receipt_date: date,
     unit_price: float,
+    lot_no: str | None = None,
     note: str | None = None,
 ) -> Receipt:
     po = db.get(PurchaseOrder, po_no)
@@ -51,7 +52,7 @@ def create_receipt(
     receipt = Receipt(
         gr_no=gr_no, po_no=po_no, part_no=po.part_no,
         qty=qty, receipt_date=receipt_date, unit_price=unit_price,
-        status=ReceiptStatus.pending, note=note,
+        status=ReceiptStatus.pending, lot_no=lot_no, note=note,
     )
     db.add(receipt)
     db.flush()  # receipt가 DB에 반영된 후 상태 계산

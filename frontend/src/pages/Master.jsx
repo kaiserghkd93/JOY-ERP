@@ -427,7 +427,7 @@ export default function Master() {
         )}
         <div className="erp-actions">
           <div className="qdate-bar">
-            {[['items','품목 마스터'],['partners','거래처 마스터']].map(([v,l])=>(
+            {[['items','품목 마스터'],['partners','거래처 마스터'],['scores','협력사 평가'],['audit','변경 이력']].map(([v,l])=>(
               <button key={v} className={`qdate-btn${tab===v?' active':''}`} onClick={()=>setTab(v)}>{l}</button>
             ))}
           </div>
@@ -527,6 +527,10 @@ export default function Master() {
         <Pagination page={partnerPage} total={filteredPartners.length} pageSize={PAGE_SIZE} onChange={setPartnerPage} />
       </>)}
 
+      {tab === 'scores' && <SupplierScoreTab />}
+
+      {tab === 'audit' && isMaster() && <AuditTab />}
+
       {itemModal !== null && (
         <ItemModal
           item={itemModal.part_no ? itemModal : null}
@@ -541,6 +545,158 @@ export default function Master() {
           onSaved={() => { setPartnerModal(null); load() }}
         />
       )}
+    </div>
+  )
+}
+
+function SupplierScoreTab() {
+  const now = new Date()
+  const [year, setYear] = useState(now.getFullYear())
+  const [month, setMonth] = useState(now.getMonth() + 1)
+  const [data, setData] = useState(null)
+  const [loading, setLoading] = useState(false)
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    try {
+      const r = await api.get(`/supplier-score/?year=${year}&month=${month}`)
+      setData(r.data)
+    } catch { setData(null) }
+    finally { setLoading(false) }
+  }, [year, month])
+
+  useEffect(() => { load() }, [load])
+
+  const gradeColor = g => ({ A: '#16a34a', B: '#2563eb', C: '#d97706', D: '#dc2626' }[g] || '#94a3b8')
+
+  return (
+    <div>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', padding: '12px 0' }}>
+        <select value={year} onChange={e => setYear(+e.target.value)}
+          style={{ padding: '4px 8px', border: '1px solid var(--border)', borderRadius: 4, fontSize: 13 }}>
+          {[2024, 2025, 2026, 2027].map(y => <option key={y}>{y}</option>)}
+        </select>
+        <select value={month} onChange={e => setMonth(+e.target.value)}
+          style={{ padding: '4px 8px', border: '1px solid var(--border)', borderRadius: 4, fontSize: 13 }}>
+          {Array.from({length:12},(_,i)=>i+1).map(m => <option key={m} value={m}>{m}월</option>)}
+        </select>
+        <button className="btn btn-sm btn-outline" onClick={load} disabled={loading}>조회</button>
+      </div>
+      {loading && <div style={{ textAlign: 'center', padding: 40, color: '#64748b' }}>로딩 중...</div>}
+      {data && (
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>협력사</th>
+                <th style={{ textAlign: 'center' }}>입고건수</th>
+                <th style={{ textAlign: 'center' }}>납기준수율</th>
+                <th style={{ textAlign: 'center' }}>검사수량</th>
+                <th style={{ textAlign: 'center' }}>불량PPM</th>
+                <th style={{ textAlign: 'center' }}>품질점수</th>
+                <th style={{ textAlign: 'center' }}>종합점수</th>
+                <th style={{ textAlign: 'center' }}>등급</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.items.length === 0 && <tr><td colSpan={8} className="empty">해당 월 입고 데이터 없음</td></tr>}
+              {data.items.map(row => (
+                <tr key={row.partner_id}>
+                  <td>{row.partner_name} <span style={{ color: '#94a3b8', fontSize: 11 }}>({row.partner_id})</span></td>
+                  <td style={{ textAlign: 'center' }}>{row.total_receipts} <span style={{ color: '#94a3b8', fontSize: 11 }}>({row.on_time_receipts} 적기)</span></td>
+                  <td style={{ textAlign: 'center', color: row.delivery_rate >= 95 ? '#16a34a' : row.delivery_rate >= 80 ? '#d97706' : '#dc2626' }}>
+                    {row.delivery_rate !== null ? `${row.delivery_rate}%` : '—'}
+                  </td>
+                  <td style={{ textAlign: 'center' }}>{row.total_inspect_qty.toLocaleString()}</td>
+                  <td style={{ textAlign: 'center', color: row.defect_ppm === 0 ? '#16a34a' : row.defect_ppm < 1000 ? '#d97706' : '#dc2626' }}>
+                    {row.defect_ppm !== null ? row.defect_ppm.toLocaleString() : '—'}
+                  </td>
+                  <td style={{ textAlign: 'center' }}>{row.quality_score !== null ? row.quality_score : '—'}</td>
+                  <td style={{ textAlign: 'center', fontWeight: 600 }}>{row.score !== null ? row.score : '—'}</td>
+                  <td style={{ textAlign: 'center' }}>
+                    <span style={{ background: gradeColor(row.grade), color: '#fff', borderRadius: 4, padding: '2px 8px', fontSize: 12, fontWeight: 700 }}>
+                      {row.grade}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 8 }}>
+        종합점수 = 납기준수율 × 60% + 품질점수 × 40% | 품질점수 = 100 - PPM/100 | A≥90 B≥75 C≥60 D미만
+      </div>
+    </div>
+  )
+}
+
+function AuditTab() {
+  const [logs, setLogs] = useState([])
+  const [tableFilter, setTableFilter] = useState('')
+  const [loading, setLoading] = useState(false)
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    try {
+      const params = tableFilter ? `?table_name=${tableFilter}` : ''
+      const r = await api.get(`/audit/${params}`)
+      setLogs(r.data)
+    } catch { setLogs([]) }
+    finally { setLoading(false) }
+  }, [tableFilter])
+
+  useEffect(() => { load() }, [load])
+
+  const actionColor = a => ({ CREATE: '#16a34a', UPDATE: '#2563eb', DELETE: '#dc2626' }[a] || '#64748b')
+
+  return (
+    <div>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', padding: '12px 0' }}>
+        <select value={tableFilter} onChange={e => setTableFilter(e.target.value)}
+          style={{ padding: '4px 8px', border: '1px solid var(--border)', borderRadius: 4, fontSize: 13 }}>
+          <option value="">전체</option>
+          <option value="item">품목 마스터</option>
+          <option value="partner">거래처 마스터</option>
+        </select>
+        <button className="btn btn-sm btn-outline" onClick={load} disabled={loading}>조회</button>
+      </div>
+      {loading && <div style={{ textAlign: 'center', padding: 40, color: '#64748b' }}>로딩 중...</div>}
+      <div className="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>시간</th>
+              <th>테이블</th>
+              <th>레코드</th>
+              <th>작업</th>
+              <th>필드</th>
+              <th>변경 전</th>
+              <th>변경 후</th>
+              <th>처리자</th>
+            </tr>
+          </thead>
+          <tbody>
+            {logs.length === 0 && <tr><td colSpan={8} className="empty">변경 이력 없음</td></tr>}
+            {logs.map(r => (
+              <tr key={r.id}>
+                <td style={{ fontSize: 11, color: '#64748b', whiteSpace: 'nowrap' }}>{r.changed_at?.replace('T', ' ').slice(0, 16)}</td>
+                <td style={{ fontSize: 12 }}>{r.table_name}</td>
+                <td style={{ fontSize: 12, fontFamily: 'monospace' }}>{r.record_id}</td>
+                <td>
+                  <span style={{ background: actionColor(r.action), color: '#fff', borderRadius: 4, padding: '1px 6px', fontSize: 11, fontWeight: 600 }}>
+                    {r.action}
+                  </span>
+                </td>
+                <td style={{ fontSize: 12, color: '#64748b' }}>{r.field_name || (r.note ? `(${r.note})` : '—')}</td>
+                <td style={{ fontSize: 12, maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: '#dc2626' }}>{r.old_value || '—'}</td>
+                <td style={{ fontSize: 12, maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: '#16a34a' }}>{r.new_value || '—'}</td>
+                <td style={{ fontSize: 12 }}>{r.changed_by}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   )
 }

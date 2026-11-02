@@ -235,7 +235,7 @@ function SalesOrderModal({ onClose, onSaved }) {
 
 function ShipModal({ so, onClose, onSaved }) {
   const remainQty = so.remaining_qty ?? so.qty ?? ''
-  const [form, setForm] = useState({ qty: remainQty, ship_date: today(), unit_price: '' })
+  const [form, setForm] = useState({ qty: remainQty, ship_date: today(), unit_price: '', lot_no: '' })
   useEffect(() => { setForm(f => ({ ...f, qty: so.remaining_qty ?? so.qty ?? '', ship_date: today() })) }, [so.so_no])
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
 
@@ -250,7 +250,7 @@ function ShipModal({ so, onClose, onSaved }) {
     if (!form.qty) return alert('출하수량을 입력하세요')
     if (!form.unit_price && form.unit_price !== 0) return alert('판매단가를 입력하세요')
     try {
-      await api.post('/sales/shipments', { so_no: so.so_no, qty: +form.qty, ship_date: form.ship_date, unit_price: +form.unit_price })
+      await api.post('/sales/shipments', { so_no: so.so_no, qty: +form.qty, ship_date: form.ship_date, unit_price: +form.unit_price, lot_no: form.lot_no || null })
       onSaved()
     } catch (err) {
       alert('출하 실패: ' + (err.response?.data?.detail || err.message))
@@ -265,7 +265,10 @@ function ShipModal({ so, onClose, onSaved }) {
           <div className="form-group"><label>출하수량</label><input type="number" value={form.qty} onChange={e => set('qty', e.target.value)} /></div>
           <div className="form-group"><label>판매단가</label><input type="number" value={form.unit_price} onChange={e => set('unit_price', e.target.value)} /></div>
         </div>
-        <div className="form-group"><label>출하일</label><input type="date" value={form.ship_date} onChange={e => set('ship_date', e.target.value)} /></div>
+        <div className="grid-2">
+          <div className="form-group"><label>출하일</label><input type="date" value={form.ship_date} onChange={e => set('ship_date', e.target.value)} /></div>
+          <div className="form-group"><label>LOT번호</label><input value={form.lot_no} onChange={e => set('lot_no', e.target.value)} placeholder="출하 LOT#" /></div>
+        </div>
         <div className="modal-footer">
           <button className="btn btn-outline" onClick={onClose}>취소</button>
           <button className="btn btn-primary" onClick={submit}>출하</button>

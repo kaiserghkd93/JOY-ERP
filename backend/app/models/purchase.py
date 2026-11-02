@@ -73,6 +73,7 @@ class Receipt(Base):
     receipt_date: Mapped[date] = mapped_column(Date, nullable=False)
     unit_price: Mapped[float] = mapped_column(Numeric(15, 2), nullable=False)
     status: Mapped[ReceiptStatus] = mapped_column(SAEnum(ReceiptStatus), default=ReceiptStatus.pending)
+    lot_no: Mapped[str | None] = mapped_column(String(50), nullable=True)
     note: Mapped[str | None] = mapped_column(String(500))
     partner_id: Mapped[str | None] = mapped_column(String(30), nullable=True)
     outsource_price: Mapped[float | None] = mapped_column(Numeric(15, 2), nullable=True)

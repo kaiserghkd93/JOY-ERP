@@ -65,6 +65,23 @@ class ClaimUpdate(BaseModel):
     why5: str | None = None
     corrective_action: str | None = None
     preventive_action: str | None = None
+    # 8D 필드
+    d1_team: str | None = None
+    d2_desc: str | None = None
+    d3_containment: str | None = None
+    d4_root_cause: str | None = None
+    d5_corrective: str | None = None
+    d6_implemented: str | None = None
+    d7_preventive: str | None = None
+    d8_verification: str | None = None
+    d1_date: date | None = None
+    d2_date: date | None = None
+    d3_date: date | None = None
+    d4_date: date | None = None
+    d5_date: date | None = None
+    d6_date: date | None = None
+    d7_date: date | None = None
+    d8_date: date | None = None
     status: ClaimStatus | None = None
 
 
@@ -84,6 +101,23 @@ class ClaimOut(BaseModel):
     why5: str | None
     corrective_action: str | None
     preventive_action: str | None
+    # 8D 필드
+    d1_team: str | None = None
+    d2_desc: str | None = None
+    d3_containment: str | None = None
+    d4_root_cause: str | None = None
+    d5_corrective: str | None = None
+    d6_implemented: str | None = None
+    d7_preventive: str | None = None
+    d8_verification: str | None = None
+    d1_date: date | None = None
+    d2_date: date | None = None
+    d3_date: date | None = None
+    d4_date: date | None = None
+    d5_date: date | None = None
+    d6_date: date | None = None
+    d7_date: date | None = None
+    d8_date: date | None = None
     status: ClaimStatus
 
 

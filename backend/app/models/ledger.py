@@ -32,6 +32,7 @@ class StockLedger(Base):
     unit_price: Mapped[float] = mapped_column(Numeric(15, 2), default=0)
     ref_type: Mapped[str | None] = mapped_column(String(20))           # GR / SH / ADJ / CANCEL
     ref_no: Mapped[str | None] = mapped_column(String(30))
+    lot_no: Mapped[str | None] = mapped_column(String(50), nullable=True)
     note: Mapped[str | None] = mapped_column(String(500))
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
 
