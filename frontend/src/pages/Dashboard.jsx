@@ -402,13 +402,13 @@ export default function Dashboard() {
         const actualMap = {
           delivery_rate: kpi.delivery_rate,
           defect_rate: kpi.defect_rate,
-          inventory_turnover: kpi.inventory_turnover,
+          cost_down_rate: kpi.cost_down_rate,
           margin_rate: kpi.margin_rate,
         }
         const showMap = {
           delivery_rate: show.kpi_delivery,
           defect_rate: show.kpi_quality,
-          inventory_turnover: show.kpi_inventory,
+          cost_down_rate: show.kpi_inventory,
           margin_rate: show.kpi_profit,
         }
         const visibleDefs = kpiTargets.filter(t => showMap[t.kpi_key])
@@ -446,9 +446,7 @@ export default function Dashboard() {
                 const variance = higher ? actual - target : target - actual
                 const varStr = `${variance >= 0 ? '+' : ''}${variance.toFixed(1)}${def.unit}`
 
-                const actualStr = def.kpi_key === 'inventory_turnover'
-                  ? actual.toFixed(2)
-                  : actual.toFixed(1)
+                const actualStr = actual.toFixed(1)
 
                 return (
                   <div key={def.kpi_key} style={{

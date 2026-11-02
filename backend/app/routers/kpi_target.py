@@ -15,8 +15,8 @@ KPI_DEFS = [
      "icon": "📦", "desc": "확정 출하 납기 기준"},
     {"kpi_key": "defect_rate",        "kpi_label": "수입검사 불량률", "unit": "%",  "higher_better": False, "default_target": 1.0,
      "icon": "🔍", "desc": "수입검사 불량수량 기준"},
-    {"kpi_key": "inventory_turnover", "kpi_label": "재고회전율",     "unit": "회", "higher_better": True,  "default_target": 6.0,
-     "icon": "🔄", "desc": "출고금액 / 재고금액"},
+    {"kpi_key": "cost_down_rate",      "kpi_label": "구매원가절감률",   "unit": "%",  "higher_better": True,  "default_target": 3.0,
+     "icon": "💰", "desc": "전월 대비 구매금액 절감률"},
     {"kpi_key": "margin_rate",        "kpi_label": "매출이익률",     "unit": "%",  "higher_better": True,  "default_target": 15.0,
      "icon": "💹", "desc": "(매출 − 원가) / 매출"},
 ]

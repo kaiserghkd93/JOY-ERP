@@ -9,7 +9,7 @@ from app.models.ledger import StockLedger
 from app.models.master import Item, Partner
 from app.models.quality import Inspection, NonConformance, NcrStatus, ProcessOutgoingDefect, InspectType
 from sqlalchemy import text as _text
-from app.services.ledger_service import get_stock, get_avg_price, get_stock_bulk, get_avg_price_bulk
+from app.services.ledger_service import get_stock, get_avg_price, get_stock_bulk, get_avg_price_bulk  # noqa: get_stock/get_avg_price used in stock-summary
 
 router = APIRouter(prefix="/dashboard", tags=["대시보드"])
 
@@ -55,22 +55,22 @@ def kpi(year: int | None = None, month: int | None = None, db: Session = Depends
     total_fail = int(insp[1] or 0)
     defect_rate = round(total_fail / total_insp * 100, 2) if total_insp > 0 else 0.0
 
-    # ── 재고회전율: DB SUM 집계 ──
-    shipped_val = db.query(func.coalesce(func.sum(
-        StockLedger.qty * StockLedger.unit_price
-    ), 0)).filter(
-        StockLedger.ledger_type == "출고",
-        extract("year", StockLedger.txn_date) == y,
-        extract("month", StockLedger.txn_date) == m,
-    ).scalar()
-    shipped_val = abs(float(shipped_val))
+    # ── 구매원가절감률: 전월 대비 당월 구매금액 절감률 ──
+    py, pm = (y - 1, 12) if m == 1 else (y, m - 1)
 
-    items = db.query(Item).filter(Item.active == True).all()
-    part_nos = [i.part_no for i in items]
-    stocks = get_stock_bulk(db, part_nos)
-    avgs = get_avg_price_bulk(db, part_nos)
-    stock_value = sum(stocks.get(p, 0) * avgs.get(p, 0.0) for p in part_nos)
-    inventory_turnover = round(shipped_val / stock_value, 2) if stock_value > 0 else 0.0
+    curr_buy = float(db.query(func.coalesce(func.sum(Receipt.qty * Receipt.unit_price), 0)).filter(
+        Receipt.status == ReceiptStatus.confirmed,
+        extract("year", Receipt.receipt_date) == y,
+        extract("month", Receipt.receipt_date) == m,
+    ).scalar())
+
+    prior_buy = float(db.query(func.coalesce(func.sum(Receipt.qty * Receipt.unit_price), 0)).filter(
+        Receipt.status == ReceiptStatus.confirmed,
+        extract("year", Receipt.receipt_date) == py,
+        extract("month", Receipt.receipt_date) == pm,
+    ).scalar())
+
+    cost_down_rate = round((prior_buy - curr_buy) / prior_buy * 100, 1) if prior_buy > 0 else 0.0
 
     # ── 마진: DB SUM으로 매출 집계 ──
     rev_row = db.query(
@@ -115,7 +115,7 @@ def kpi(year: int | None = None, month: int | None = None, db: Session = Depends
         "year": y, "month": m,
         "delivery_rate": delivery_rate,
         "defect_rate": defect_rate,
-        "inventory_turnover": inventory_turnover,
+        "cost_down_rate": cost_down_rate,
         "gross_profit": gross_profit,
         "margin_rate": margin_rate,
         "stock_value": round(stock_value, 0),
