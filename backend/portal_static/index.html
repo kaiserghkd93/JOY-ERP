@@ -563,6 +563,7 @@ tbody tr:hover { background: #f8fafc; }
   <div class="tabs">
     <div class="tab active" onclick="showTab('orders')">발주 현황</div>
     <div class="tab" onclick="showTab('deliver')">납품 입력</div>
+    <div class="tab" onclick="showTab('completed')">납품완료</div>
     <div class="tab" onclick="showTab('monthly')">월별 집계</div>
     <div class="tab" onclick="showTab('ncr')">부적합 통보</div>
     <div class="tab" onclick="showTab('molds')">대여 금형</div>
@@ -698,6 +699,14 @@ tbody tr:hover { background: #f8fafc; }
       <div class="card">
         <div class="card-header">보유 금형 현황</div>
         <div id="molds-body"><div style="padding:40px;text-align:center;color:var(--text-sm)">로딩 중...</div></div>
+      </div>
+    </div>
+
+    <!-- 납품완료 -->
+    <div id="tab-completed" class="section">
+      <div class="card">
+        <div class="card-header">납품완료 내역</div>
+        <div id="completed-body"><div style="padding:40px;text-align:center;color:var(--text-sm)">로딩 중...</div></div>
       </div>
     </div>
 
@@ -984,10 +993,11 @@ function renderPoList() {
 function filterPoList() {
   const q = (document.getElementById('po-search')?.value || '').toLowerCase();
   const filtered = allOrders.filter(o =>
-    !q || o.item_name.toLowerCase().includes(q) || o.po_no.toLowerCase().includes(q)
+    o.remaining_qty > 0 &&
+    (!q || o.item_name.toLowerCase().includes(q) || o.po_no.toLowerCase().includes(q))
   );
   const cnt = document.getElementById('po-count');
-  if (cnt) cnt.textContent = filtered.length + '건';
+  if (cnt) cnt.textContent = '발주잔량 ' + filtered.length + '건';
   if (!filtered.length) {
     document.getElementById('po-list').innerHTML = '<div style="padding:30px;text-align:center;color:var(--text-sm)">' + (q ? '검색 결과 없음' : '발주 없음') + '</div>';
     return;
@@ -1000,18 +1010,44 @@ function filterPoList() {
         <div class="po-item-name">${o.item_name}</div>
         <div class="po-item-info">${o.po_no} · 납기 ${o.due_date}</div>
       </div>
-      <div class="po-item-remain">${o.remaining_qty.toLocaleString()}<br><span style="font-size:10px;font-weight:400;color:var(--text-sm)">${o.item_unit}</span></div>
+      <div class="po-item-remain">${o.remaining_qty.toLocaleString()}<br><span style="font-size:10px;font-weight:400;color:var(--text-sm)">발주잔량 ${o.item_unit}</span></div>
     </div>`;
   }).join('');
 }
 
 function showTab(tab) {
-  document.querySelectorAll('.tab').forEach((t,i) => t.classList.toggle('active', ['orders','deliver','monthly','ncr','molds'][i]===tab));
+  document.querySelectorAll('.tab').forEach((t,i) => t.classList.toggle('active', ['orders','deliver','completed','monthly','ncr','molds'][i]===tab));
   document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
   document.getElementById('tab-' + tab).classList.add('active');
+  if (tab === 'completed') loadCompleted();
   if (tab === 'monthly') loadMonthly();
   if (tab === 'ncr') loadNcr();
   if (tab === 'molds') loadMyMolds();
+}
+
+async function loadCompleted() {
+  const body = document.getElementById('completed-body');
+  body.innerHTML = '<div style="padding:40px;text-align:center;color:var(--text-sm)">로딩 중...</div>';
+  const data = await api('GET', '/portal/orders/completed') || [];
+  if (!data.length) {
+    body.innerHTML = '<div style="padding:40px;text-align:center;color:var(--text-sm)">납품완료 내역이 없습니다</div>';
+    return;
+  }
+  body.innerHTML = `
+    <table><thead><tr>
+      <th>발주번호</th><th>품목</th><th>품번</th><th>발주수량</th><th>납품수량</th><th>납기일</th><th>발주일</th>
+    </tr></thead><tbody>
+    ${data.map(o=>`<tr>
+      <td style="font-family:monospace;font-size:11px;color:var(--text-sm)">${o.po_no}</td>
+      <td><strong style="font-size:12px">${o.item_name}</strong></td>
+      <td style="font-size:11px;color:var(--text-sm)">${o.part_no}</td>
+      <td>${o.qty.toLocaleString()} ${o.item_unit}</td>
+      <td><strong style="color:var(--green,#16a34a)">${o.delivered_qty.toLocaleString()} ${o.item_unit}</strong></td>
+      <td style="font-size:12px">${o.due_date}</td>
+      <td style="font-size:12px;color:var(--text-sm)">${o.order_date}</td>
+    </tr>`).join('')}
+    </tbody></table>
+  `;
 }
 
 // ── 부적합 통보(NCR) ──
