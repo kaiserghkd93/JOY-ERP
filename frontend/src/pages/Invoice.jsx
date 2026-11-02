@@ -351,6 +351,7 @@ export default function Invoice() {
 
   // 필터 적용
   const filtered = invoices.filter(inv => {
+    if (!filterStatus && inv.status === '취소') return false
     if (filterMonth && inv.issue_date.slice(0, 7) !== filterMonth) return false
     if (filterPartner && (inv.partner_name || inv.partner_id) !== filterPartner) return false
     if (filterStatus && inv.status !== filterStatus) return false
