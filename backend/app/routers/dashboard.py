@@ -118,7 +118,6 @@ def kpi(year: int | None = None, month: int | None = None, db: Session = Depends
         "cost_down_rate": cost_down_rate,
         "gross_profit": gross_profit,
         "margin_rate": margin_rate,
-        "stock_value": round(stock_value, 0),
         "total_revenue": round(total_revenue, 0),
         "po_today": po_today,
         "po_this_month": po_this_month,
