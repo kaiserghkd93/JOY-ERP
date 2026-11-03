@@ -45,7 +45,7 @@ class ReceiptCreate(BaseModel):
 class ReceiptOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     gr_no: str
-    po_no: str
+    po_no: str | None = None
     part_no: str
     qty: int
     delivered_qty: int = 0
