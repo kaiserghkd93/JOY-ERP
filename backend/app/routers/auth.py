@@ -1,11 +1,11 @@
 import os, hashlib, hmac, base64, json, time
+import bcrypt as _bcrypt_lib
 from collections import defaultdict
 from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, field_validator
-from passlib.context import CryptContext
 
 from app.database import get_db
 from app.models.auth import User, UserRole
@@ -21,8 +21,6 @@ if not SECRET:
         "⚠️  JWT_SECRET 환경변수 미설정 — 재시작 시 모든 토큰 무효화됩니다. Railway 환경변수에 JWT_SECRET을 설정하세요.")
 
 EXPIRE_HOURS = 8   # 8시간 (기존 7일 → 단축)
-
-_pwd_ctx = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 # ── rate limiter (IP별 로그인 실패 추적) ─────────────────────────
 _fail_log: dict[str, list[float]] = defaultdict(list)
@@ -71,12 +69,12 @@ def _verify(token: str) -> dict:
 _LEGACY_SECRET = "joy-erp-secret-2026"  # SHA-256 마이그레이션용 고정값
 
 def _hash(pw: str) -> str:
-    return _pwd_ctx.hash(pw)
+    return _bcrypt_lib.hashpw(pw.encode(), _bcrypt_lib.gensalt()).decode()
 
 def _verify_password(plain: str, stored: str) -> bool:
     """bcrypt 또는 구형 SHA-256 모두 검증"""
     if stored.startswith("$2b$") or stored.startswith("$2a$"):
-        return _pwd_ctx.verify(plain, stored)
+        return _bcrypt_lib.checkpw(plain.encode(), stored.encode())
     # 구형 SHA-256 폴백 — 두 가지 솔트 모두 시도
     if hmac.compare_digest(stored, hashlib.sha256((plain + _LEGACY_SECRET).encode()).hexdigest()):
         return True
