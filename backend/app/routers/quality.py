@@ -564,6 +564,10 @@ def _defect_row(r) -> dict:
         "registered_by": r.registered_by,
         "note": r.note,
         "created_at": str(r.created_at),
+        "status": r.status or "등록",
+        "improvement_note": r.improvement_note,
+        "reviewer": r.reviewer,
+        "reviewed_at": str(r.reviewed_at) if r.reviewed_at else None,
     }
 
 
@@ -683,6 +687,10 @@ class DefectRegUpdate(BaseModel):
     cause: str | None = None
     action_taken: str | None = None
     note: str | None = None
+    status: str | None = None
+    improvement_note: str | None = None
+    reviewer: str | None = None
+    reviewed_at: date | None = None
 
 @router.patch("/defect-reg/{row_id}")
 def update_defect_reg(row_id: int, body: DefectRegUpdate, db: Session = Depends(get_db), _: User = Depends(get_current_user)):

@@ -285,5 +285,10 @@ class ProcessOutgoingDefect(Base):
     registered_by: Mapped[str | None] = mapped_column(ForeignKey("user.username"), nullable=True)
     note: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+    # 개선 워크플로우
+    status: Mapped[str] = mapped_column(String(20), default="등록")   # 등록→검토중→개선완료→종결
+    improvement_note: Mapped[str | None] = mapped_column(Text)        # 생산부서 개선내용
+    reviewer: Mapped[str | None] = mapped_column(String(50))          # 생산부서 검토자
+    reviewed_at: Mapped[date | None] = mapped_column(Date)            # 검토완료일
 
     partner: Mapped["Partner | None"] = relationship(foreign_keys=[partner_id])

@@ -82,6 +82,11 @@ with engine.connect() as _conn:
         "ALTER TABLE quality_claim ADD COLUMN IF NOT EXISTS d8_date DATE",
         # 공정/출하 불량 단가 (로스 금액 계산용)
         "ALTER TABLE process_outgoing_defect ADD COLUMN IF NOT EXISTS unit_price INTEGER DEFAULT 0",
+        # 불량 개선 워크플로우
+        "ALTER TABLE process_outgoing_defect ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT '등록'",
+        "ALTER TABLE process_outgoing_defect ADD COLUMN IF NOT EXISTS improvement_note TEXT",
+        "ALTER TABLE process_outgoing_defect ADD COLUMN IF NOT EXISTS reviewer VARCHAR(50)",
+        "ALTER TABLE process_outgoing_defect ADD COLUMN IF NOT EXISTS reviewed_at DATE",
     ]:
         try:
             _conn.execute(_text(_sql))

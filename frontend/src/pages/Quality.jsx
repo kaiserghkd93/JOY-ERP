@@ -1412,10 +1412,10 @@ export default function Quality() {
             <thead><tr>
               <th>발생일</th><th>검사유형</th><th>출처</th><th>품번</th><th>품명</th>
               <th>불량유형</th><th>검사수량</th><th>불량수량</th><th>불량율</th><th>로스금액</th>
-              <th>라인/공정</th><th>불량원인</th><th>처리조치</th><th>등록자</th><th>삭제</th>
+              <th>상태</th><th>검토자</th><th>라인/공정</th><th>불량원인</th><th>처리조치</th><th>등록자</th><th>삭제</th>
             </tr></thead>
             <tbody>
-              {defRegList.length === 0 && <tr><td colSpan={15} className="empty">등록된 불량 없음</td></tr>}
+              {defRegList.length === 0 && <tr><td colSpan={17} className="empty">등록된 불량 없음</td></tr>}
               {defRegList.map(r => (
                 <tr key={r.id}>
                   <td>{r.defect_date}</td>
@@ -1436,6 +1436,13 @@ export default function Quality() {
                   <td style={{textAlign:'right',color:'var(--danger)',fontWeight:r.loss_amount>0?600:400}}>
                     {r.loss_amount>0 ? r.loss_amount.toLocaleString()+'원' : '—'}
                   </td>
+                  <td>
+                    {r.status==='등록'    && <span className="badge badge-blue">등록</span>}
+                    {r.status==='검토중'  && <span className="badge badge-amber">검토중</span>}
+                    {r.status==='개선완료' && <span className="badge badge-green">개선완료</span>}
+                    {r.status==='종결'    && <span className="badge" style={{background:'var(--bg-card)',color:'var(--text-sm)',border:'1px solid var(--border)'}}>종결</span>}
+                  </td>
+                  <td style={{fontSize:11,color:'var(--text-sm)'}}>{r.reviewer||'—'}</td>
                   <td>{r.line_no||'—'}</td>
                   <td style={{maxWidth:120,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.cause||'—'}</td>
                   <td style={{maxWidth:120,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.action_taken||'—'}</td>
@@ -1671,6 +1678,34 @@ export default function Quality() {
                   onChange={e=>setEditDefReg(p=>({...p,note:e.target.value}))} />
               </div>
             </div>
+            <div style={{borderTop:'1px solid var(--border)',marginTop:12,paddingTop:12}}>
+              <div style={{fontWeight:600,marginBottom:8,fontSize:13}}>🔄 개선 워크플로우</div>
+              <div style={{display:'flex',gap:6,marginBottom:10,flexWrap:'wrap'}}>
+                {['등록','검토중','개선완료','종결'].map(s=>(
+                  <button key={s} className={`btn btn-sm ${editDefReg.status===s?'btn-primary':'btn-outline'}`}
+                    onClick={()=>setEditDefReg(p=>({...p,status:s}))}>
+                    {s==='등록'&&'📋 '}{s==='검토중'&&'🔍 '}{s==='개선완료'&&'✅ '}{s==='종결'&&'🔒 '}{s}
+                  </button>
+                ))}
+              </div>
+              <div className="grid-2">
+                <div className="form-group">
+                  <label>검토자 (생산부서)</label>
+                  <input value={editDefReg.reviewer||''} placeholder="담당자 이름"
+                    onChange={e=>setEditDefReg(p=>({...p,reviewer:e.target.value}))} />
+                </div>
+                <div className="form-group">
+                  <label>검토완료일</label>
+                  <input type="date" value={editDefReg.reviewed_at||''}
+                    onChange={e=>setEditDefReg(p=>({...p,reviewed_at:e.target.value||null}))} />
+                </div>
+              </div>
+              <div className="form-group">
+                <label>개선내용 (생산부서 입력)</label>
+                <input value={editDefReg.improvement_note||''} placeholder="원인분석, 개선조치, 재발방지책..."
+                  onChange={e=>setEditDefReg(p=>({...p,improvement_note:e.target.value}))} />
+              </div>
+            </div>
             <div className="modal-footer">
               <button className="btn btn-outline" onClick={()=>setEditDefReg(null)}>취소</button>
               <button className="btn btn-primary" onClick={async()=>{
@@ -1685,6 +1720,10 @@ export default function Quality() {
                     cause: editDefReg.cause,
                     action_taken: editDefReg.action_taken,
                     note: editDefReg.note,
+                    status: editDefReg.status,
+                    improvement_note: editDefReg.improvement_note,
+                    reviewer: editDefReg.reviewer,
+                    reviewed_at: editDefReg.reviewed_at||null,
                   })
                   setEditDefReg(null)
                   load()
