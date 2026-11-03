@@ -68,7 +68,7 @@ def _verify(token: str) -> dict:
 
 
 # ── 비밀번호 해시 (bcrypt) ───────────────────────────────────────
-_LEGACY_SECRET = os.environ.get("JWT_SECRET", "joy-erp-secret-2026")
+_LEGACY_SECRET = "joy-erp-secret-2026"  # SHA-256 마이그레이션용 고정값
 
 def _hash(pw: str) -> str:
     return _pwd_ctx.hash(pw)
