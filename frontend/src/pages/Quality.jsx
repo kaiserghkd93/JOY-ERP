@@ -891,6 +891,7 @@ export default function Quality() {
   const [defRegForm, setDefRegForm] = useState({ defect_date: new Date().toISOString().slice(0,10), inspect_type:'공정검사', source_type:'자체생산', partner_id:'', part_no:'', part_name:'', defect_type:'', defect_qty:0, inspect_qty:0, unit_price:0, line_no:'', cause:'', action_taken:'', note:'' })
   const [defRegMonthly, setDefRegMonthly] = useState(null)
   const [defRegMonth, setDefRegMonth] = useState(new Date().toISOString().slice(0,7))
+  const [editDefReg, setEditDefReg] = useState(null)
   const [itemMaster, setItemMaster] = useState([])
   const [partAcList, setPartAcList] = useState([])
   const [partAcOpen, setPartAcOpen] = useState(false)
@@ -1439,7 +1440,10 @@ export default function Quality() {
                   <td style={{maxWidth:120,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.cause||'—'}</td>
                   <td style={{maxWidth:120,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.action_taken||'—'}</td>
                   <td style={{fontSize:11,color:'var(--text-sm)'}}>{r.registered_by||'—'}</td>
-                  <td><button className="btn btn-xs btn-danger" onClick={async()=>{if(window.confirm('삭제?')){await api.delete(`/quality/defect-reg/${r.id}`);load()}}}>삭제</button></td>
+                  <td style={{whiteSpace:'nowrap'}}>
+                    <button className="btn btn-xs btn-outline" style={{marginRight:4}} onClick={()=>setEditDefReg({...r})}>수정</button>
+                    <button className="btn btn-xs btn-danger" onClick={async()=>{if(window.confirm('삭제?')){await api.delete(`/quality/defect-reg/${r.id}`);load()}}}>삭제</button>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -1594,6 +1598,95 @@ export default function Quality() {
                   await api.post('/quality/defect-reg', defRegForm)
                   setShowDefRegModal(false)
                   setDefRegForm({defect_date:new Date().toISOString().slice(0,10),inspect_type:'공정검사',source_type:'자체생산',partner_id:'',part_no:'',part_name:'',defect_type:'',defect_qty:0,inspect_qty:0,unit_price:0,line_no:'',cause:'',action_taken:'',note:''})
+                  load()
+                } catch(e) { alert(e.response?.data?.detail||'저장 실패') }
+              }}>저장</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {editDefReg && (
+        <div className="modal-overlay">
+          <div className="modal" style={{maxWidth:480}}>
+            <h3>불량 수정</h3>
+            <div className="grid-2">
+              <div className="form-group">
+                <label>발생일</label>
+                <input type="date" value={editDefReg.defect_date}
+                  onChange={e=>setEditDefReg(p=>({...p,defect_date:e.target.value}))} />
+              </div>
+              <div className="form-group">
+                <label>품번</label>
+                <input value={editDefReg.part_no}
+                  onChange={e=>setEditDefReg(p=>({...p,part_no:e.target.value}))} />
+              </div>
+            </div>
+            <div className="grid-2">
+              <div className="form-group">
+                <label>불량유형</label>
+                <input value={editDefReg.defect_type}
+                  onChange={e=>setEditDefReg(p=>({...p,defect_type:e.target.value}))} />
+              </div>
+              <div className="form-group">
+                <label>불량원인</label>
+                <input value={editDefReg.cause||''}
+                  onChange={e=>setEditDefReg(p=>({...p,cause:e.target.value}))} />
+              </div>
+            </div>
+            <div className="grid-2">
+              <div className="form-group">
+                <label>검사수량</label>
+                <input type="number" value={editDefReg.inspect_qty||0}
+                  onChange={e=>setEditDefReg(p=>({...p,inspect_qty:+e.target.value}))} />
+              </div>
+              <div className="form-group">
+                <label>불량수량</label>
+                <input type="number" value={editDefReg.defect_qty||0}
+                  onChange={e=>setEditDefReg(p=>({...p,defect_qty:+e.target.value}))} />
+              </div>
+            </div>
+            <div className="grid-2">
+              <div className="form-group">
+                <label>단가 (원)</label>
+                <input type="number" value={editDefReg.unit_price||0}
+                  onChange={e=>setEditDefReg(p=>({...p,unit_price:+e.target.value}))} />
+              </div>
+              <div className="form-group">
+                <label>로스금액</label>
+                <div style={{padding:'6px 10px',background:'var(--bg)',border:'1px solid var(--border)',borderRadius:6,fontSize:13,color:'var(--danger)',fontWeight:600}}>
+                  {((editDefReg.defect_qty||0)*(editDefReg.unit_price||0)).toLocaleString()}원
+                </div>
+              </div>
+            </div>
+            <div className="grid-2">
+              <div className="form-group">
+                <label>처리조치</label>
+                <input value={editDefReg.action_taken||''}
+                  onChange={e=>setEditDefReg(p=>({...p,action_taken:e.target.value}))} />
+              </div>
+              <div className="form-group">
+                <label>비고</label>
+                <input value={editDefReg.note||''}
+                  onChange={e=>setEditDefReg(p=>({...p,note:e.target.value}))} />
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-outline" onClick={()=>setEditDefReg(null)}>취소</button>
+              <button className="btn btn-primary" onClick={async()=>{
+                try {
+                  await api.patch(`/quality/defect-reg/${editDefReg.id}`, {
+                    defect_date: editDefReg.defect_date,
+                    part_no: editDefReg.part_no,
+                    defect_type: editDefReg.defect_type,
+                    inspect_qty: editDefReg.inspect_qty,
+                    defect_qty: editDefReg.defect_qty,
+                    unit_price: editDefReg.unit_price||0,
+                    cause: editDefReg.cause,
+                    action_taken: editDefReg.action_taken,
+                    note: editDefReg.note,
+                  })
+                  setEditDefReg(null)
                   load()
                 } catch(e) { alert(e.response?.data?.detail||'저장 실패') }
               }}>저장</button>

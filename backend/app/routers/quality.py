@@ -668,6 +668,34 @@ def defect_monthly_summary(
     }
 
 
+class DefectRegUpdate(BaseModel):
+    defect_date: date | None = None
+    inspect_type: str | None = None
+    source_type: str | None = None
+    partner_id: str | None = None
+    part_no: str | None = None
+    part_name: str | None = None
+    defect_type: str | None = None
+    defect_qty: int | None = None
+    inspect_qty: int | None = None
+    unit_price: int | None = None
+    line_no: str | None = None
+    cause: str | None = None
+    action_taken: str | None = None
+    note: str | None = None
+
+@router.patch("/defect-reg/{row_id}")
+def update_defect_reg(row_id: int, body: DefectRegUpdate, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+    row = db.get(ProcessOutgoingDefect, row_id)
+    if not row:
+        raise HTTPException(404, "not found")
+    for field, val in body.model_dump(exclude_unset=True).items():
+        setattr(row, field, val)
+    db.commit()
+    db.refresh(row)
+    return _defect_row(row)
+
+
 @router.delete("/defect-reg/{row_id}", status_code=204)
 def delete_defect_reg(row_id: int, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     row = db.get(ProcessOutgoingDefect, row_id)
