@@ -1,5 +1,4 @@
 import { useEffect, useState, useCallback } from 'react'
-import * as XLSX from 'xlsx'
 import api from '../api'
 
 const MONTHS = ['1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월']
@@ -208,8 +207,9 @@ export default function Report() {
   useEffect(() => { if (tab === 'auto') loadAutoCheck() }, [tab, loadAutoCheck])
 
   // ── 연간 월별 보고서 Excel 출력 ──
-  const exportAnnual = () => {
+  const exportAnnual = async () => {
     if (!report) return
+    const XLSX = await import('xlsx')
     const wb = XLSX.utils.book_new()
 
     // Sheet1: 월별 요약

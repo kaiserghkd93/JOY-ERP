@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react'
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, CartesianGrid } from 'recharts'
-import * as XLSX from 'xlsx'
 import api from '../api'
 import { getRole, isMaster } from '../auth'
 
@@ -109,7 +108,8 @@ const ROLE_SECTIONS = {
   },
 }
 
-function exportExcel(rows, columns, filename) {
+async function exportExcel(rows, columns, filename) {
+  const XLSX = await import('xlsx')
   const data = [columns.map(c => c.label), ...rows.map(r => columns.map(c => r[c.key]))]
   const ws = XLSX.utils.aoa_to_sheet(data)
   const wb = XLSX.utils.book_new()

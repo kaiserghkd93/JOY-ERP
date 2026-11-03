@@ -202,15 +202,14 @@ app.include_router(audit_router.router)
 
 @app.on_event("startup")
 def _init_admin():
-    """최초 실행 시 admin 계정 없으면 자동 생성"""
+    """최초 실행 시 admin 계정 없으면 자동 생성 (bcrypt)"""
     from app.models.auth import User, UserRole
-    SECRET = os.environ.get("JWT_SECRET", "joy-erp-secret-2026")
+    from app.routers.auth import _hash as _bcrypt_hash
     ADMIN_PW = os.environ.get("ADMIN_PASSWORD", "admin1234")
-    pw_hash = hashlib.sha256((ADMIN_PW + SECRET).encode()).hexdigest()
     db = SessionLocal()
     try:
         if not db.query(User).filter(User.role == UserRole.admin).first():
-            db.add(User(username="admin", password_hash=pw_hash,
+            db.add(User(username="admin", password_hash=_bcrypt_hash(ADMIN_PW),
                         name="관리자", role=UserRole.admin))
             db.commit()
     finally:

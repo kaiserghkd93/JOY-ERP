@@ -1,5 +1,4 @@
 import { useEffect, useState, useCallback } from 'react'
-import * as XLSX from 'xlsx'
 import api from '../api'
 
 const LEDGER_TYPE_BADGE = {
@@ -46,7 +45,8 @@ function LedgerModal({ item, onClose, onAdjusted }) {
     }
   }
 
-  const exportLedger = () => {
+  const exportLedger = async () => {
+    const XLSX = await import('xlsx')
     const data = [
       ['날짜', '구분', '입출고', '단가', '잔량', '참조문서', '비고'],
       ...rows.map(r => [r.txn_date, r.ledger_type, r.qty, r.unit_price, r.balance, r.ref_no || '', r.note || '']),

@@ -1,5 +1,4 @@
 import { useEffect, useState, useRef, useCallback } from 'react'
-import * as XLSX from 'xlsx'
 import api from '../api'
 
 const fmtPrice = (v) => {
@@ -255,7 +254,8 @@ export default function DeliveryReport() {
     setTimeout(() => { win.print(); win.close() }, 300)
   }
 
-  const exportExcel = () => {
+  const exportExcel = async () => {
+    const XLSX = await import('xlsx')
     const wb = XLSX.utils.book_new()
 
     // 고객사 시트

@@ -1,5 +1,4 @@
 import { useEffect, useState, useCallback, useRef, Fragment } from 'react'
-import * as XLSX from 'xlsx'
 import api from '../api'
 import { isMaster, getRole } from '../auth'
 
@@ -980,7 +979,8 @@ export default function Purchase() {
     a.click()
   }
 
-  const downloadTemplate = () => {
+  const downloadTemplate = async () => {
+    const XLSX = await import('xlsx')
     const data = [
       ['partner_id', 'order_date', 'due_date', 'note', 'part_no', 'qty', 'unit_price', 'line_note'],
       ['마이더스시스템', '2026-06-23', '2026-07-15', '정기발주', 'GC3-MO-0052', 100, 3300, ''],
@@ -996,6 +996,7 @@ export default function Purchase() {
     if (!file) return
     e.target.value = ''
 
+    const XLSX = await import('xlsx')
     const buf = await file.arrayBuffer()
     const wb = XLSX.read(buf)
     const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]])
