@@ -196,9 +196,9 @@ def list_shipments(
     if partner_id:
         q = q.join(SalesOrder).filter(SalesOrder.partner_id == partner_id)
     if year:
-        q = q.filter(func.strftime('%Y', Shipment.ship_date) == str(year))
+        q = q.filter(func.extract('year', Shipment.ship_date) == year)
     if month:
-        q = q.filter(func.strftime('%m', Shipment.ship_date) == str(month).zfill(2))
+        q = q.filter(func.extract('month', Shipment.ship_date) == month)
     shipments = q.order_by(Shipment.ship_date.desc(), Shipment.sh_no).all()
     result = []
     for sh in shipments:
