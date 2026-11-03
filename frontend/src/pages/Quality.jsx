@@ -888,7 +888,7 @@ export default function Quality() {
   const [rejectReason, setRejectReason] = useState('')
   const [defRegList, setDefRegList] = useState([])
   const [showDefRegModal, setShowDefRegModal] = useState(false)
-  const [defRegForm, setDefRegForm] = useState({ defect_date: new Date().toISOString().slice(0,10), inspect_type:'공정검사', source_type:'자체생산', partner_id:'', part_no:'', part_name:'', defect_type:'', defect_qty:0, inspect_qty:0, line_no:'', cause:'', action_taken:'', note:'' })
+  const [defRegForm, setDefRegForm] = useState({ defect_date: new Date().toISOString().slice(0,10), inspect_type:'공정검사', source_type:'자체생산', partner_id:'', part_no:'', part_name:'', defect_type:'', defect_qty:0, inspect_qty:0, unit_price:0, line_no:'', cause:'', action_taken:'', note:'' })
   const [defRegMonthly, setDefRegMonthly] = useState(null)
   const [defRegMonth, setDefRegMonth] = useState(new Date().toISOString().slice(0,7))
   const [itemMaster, setItemMaster] = useState([])
@@ -1375,18 +1375,33 @@ export default function Quality() {
                   <div style={{fontSize:13}}>검사 {defRegMonthly.inhouse.total_inspect?.toLocaleString()}개 / 불량 <span style={{color:'var(--danger)',fontWeight:600}}>{defRegMonthly.inhouse.total_defect?.toLocaleString()}개</span>
                     {defRegMonthly.inhouse.total_inspect > 0 && <span style={{marginLeft:6,color:'var(--text-sm)'}}>({(defRegMonthly.inhouse.total_defect/defRegMonthly.inhouse.total_inspect*100).toFixed(1)}%)</span>}
                   </div>
+                  {defRegMonthly.inhouse.total_loss > 0 && (
+                    <div style={{fontSize:13,marginTop:4}}>로스금액 <span style={{color:'var(--danger)',fontWeight:600}}>{defRegMonthly.inhouse.total_loss?.toLocaleString()}원</span></div>
+                  )}
                 </div>
                 <div>
-                  <div style={{fontWeight:600,marginBottom:6,color:'#d97706'}}>🚚 외주업체별</div>
+                  <div style={{fontWeight:600,marginBottom:6,color:'#d97706'}}>🚚 외주업체별 차감내역</div>
                   {defRegMonthly.outsource.length === 0 && <div style={{fontSize:13,color:'var(--text-sm)'}}>외주 불량 없음</div>}
                   {defRegMonthly.outsource.map(g=>(
-                    <div key={g.partner_id} style={{fontSize:13,marginBottom:4,display:'flex',justifyContent:'space-between'}}>
-                      <span>{g.partner_name}</span>
-                      <span>불량 <strong style={{color:'var(--danger)'}}>{g.total_defect}</strong>개
-                        {g.defect_rate!=null && <span style={{color:'var(--text-sm)',marginLeft:4}}>({g.defect_rate}%)</span>}
-                      </span>
+                    <div key={g.partner_id} style={{fontSize:13,marginBottom:6,padding:'6px 8px',background:'var(--bg)',borderRadius:6,border:'1px solid var(--border)'}}>
+                      <div style={{display:'flex',justifyContent:'space-between',marginBottom:2}}>
+                        <span style={{fontWeight:600}}>{g.partner_name}</span>
+                        <span>불량 <strong style={{color:'var(--danger)'}}>{g.total_defect?.toLocaleString()}</strong>개
+                          {g.defect_rate!=null && <span style={{color:'var(--text-sm)',marginLeft:4}}>({g.defect_rate}%)</span>}
+                        </span>
+                      </div>
+                      {g.total_loss > 0 && (
+                        <div style={{color:'var(--danger)',fontWeight:700,textAlign:'right'}}>
+                          차감예정 {g.total_loss?.toLocaleString()}원
+                        </div>
+                      )}
                     </div>
                   ))}
+                  {defRegMonthly.outsource.length > 0 && (
+                    <div style={{fontSize:13,marginTop:8,fontWeight:700,textAlign:'right',borderTop:'1px solid var(--border)',paddingTop:6}}>
+                      외주 총 차감 <span style={{color:'var(--danger)'}}>{defRegMonthly.outsource.reduce((s,g)=>s+(g.total_loss||0),0).toLocaleString()}원</span>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -1395,11 +1410,11 @@ export default function Quality() {
           <table>
             <thead><tr>
               <th>발생일</th><th>검사유형</th><th>출처</th><th>품번</th><th>품명</th>
-              <th>불량유형</th><th>검사수량</th><th>불량수량</th><th>불량율</th>
+              <th>불량유형</th><th>검사수량</th><th>불량수량</th><th>불량율</th><th>로스금액</th>
               <th>라인/공정</th><th>불량원인</th><th>처리조치</th><th>등록자</th><th>삭제</th>
             </tr></thead>
             <tbody>
-              {defRegList.length === 0 && <tr><td colSpan={14} className="empty">등록된 불량 없음</td></tr>}
+              {defRegList.length === 0 && <tr><td colSpan={15} className="empty">등록된 불량 없음</td></tr>}
               {defRegList.map(r => (
                 <tr key={r.id}>
                   <td>{r.defect_date}</td>
@@ -1416,6 +1431,9 @@ export default function Quality() {
                   <td style={{textAlign:'right',color:'var(--danger)',fontWeight:600}}>{r.defect_qty?.toLocaleString()}</td>
                   <td style={{textAlign:'right'}}>
                     {r.defect_rate!=null ? <span className={`badge ${r.defect_rate>5?'badge-red':r.defect_rate>2?'badge-amber':'badge-green'}`}>{r.defect_rate}%</span> : '—'}
+                  </td>
+                  <td style={{textAlign:'right',color:'var(--danger)',fontWeight:r.loss_amount>0?600:400}}>
+                    {r.loss_amount>0 ? r.loss_amount.toLocaleString()+'원' : '—'}
                   </td>
                   <td>{r.line_no||'—'}</td>
                   <td style={{maxWidth:120,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.cause||'—'}</td>
@@ -1539,6 +1557,19 @@ export default function Quality() {
                   onChange={e=>setDefRegForm(p=>({...p,defect_qty:+e.target.value}))} />
               </div>
             </div>
+            <div className="grid-2">
+              <div className="form-group">
+                <label>단가 (원) <span style={{fontSize:11,color:'var(--text-sm)'}}>— 로스금액 계산용</span></label>
+                <input type="number" value={defRegForm.unit_price}
+                  onChange={e=>setDefRegForm(p=>({...p,unit_price:+e.target.value}))} />
+              </div>
+              <div className="form-group">
+                <label>로스금액</label>
+                <div style={{padding:'6px 10px',background:'var(--bg)',border:'1px solid var(--border)',borderRadius:6,fontSize:13,color:'var(--danger)',fontWeight:600}}>
+                  {(defRegForm.defect_qty * defRegForm.unit_price).toLocaleString()}원
+                </div>
+              </div>
+            </div>
             <div className="form-group">
               <label>불량원인</label>
               <input value={defRegForm.cause} placeholder="원재료 이물, 금형마모..."
@@ -1562,7 +1593,7 @@ export default function Quality() {
                   if(defRegForm.source_type==='외주'&&!defRegForm.partner_id) return alert('외주 선택 시 업체를 선택해주세요')
                   await api.post('/quality/defect-reg', defRegForm)
                   setShowDefRegModal(false)
-                  setDefRegForm({defect_date:new Date().toISOString().slice(0,10),inspect_type:'공정검사',source_type:'자체생산',partner_id:'',part_no:'',part_name:'',defect_type:'',defect_qty:0,inspect_qty:0,line_no:'',cause:'',action_taken:'',note:''})
+                  setDefRegForm({defect_date:new Date().toISOString().slice(0,10),inspect_type:'공정검사',source_type:'자체생산',partner_id:'',part_no:'',part_name:'',defect_type:'',defect_qty:0,inspect_qty:0,unit_price:0,line_no:'',cause:'',action_taken:'',note:''})
                   load()
                 } catch(e) { alert(e.response?.data?.detail||'저장 실패') }
               }}>저장</button>

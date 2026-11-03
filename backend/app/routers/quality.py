@@ -531,6 +531,7 @@ class DefectRegCreate(BaseModel):
     defect_type: str
     defect_qty: int
     inspect_qty: int = 0
+    unit_price: int = 0
     line_no: str | None = None
     cause: str | None = None
     action_taken: str | None = None
@@ -555,6 +556,8 @@ def _defect_row(r) -> dict:
         "defect_qty": r.defect_qty,
         "inspect_qty": r.inspect_qty,
         "defect_rate": round(r.defect_qty / r.inspect_qty * 100, 2) if r.inspect_qty else None,
+        "unit_price": r.unit_price or 0,
+        "loss_amount": r.defect_qty * (r.unit_price or 0),
         "line_no": r.line_no,
         "cause": r.cause,
         "action_taken": r.action_taken,
@@ -601,6 +604,7 @@ def create_defect_reg(body: DefectRegCreate, current_user: User = Depends(get_cu
         defect_type=body.defect_type,
         defect_qty=body.defect_qty,
         inspect_qty=body.inspect_qty,
+        unit_price=body.unit_price,
         line_no=body.line_no,
         cause=body.cause,
         action_taken=body.action_taken,
@@ -640,24 +644,27 @@ def defect_monthly_summary(
         pid = r.partner_id or "미지정"
         pname = (r.partner.name if r.partner else None) or pid
         if pid not in outsource_map:
-            outsource_map[pid] = {"partner_id": pid, "partner_name": pname, "total_inspect": 0, "total_defect": 0, "items": []}
+            outsource_map[pid] = {"partner_id": pid, "partner_name": pname, "total_inspect": 0, "total_defect": 0, "total_loss": 0, "items": []}
         g = outsource_map[pid]
         g["total_inspect"] += r.inspect_qty
         g["total_defect"] += r.defect_qty
+        g["total_loss"] += r.defect_qty * (r.unit_price or 0)
         g["items"].append(_defect_row(r))
 
     for g in outsource_map.values():
         g["defect_rate"] = round(g["total_defect"] / g["total_inspect"] * 100, 2) if g["total_inspect"] else None
 
+    inhouse_loss = sum(r.defect_qty * (r.unit_price or 0) for r in inhouse)
     return {
         "year": year,
         "month": month,
         "inhouse": {
             "total_inspect": sum(r.inspect_qty for r in inhouse),
             "total_defect": sum(r.defect_qty for r in inhouse),
+            "total_loss": inhouse_loss,
             "items": [_defect_row(r) for r in inhouse],
         },
-        "outsource": sorted(outsource_map.values(), key=lambda x: x["total_defect"], reverse=True),
+        "outsource": sorted(outsource_map.values(), key=lambda x: x["total_loss"], reverse=True),
     }
 
 

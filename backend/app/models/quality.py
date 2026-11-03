@@ -278,6 +278,7 @@ class ProcessOutgoingDefect(Base):
     defect_type: Mapped[str] = mapped_column(String(100), nullable=False)
     defect_qty: Mapped[int] = mapped_column(Integer, default=0)
     inspect_qty: Mapped[int] = mapped_column(Integer, default=0)
+    unit_price: Mapped[int] = mapped_column(Integer, default=0)
     line_no: Mapped[str | None] = mapped_column(String(50))
     cause: Mapped[str | None] = mapped_column(Text)
     action_taken: Mapped[str | None] = mapped_column(Text)
