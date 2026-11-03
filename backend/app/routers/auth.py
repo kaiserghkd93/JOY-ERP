@@ -1,9 +1,11 @@
-import os, hashlib, hmac, base64, json
+import os, hashlib, hmac, base64, json, time
+from collections import defaultdict
 from datetime import datetime, timedelta
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
+from passlib.context import CryptContext
 
 from app.database import get_db
 from app.models.auth import User, UserRole
@@ -11,18 +13,43 @@ from app.models.auth import User, UserRole
 router = APIRouter(prefix="/auth", tags=["인증"])
 security = HTTPBearer(auto_error=False)
 
-SECRET = os.environ.get("JWT_SECRET", "joy-erp-secret-2026")
-EXPIRE_HOURS = 24 * 7  # 7일
+SECRET = os.environ.get("JWT_SECRET", "")
+if not SECRET:
+    import secrets as _sec
+    SECRET = _sec.token_hex(32)
+    import logging; logging.getLogger("uvicorn").warning(
+        "⚠️  JWT_SECRET 환경변수 미설정 — 재시작 시 모든 토큰 무효화됩니다. Railway 환경변수에 JWT_SECRET을 설정하세요.")
+
+EXPIRE_HOURS = 8   # 8시간 (기존 7일 → 단축)
+
+_pwd_ctx = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+# ── rate limiter (IP별 로그인 실패 추적) ─────────────────────────
+_fail_log: dict[str, list[float]] = defaultdict(list)
+_WINDOW = 900   # 15분
+_MAX_FAIL = 10  # 최대 실패 횟수
+
+def _check_rate(ip: str):
+    now = time.time()
+    _fail_log[ip] = [t for t in _fail_log[ip] if now - t < _WINDOW]
+    if len(_fail_log[ip]) >= _MAX_FAIL:
+        raise HTTPException(429, f"로그인 시도 횟수 초과. {_WINDOW//60}분 후 재시도하세요.")
+
+def _record_fail(ip: str):
+    _fail_log[ip].append(time.time())
+
+def _clear_fail(ip: str):
+    _fail_log.pop(ip, None)
 
 
-# ── 간단한 JWT (HS256) ────────────────────────────────────────────
+# ── JWT (HS256) ──────────────────────────────────────────────────
 def _b64(data: bytes) -> str:
     return base64.urlsafe_b64encode(data).rstrip(b"=").decode()
 
 def _sign(payload: dict) -> str:
     header = _b64(json.dumps({"alg": "HS256", "typ": "JWT"}).encode())
-    body = _b64(json.dumps(payload).encode())
-    sig = _b64(hmac.new(SECRET.encode(), f"{header}.{body}".encode(), hashlib.sha256).digest())
+    body   = _b64(json.dumps(payload).encode())
+    sig    = _b64(hmac.new(SECRET.encode(), f"{header}.{body}".encode(), hashlib.sha256).digest())
     return f"{header}.{body}.{sig}"
 
 def _verify(token: str) -> dict:
@@ -40,9 +67,19 @@ def _verify(token: str) -> dict:
         raise HTTPException(status_code=401, detail="토큰이 유효하지 않습니다")
 
 
-# ── 비밀번호 해시 ────────────────────────────────────────────────
+# ── 비밀번호 해시 (bcrypt) ───────────────────────────────────────
+_LEGACY_SECRET = os.environ.get("JWT_SECRET", "joy-erp-secret-2026")
+
 def _hash(pw: str) -> str:
-    return hashlib.sha256((pw + SECRET).encode()).hexdigest()
+    return _pwd_ctx.hash(pw)
+
+def _verify_password(plain: str, stored: str) -> bool:
+    """bcrypt 또는 구형 SHA-256 모두 검증"""
+    if stored.startswith("$2b$") or stored.startswith("$2a$"):
+        return _pwd_ctx.verify(plain, stored)
+    # 구형 SHA-256 폴백
+    legacy = hashlib.sha256((plain + _LEGACY_SECRET).encode()).hexdigest()
+    return hmac.compare_digest(stored, legacy)
 
 
 # ── 현재 유저 가져오기 (의존성) ──────────────────────────────────
@@ -74,6 +111,21 @@ class LoginReq(BaseModel):
     username: str
     password: str
 
+    @field_validator("username")
+    @classmethod
+    def _check_username(cls, v: str) -> str:
+        v = v.strip()
+        if not v or len(v) > 50:
+            raise ValueError("아이디는 1~50자여야 합니다")
+        return v
+
+    @field_validator("password")
+    @classmethod
+    def _check_password(cls, v: str) -> str:
+        if not v or len(v) > 128:
+            raise ValueError("비밀번호를 확인하세요")
+        return v
+
 class UserCreateReq(BaseModel):
     username: str
     password: str
@@ -81,11 +133,35 @@ class UserCreateReq(BaseModel):
     partner_id: str | None = None
     role: str = UserRole.supplier
 
+    @field_validator("username")
+    @classmethod
+    def _uname(cls, v: str) -> str:
+        v = v.strip()
+        if len(v) < 2 or len(v) > 50:
+            raise ValueError("아이디는 2~50자여야 합니다")
+        return v
+
+    @field_validator("password")
+    @classmethod
+    def _pw(cls, v: str) -> str:
+        if len(v) < 6:
+            raise ValueError("비밀번호는 6자 이상이어야 합니다")
+        if len(v) > 128:
+            raise ValueError("비밀번호가 너무 깁니다")
+        return v
+
 class UserPatchReq(BaseModel):
     name: str | None = None
     role: str | None = None
     is_active: bool | None = None
     password: str | None = None
+
+    @field_validator("password")
+    @classmethod
+    def _pw(cls, v: str | None) -> str | None:
+        if v is not None and len(v) < 6:
+            raise ValueError("비밀번호는 6자 이상이어야 합니다")
+        return v
 
 class UserOut(BaseModel):
     id: int
@@ -98,12 +174,23 @@ class UserOut(BaseModel):
 
 # ── 엔드포인트 ──────────────────────────────────────────────────
 @router.post("/login")
-def login(body: LoginReq, db: Session = Depends(get_db)):
+def login(request: Request, body: LoginReq, db: Session = Depends(get_db)):
+    ip = request.client.host if request.client else "unknown"
+    _check_rate(ip)
+
     user = db.query(User).filter(User.username == body.username).first()
-    if not user or user.password_hash != _hash(body.password):
+    if not user or not _verify_password(body.password, user.password_hash):
+        _record_fail(ip)
         raise HTTPException(status_code=401, detail="아이디 또는 비밀번호가 틀렸습니다")
     if not user.is_active:
         raise HTTPException(status_code=403, detail="비활성화된 계정입니다")
+
+    # 구형 SHA-256 해시이면 bcrypt로 자동 업그레이드
+    if not (user.password_hash.startswith("$2b$") or user.password_hash.startswith("$2a$")):
+        user.password_hash = _hash(body.password)
+        db.commit()
+
+    _clear_fail(ip)
     exp = datetime.utcnow() + timedelta(hours=EXPIRE_HOURS)
     token = _sign({"sub": user.id, "role": user.role, "exp": exp.timestamp()})
     return {
@@ -155,10 +242,14 @@ def patch_user(user_id: int, body: UserPatchReq, _: User = Depends(require_admin
                    role=u.role, partner_id=u.partner_id, is_active=u.is_active)
 
 @router.delete("/users/{user_id}")
-def delete_user(user_id: int, _: User = Depends(require_admin), db: Session = Depends(get_db)):
+def delete_user(user_id: int, me: User = Depends(require_admin), db: Session = Depends(get_db)):
     u = db.get(User, user_id)
     if not u:
         raise HTTPException(404)
-    db.delete(u); db.commit()
-    return {"ok": True}
+    if u.id == me.id:
+        raise HTTPException(400, "본인 계정은 비활성화할 수 없습니다")
+    # ERP 원칙: 계정 이력 보존 — 삭제 대신 비활성화
+    u.is_active = False
+    db.commit()
+    return {"ok": True, "note": "계정 비활성화 (이력 보존)"}
 

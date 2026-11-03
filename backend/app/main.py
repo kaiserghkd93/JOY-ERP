@@ -87,6 +87,15 @@ with engine.connect() as _conn:
         "ALTER TABLE process_outgoing_defect ADD COLUMN IF NOT EXISTS improvement_note TEXT",
         "ALTER TABLE process_outgoing_defect ADD COLUMN IF NOT EXISTS reviewer VARCHAR(50)",
         "ALTER TABLE process_outgoing_defect ADD COLUMN IF NOT EXISTS reviewed_at DATE",
+        # 성능 최적화 인덱스
+        "CREATE INDEX IF NOT EXISTS ix_stock_ledger_part_no ON stock_ledger(part_no)",
+        "CREATE INDEX IF NOT EXISTS ix_stock_ledger_txn_date ON stock_ledger(txn_date)",
+        "CREATE INDEX IF NOT EXISTS ix_stock_ledger_type ON stock_ledger(ledger_type)",
+        "CREATE INDEX IF NOT EXISTS ix_receipt_partner ON receipt(partner_id)",
+        "CREATE INDEX IF NOT EXISTS ix_receipt_date ON receipt(receipt_date)",
+        "CREATE INDEX IF NOT EXISTS ix_shipment_date ON shipment(ship_date)",
+        "CREATE INDEX IF NOT EXISTS ix_process_defect_date ON process_outgoing_defect(defect_date)",
+        "CREATE INDEX IF NOT EXISTS ix_process_defect_status ON process_outgoing_defect(status)",
     ]:
         try:
             _conn.execute(_text(_sql))
@@ -124,35 +133,38 @@ with engine.connect().execution_options(isolation_level="AUTOCOMMIT") as _ddl:
         pass
 
 # ── 환경변수 기반 계정 초기화 ─────────────────────────────────────────
-import hashlib as _hl
-_JWT_SECRET = os.environ.get("JWT_SECRET", "joy-erp-secret-2026")
-def _pw(raw: str) -> str:
-    return _hl.sha256((raw + _JWT_SECRET).encode()).hexdigest()
-
 with SessionLocal() as _s:
     from app.models.auth import User as _User
+    from app.routers.auth import _hash as _pw_hash
     _ou = os.environ.get("INIT_OWNER_USER", "")
     _op = os.environ.get("INIT_OWNER_PASS", "")
     _ap = os.environ.get("INIT_ADMIN_PASS", "")
     if _ou and _op:
         if not _s.query(_User).filter(_User.username == _ou).first():
-            _s.add(_User(username=_ou, password_hash=_pw(_op), name="오너", role="owner"))
+            _s.add(_User(username=_ou, password_hash=_pw_hash(_op), name="오너", role="owner"))
     if _ap:
         _adm = _s.query(_User).filter(_User.username == "admin").first()
         if _adm:
-            _adm.password_hash = _pw(_ap)
+            _adm.password_hash = _pw_hash(_ap)
     _s.commit()
 
 app = FastAPI(title="넥스젬 ERP", version="0.2.0")
 
-FRONTEND_ORIGIN = os.environ.get("FRONTEND_URL", "http://localhost:5173")
+_ALLOWED_ORIGINS = [
+    "https://joy-erp-production.up.railway.app",
+    "http://localhost:5173",
+    "http://localhost:8000",
+]
+_extra = os.environ.get("EXTRA_ORIGINS", "")
+if _extra:
+    _ALLOWED_ORIGINS += [o.strip() for o in _extra.split(",") if o.strip()]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_ALLOWED_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET","POST","PUT","PATCH","DELETE","OPTIONS"],
+    allow_headers=["Authorization","Content-Type","Accept"],
 )
 
 app.include_router(auth.router)
