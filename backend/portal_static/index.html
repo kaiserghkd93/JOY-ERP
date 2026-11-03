@@ -1046,9 +1046,9 @@ function initCompletedFilter() {
       yEl.appendChild(opt);
     }
     yEl.value = now.getFullYear();
+    const mEl = document.getElementById('completed-month');
+    if (mEl) mEl.value = now.getMonth() + 1;
   }
-  const mEl = document.getElementById('completed-month');
-  if (mEl) mEl.value = now.getMonth() + 1;
 }
 
 async function loadCompleted() {
