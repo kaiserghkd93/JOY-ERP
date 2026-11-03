@@ -564,7 +564,7 @@ def _defect_row(r) -> dict:
     }
 
 
-@router.get("/quality/defect-reg")
+@router.get("/defect-reg")
 def list_defect_reg(
     start: date | None = None,
     end: date | None = None,
@@ -588,7 +588,7 @@ def list_defect_reg(
     return [_defect_row(r) for r in rows]
 
 
-@router.post("/quality/defect-reg", status_code=201)
+@router.post("/defect-reg", status_code=201)
 def create_defect_reg(body: DefectRegCreate, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     from app.models.quality import DefectSourceType
     row = ProcessOutgoingDefect(
@@ -613,7 +613,7 @@ def create_defect_reg(body: DefectRegCreate, current_user: User = Depends(get_cu
     return {"id": row.id}
 
 
-@router.get("/quality/defect-reg/monthly-summary")
+@router.get("/defect-reg/monthly-summary")
 def defect_monthly_summary(
     year: int,
     month: int,
@@ -661,7 +661,7 @@ def defect_monthly_summary(
     }
 
 
-@router.delete("/quality/defect-reg/{row_id}", status_code=204)
+@router.delete("/defect-reg/{row_id}", status_code=204)
 def delete_defect_reg(row_id: int, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     row = db.get(ProcessOutgoingDefect, row_id)
     if not row:

@@ -1094,7 +1094,7 @@ export default function Quality() {
                               const v = editingInspector.value.trim()
                               if (v && v !== (selectedInsp.inspector_id || '')) {
                                 try {
-                                  await api.patch(`/inspections/${selectedInsp.id}/inspector`, { inspector_id: v })
+                                  await api.patch(`/quality/inspections/${selectedInsp.id}/inspector`, { inspector_id: v })
                                   load()
                                 } catch(e) { alert(e.response?.data?.detail || '저장 실패') }
                               }
