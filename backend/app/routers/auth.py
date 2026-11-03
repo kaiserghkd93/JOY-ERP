@@ -77,9 +77,11 @@ def _verify_password(plain: str, stored: str) -> bool:
     """bcrypt 또는 구형 SHA-256 모두 검증"""
     if stored.startswith("$2b$") or stored.startswith("$2a$"):
         return _pwd_ctx.verify(plain, stored)
-    # 구형 SHA-256 폴백
-    legacy = hashlib.sha256((plain + _LEGACY_SECRET).encode()).hexdigest()
-    return hmac.compare_digest(stored, legacy)
+    # 구형 SHA-256 폴백 — 두 가지 솔트 모두 시도
+    if hmac.compare_digest(stored, hashlib.sha256((plain + _LEGACY_SECRET).encode()).hexdigest()):
+        return True
+    # JWT_SECRET이 솔트로 사용된 경우 (마이그레이션 과도기 버그 대응)
+    return hmac.compare_digest(stored, hashlib.sha256((plain + SECRET).encode()).hexdigest())
 
 
 # ── 현재 유저 가져오기 (의존성) ──────────────────────────────────
