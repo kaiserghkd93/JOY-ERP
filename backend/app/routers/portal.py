@@ -69,10 +69,13 @@ def my_orders(user: User = Depends(get_current_user), db: Session = Depends(get_
     return result
 
 
-# ── 납품 완료 발주 목록 (잔량 = 0 or closed) ────────────────────
+# ── 납품 완료 발주 목록 (잔량 = 0 or closed) + 직접입고 ─────────
 @router.get("/orders/completed")
 def my_completed_orders(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     partner_id = _supplier_partner(user)
+    result = []
+
+    # 1) PO 기반 완료 건
     orders = (
         db.query(PurchaseOrder)
         .filter(
@@ -82,7 +85,6 @@ def my_completed_orders(user: User = Depends(get_current_user), db: Session = De
         .order_by(PurchaseOrder.due_date.desc())
         .all()
     )
-    result = []
     for po in orders:
         item = db.get(Item, po.part_no)
         delivered = sum(
@@ -90,7 +92,6 @@ def my_completed_orders(user: User = Depends(get_current_user), db: Session = De
             if r.status == ReceiptStatus.confirmed
         )
         remaining = po.qty - delivered
-        # closed 상태이거나 실납품이 발주량 이상인 경우
         if po.status != POStatus.closed and remaining > 0:
             continue
         result.append({
@@ -105,7 +106,41 @@ def my_completed_orders(user: User = Depends(get_current_user), db: Session = De
             "order_date": str(po.order_date),
             "due_date": str(po.due_date),
             "status": po.status,
+            "is_direct": False,
         })
+
+    # 2) 직접입고 (po_no 없는 confirmed 입고)
+    direct = (
+        db.query(Receipt)
+        .filter(
+            Receipt.partner_id == partner_id,
+            Receipt.po_no.is_(None),
+            Receipt.status == ReceiptStatus.confirmed,
+        )
+        .order_by(Receipt.receipt_date.desc())
+        .all()
+    )
+    for r in direct:
+        item = db.get(Item, r.part_no)
+        result.append({
+            "po_no": None,
+            "gr_no": r.gr_no,
+            "part_no": r.part_no,
+            "item_name": item.name if item else r.part_no,
+            "item_unit": item.unit if item else "EA",
+            "qty": r.qty,
+            "delivered_qty": r.qty,
+            "remaining_qty": 0,
+            "unit_price": float(r.unit_price or 0),
+            "order_date": str(r.receipt_date),
+            "due_date": str(r.receipt_date),
+            "status": "confirmed",
+            "is_direct": True,
+            "note": r.note,
+        })
+
+    # 날짜 내림차순 정렬
+    result.sort(key=lambda x: x["due_date"], reverse=True)
     return result
 
 

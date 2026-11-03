@@ -1033,12 +1033,13 @@ async function loadCompleted() {
     body.innerHTML = '<div style="padding:40px;text-align:center;color:var(--text-sm)">납품완료 내역이 없습니다</div>';
     return;
   }
+  const directBadge = `<span style="display:inline-block;background:#f0fdf4;color:#16a34a;border:1px solid #bbf7d0;border-radius:3px;font-size:10px;font-weight:700;padding:1px 6px;margin-left:4px;letter-spacing:.3px">직접입고</span>`;
   body.innerHTML = `
     <table><thead><tr>
       <th>발주번호</th><th>품목</th><th>품번</th><th>발주수량</th><th>납품수량</th><th>납기일</th><th>발주일</th>
     </tr></thead><tbody>
-    ${data.map(o=>`<tr>
-      <td style="font-family:monospace;font-size:11px;color:var(--text-sm)">${o.po_no}</td>
+    ${data.map(o=>`<tr${o.is_direct ? ' style="background:#f0fdf4"' : ''}>
+      <td style="font-family:monospace;font-size:11px;color:var(--text-sm)">${o.is_direct ? (directBadge + '<br><span style="font-size:10px;color:#64748b">' + (o.gr_no||'') + '</span>') : o.po_no}</td>
       <td><strong style="font-size:12px">${o.item_name}</strong></td>
       <td style="font-size:11px;color:var(--text-sm)">${o.part_no}</td>
       <td>${o.qty.toLocaleString()} ${o.item_unit}</td>
