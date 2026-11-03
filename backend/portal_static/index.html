@@ -705,7 +705,18 @@ tbody tr:hover { background: #f8fafc; }
     <!-- 납품완료 -->
     <div id="tab-completed" class="section">
       <div class="card">
-        <div class="card-header">납품완료 내역</div>
+        <div class="card-header" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
+          <span>납품완료 내역</span>
+          <div style="display:flex;align-items:center;gap:8px">
+            <select id="completed-year" onchange="loadCompleted()" style="height:30px;border:1px solid var(--border,#e2e8f0);border-radius:4px;padding:0 8px;font-size:12px;background:white"></select>
+            <select id="completed-month" onchange="loadCompleted()" style="height:30px;border:1px solid var(--border,#e2e8f0);border-radius:4px;padding:0 8px;font-size:12px;background:white">
+              <option value="1">1월</option><option value="2">2월</option><option value="3">3월</option>
+              <option value="4">4월</option><option value="5">5월</option><option value="6">6월</option>
+              <option value="7">7월</option><option value="8">8월</option><option value="9">9월</option>
+              <option value="10">10월</option><option value="11">11월</option><option value="12">12월</option>
+            </select>
+          </div>
+        </div>
         <div id="completed-body"><div style="padding:40px;text-align:center;color:var(--text-sm)">로딩 중...</div></div>
       </div>
     </div>
@@ -1025,21 +1036,42 @@ function showTab(tab) {
   if (tab === 'molds') loadMyMolds();
 }
 
+function initCompletedFilter() {
+  const now = new Date();
+  const yEl = document.getElementById('completed-year');
+  if (yEl && !yEl.options.length) {
+    for (let y = now.getFullYear(); y >= 2024; y--) {
+      const opt = document.createElement('option');
+      opt.value = y; opt.textContent = y + '년';
+      yEl.appendChild(opt);
+    }
+    yEl.value = now.getFullYear();
+  }
+  const mEl = document.getElementById('completed-month');
+  if (mEl) mEl.value = now.getMonth() + 1;
+}
+
 async function loadCompleted() {
+  initCompletedFilter();
+  const year  = document.getElementById('completed-year')?.value  || '';
+  const month = document.getElementById('completed-month')?.value || '';
   const body = document.getElementById('completed-body');
   body.innerHTML = '<div style="padding:40px;text-align:center;color:var(--text-sm)">로딩 중...</div>';
-  const data = await api('GET', '/portal/orders/completed') || [];
+  const params = (year && month) ? `?year=${year}&month=${month}` : '';
+  const data = await api('GET', '/portal/orders/completed' + params) || [];
   if (!data.length) {
-    body.innerHTML = '<div style="padding:40px;text-align:center;color:var(--text-sm)">납품완료 내역이 없습니다</div>';
+    body.innerHTML = '<div style="padding:40px;text-align:center;color:var(--text-sm)">해당 월 납품완료 내역이 없습니다</div>';
     return;
   }
-  const directBadge = `<span style="display:inline-block;background:#f0fdf4;color:#16a34a;border:1px solid #bbf7d0;border-radius:3px;font-size:10px;font-weight:700;padding:1px 6px;margin-left:4px;letter-spacing:.3px">직접입고</span>`;
+  const directBadge = `<span style="display:inline-block;background:#f0fdf4;color:#16a34a;border:1px solid #bbf7d0;border-radius:3px;font-size:10px;font-weight:700;padding:1px 6px;letter-spacing:.3px">직접입고</span>`;
   body.innerHTML = `
     <table><thead><tr>
       <th>발주번호</th><th>품목</th><th>품번</th><th>발주수량</th><th>납품수량</th><th>납기일</th><th>발주일</th>
     </tr></thead><tbody>
     ${data.map(o=>`<tr${o.is_direct ? ' style="background:#f0fdf4"' : ''}>
-      <td style="font-family:monospace;font-size:11px;color:var(--text-sm)">${o.is_direct ? (directBadge + '<br><span style="font-size:10px;color:#64748b">' + (o.gr_no||'') + '</span>') : o.po_no}</td>
+      <td style="font-family:monospace;font-size:11px;color:var(--text-sm)">${o.is_direct
+        ? (directBadge + '<br><span style="font-size:10px;color:#64748b">' + (o.gr_no||'') + '</span>')
+        : o.po_no}</td>
       <td><strong style="font-size:12px">${o.item_name}</strong></td>
       <td style="font-size:11px;color:var(--text-sm)">${o.part_no}</td>
       <td>${o.qty.toLocaleString()} ${o.item_unit}</td>

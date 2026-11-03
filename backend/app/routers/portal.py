@@ -71,26 +71,31 @@ def my_orders(user: User = Depends(get_current_user), db: Session = Depends(get_
 
 # ── 납품 완료 발주 목록 (잔량 = 0 or closed) + 직접입고 ─────────
 @router.get("/orders/completed")
-def my_completed_orders(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def my_completed_orders(
+    year: int | None = None,
+    month: int | None = None,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    from sqlalchemy import extract as sa_extract
     partner_id = _supplier_partner(user)
     result = []
 
     # 1) PO 기반 완료 건
-    orders = (
+    q_po = (
         db.query(PurchaseOrder)
         .filter(
             PurchaseOrder.partner_id == partner_id,
             PurchaseOrder.po_type == "outsource",
         )
-        .order_by(PurchaseOrder.due_date.desc())
-        .all()
     )
-    for po in orders:
+    if year:
+        q_po = q_po.filter(sa_extract("year", PurchaseOrder.due_date) == year)
+    if month:
+        q_po = q_po.filter(sa_extract("month", PurchaseOrder.due_date) == month)
+    for po in q_po.order_by(PurchaseOrder.due_date.desc()).all():
         item = db.get(Item, po.part_no)
-        delivered = sum(
-            r.qty for r in po.receipts
-            if r.status == ReceiptStatus.confirmed
-        )
+        delivered = sum(r.qty for r in po.receipts if r.status == ReceiptStatus.confirmed)
         remaining = po.qty - delivered
         if po.status != POStatus.closed and remaining > 0:
             continue
@@ -110,17 +115,19 @@ def my_completed_orders(user: User = Depends(get_current_user), db: Session = De
         })
 
     # 2) 직접입고 (po_no 없는 confirmed 입고)
-    direct = (
+    q_dr = (
         db.query(Receipt)
         .filter(
             Receipt.partner_id == partner_id,
             Receipt.po_no.is_(None),
             Receipt.status == ReceiptStatus.confirmed,
         )
-        .order_by(Receipt.receipt_date.desc())
-        .all()
     )
-    for r in direct:
+    if year:
+        q_dr = q_dr.filter(sa_extract("year", Receipt.receipt_date) == year)
+    if month:
+        q_dr = q_dr.filter(sa_extract("month", Receipt.receipt_date) == month)
+    for r in q_dr.order_by(Receipt.receipt_date.desc()).all():
         item = db.get(Item, r.part_no)
         result.append({
             "po_no": None,
@@ -139,7 +146,6 @@ def my_completed_orders(user: User = Depends(get_current_user), db: Session = De
             "note": r.note,
         })
 
-    # 날짜 내림차순 정렬
     result.sort(key=lambda x: x["due_date"], reverse=True)
     return result
 
