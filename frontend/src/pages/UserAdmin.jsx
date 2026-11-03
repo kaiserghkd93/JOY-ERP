@@ -31,6 +31,14 @@ export default function UserAdmin() {
     setShowForm(true)
   }
 
+  const errMsg = (e) => {
+    const d = e.response?.data?.detail
+    if (!d) return '저장 실패'
+    if (typeof d === 'string') return d
+    if (Array.isArray(d)) return d.map(x => x.msg || JSON.stringify(x)).join('\n')
+    return JSON.stringify(d)
+  }
+
   const submit = async () => {
     if (!form.username || !form.name || (!editUser && !form.password)) {
       alert('아이디, 이름, 비밀번호는 필수입니다')
@@ -39,7 +47,7 @@ export default function UserAdmin() {
     setSaving(true)
     try {
       if (editUser) {
-        const patch = { name: form.name, role: form.role }
+        const patch = { name: form.name, role: form.role, partner_id: form.partner_id || null }
         if (form.password) patch.password = form.password
         await api.patch(`/auth/users/${editUser.id}`, patch)
       } else {
@@ -52,7 +60,7 @@ export default function UserAdmin() {
       setShowForm(false)
       load()
     } catch (e) {
-      alert(e.response?.data?.detail || '저장 실패')
+      alert(errMsg(e))
     } finally { setSaving(false) }
   }
 

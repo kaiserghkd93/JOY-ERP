@@ -155,6 +155,7 @@ class UserPatchReq(BaseModel):
     role: str | None = None
     is_active: bool | None = None
     password: str | None = None
+    partner_id: str | None = None
 
     @field_validator("password")
     @classmethod
@@ -237,6 +238,8 @@ def patch_user(user_id: int, body: UserPatchReq, _: User = Depends(require_admin
         u.is_active = body.is_active
     if body.password is not None:
         u.password_hash = _hash(body.password)
+    if body.partner_id is not None:
+        u.partner_id = body.partner_id or None
     db.commit()
     return UserOut(id=u.id, username=u.username, name=u.name,
                    role=u.role, partner_id=u.partner_id, is_active=u.is_active)
