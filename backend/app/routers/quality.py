@@ -731,6 +731,23 @@ def delete_defect_reg(row_id: int, db: Session = Depends(get_db), _: User = Depe
     db.commit()
 
 
+@router.post("/defect-reg/recalc-labor-loss")
+def recalc_labor_loss(_: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """기존 불량 레코드 공수 로스 일괄 재계산 (manual_ct_sec 기준)"""
+    items = {i.part_no: i for i in db.query(Item).all()}
+    rows = db.query(ProcessOutgoingDefect).all()
+    updated = 0
+    for r in rows:
+        item = items.get(r.part_no)
+        ct_sec = float(item.manual_ct_sec or 0) if item else 0
+        new_val = round(r.defect_qty * ct_sec / 60, 1)
+        if new_val != (r.labor_loss_min or 0):
+            r.labor_loss_min = new_val
+            updated += 1
+    db.commit()
+    return {"updated": updated, "total": len(rows)}
+
+
 # ── VDA 6.3 분석 엔드포인트 ────────────────────────────────────────
 
 @router.get("/vda-analysis")

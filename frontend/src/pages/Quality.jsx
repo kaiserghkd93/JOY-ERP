@@ -899,14 +899,16 @@ function QualityReportPanel() {
     try { await downloadQualityReport(vda, iatfData, `${y}년 ${m}월`) } finally { setDownloading(false) }
   }
 
-  useEffect(() => {
+  const loadVda = () => {
     setLoading(true)
     Promise.all([
       api.get(`/quality/vda-analysis?year=${y}&month=${m}`).then(r => setVda(r.data)).catch(() => setVda(null)),
       api.get(`/quality-adv/iatf-summary?year=${y}&month=${m}`).then(r => setIatfData(r.data)).catch(() => setIatfData(null)),
       api.get(`/improvement?year=${y}&month=${m}&source_module=quality`).then(r => setImprovements(r.data)).catch(() => setImprovements([])),
     ]).finally(() => setLoading(false))
-  }, [ym])
+  }
+
+  useEffect(() => { loadVda() }, [ym])
 
   const handleSaveTask = async () => {
     if (!taskForm.title.trim()) return
@@ -948,6 +950,17 @@ function QualityReportPanel() {
         <span style={{ fontWeight: 700, fontSize: 15 }}>공정·공급망 품질 보고서</span>
         <input type="month" value={ym} onChange={e => setYm(e.target.value)}
           style={{ border: '1px solid var(--border)', borderRadius: 4, padding: '4px 8px', fontSize: 13 }} />
+        <button onClick={async () => {
+            if (!window.confirm('품목 마스터 C/T 기준으로 기존 불량 레코드 공수 로스를 일괄 재계산합니다.\n계속할까요?')) return
+            try {
+              const r = await api.post('/quality/defect-reg/recalc-labor-loss')
+              alert(`재계산 완료: ${r.data.updated}건 업데이트 (전체 ${r.data.total}건)`)
+              loadVda()
+            } catch { alert('재계산 실패') }
+          }}
+          style={{ padding: '5px 12px', fontSize: 12, background: '#f59e0b', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer' }}>
+          ⟳ 공수 로스 재계산
+        </button>
         <button onClick={handlePptDownload} disabled={downloading || loading || !vda}
           style={{ marginLeft: 'auto', padding: '5px 14px', fontSize: 12, fontWeight: 700,
             background: downloading ? '#94a3b8' : '#1e3a5f', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer' }}>
