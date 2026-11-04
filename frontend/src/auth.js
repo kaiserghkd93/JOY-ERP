@@ -4,9 +4,9 @@ const API = import.meta.env.VITE_API_URL || ''
 // null = 전체 접근 (admin)
 const ROLE_PERMISSIONS = {
   admin:      null,  // 나만 (외주구매·계정관리 포함 전체)
-  executive:  ['/', '/report', '/dashboard', '/monthly-sales', '/monthly-purchase', '/sales-target', '/inventory', '/cost', '/cost-actual', '/mrp', '/management', '/exceptions'],
+  executive:  ['/', '/dashboard', '/monthly-sales', '/monthly-purchase', '/sales-target', '/inventory', '/cost', '/cost-actual', '/mrp', '/management', '/exceptions'],
   manager:    ['/', '/sales-target', '/cost-actual', '/exceptions'],
-  accounting: ['/', '/invoice', '/monthly-sales', '/monthly-purchase', '/sales-target', '/report', '/inventory', '/cost-actual'],
+  accounting: ['/', '/invoice', '/monthly-sales', '/monthly-purchase', '/sales-target', '/inventory', '/cost-actual'],
   sales:      ['/', '/sales', '/invoice', '/monthly-sales', '/sales-target', '/inventory'],
   purchase:   ['/', '/purchase', '/receipt', '/mrp', '/monthly-purchase',
                '/inventory', '/master', '/bom',

@@ -720,6 +720,7 @@ function MaterialPurchase() {
     ['orders',  '자재 발주 목록'],
     ['receipt', '자재 입고 현황'],
     ['closing', '자재 매입 집계'],
+    ['report',  '보고서'],
   ]
 
   const fmt = n => Number(n||0).toLocaleString()
@@ -931,6 +932,152 @@ function MaterialPurchase() {
           )}
         </>
       )}
+
+      {matTab === 'report' && <MatReportPanel month={matMonth} />}
+    </div>
+  )
+}
+
+function MatReportPanel({ month }) {
+  const now = new Date()
+  const defaultYm = month || `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`
+  const [ym, setYm] = useState(defaultYm)
+  const [data, setData] = useState(null)
+  const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    if (month) setYm(month)
+  }, [month])
+
+  useEffect(() => {
+    const [y, m] = ym.split('-')
+    setLoading(true)
+    api.get(`/material/summary?year=${y}&month=${m}`)
+      .then(r => setData(r.data))
+      .catch(() => setData(null))
+      .finally(() => setLoading(false))
+  }, [ym])
+
+  const fmt = (v) => v != null ? Math.round(v / 10000).toLocaleString() + '만원' : '-'
+
+  const KPI = ({ label, value, color, sub, target, actual }) => {
+    const rate = target > 0 && actual != null ? Math.round(actual / target * 100) : null
+    return (
+      <div style={{ background: '#f8fafc', border: '1px solid var(--border)', borderRadius: 10, padding: '14px 20px', minWidth: 150, flex: 1 }}>
+        <div style={{ fontSize: 11, color: '#64748b', marginBottom: 6, fontWeight: 600 }}>{label}</div>
+        <div style={{ fontSize: 24, fontWeight: 800, color: color || '#1e3a5f' }}>{value}</div>
+        {rate != null && (
+          <div style={{ marginTop: 6, background: '#e2e8f0', borderRadius: 3, height: 5, overflow: 'hidden' }}>
+            <div style={{ width: `${Math.min(rate, 100)}%`, height: '100%',
+              background: rate <= 90 ? '#059669' : rate <= 100 ? '#d97706' : '#dc2626' }} />
+          </div>
+        )}
+        {sub && <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>{sub}</div>}
+      </div>
+    )
+  }
+
+  return (
+    <div style={{ padding: '0 0 32px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
+        <span style={{ fontWeight: 700, fontSize: 15 }}>자재구매 KPI 보고서</span>
+        <input type="month" value={ym} onChange={e => setYm(e.target.value)}
+          style={{ border: '1px solid var(--border)', borderRadius: 4, padding: '4px 8px', fontSize: 13 }} />
+      </div>
+      {loading ? <div style={{ textAlign: 'center', padding: 40, color: '#94a3b8' }}>로딩 중...</div> : !data ? (
+        <div style={{ textAlign: 'center', color: '#94a3b8', padding: 40 }}>데이터 없음</div>
+      ) : (<>
+      {/* KPI 카드 */}
+      <div style={{ display: 'flex', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
+        <KPI label="월 구매 목표" value={fmt(data.target_amount)} sub={ym} />
+        <KPI label="현재 구매액" value={fmt(data.current_amount)} color="#059669"
+          target={data.target_amount} actual={data.current_amount}
+          sub={data.target_amount > 0 ? `목표 대비 ${Math.round((data.current_amount||0)/data.target_amount*100)}%` : ''} />
+        <KPI label="월 최종 예상" value={fmt(data.final_amount ?? data.current_amount)}
+          color={(data.final_amount || data.current_amount || 0) > (data.target_amount || 0) ? '#dc2626' : '#1e3a5f'}
+          sub="예상 월말 금액" />
+        {data.order_count != null && <KPI label="발주 건수" value={`${data.order_count}건`} />}
+        {data.supplier_count != null && <KPI label="거래 협력사" value={`${data.supplier_count}사`} />}
+      </div>
+
+      {/* 목표 대비 바 */}
+      {data.target_amount > 0 && (
+        <div style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: 10, padding: 16, marginBottom: 20 }}>
+          <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 12 }}>월 구매 목표 달성 현황</div>
+          {[
+            { label: '현재 집행률', val: Math.round((data.current_amount||0)/data.target_amount*100) },
+            data.final_amount != null && { label: '월말 예상률', val: Math.round((data.final_amount)/data.target_amount*100) },
+          ].filter(Boolean).map(({ label, val }) => (
+            <div key={label} style={{ marginBottom: 12 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 4 }}>
+                <span style={{ color: '#374151' }}>{label}</span>
+                <span style={{ fontWeight: 700, color: val <= 90 ? '#059669' : val <= 100 ? '#d97706' : '#dc2626' }}>{val}%</span>
+              </div>
+              <div style={{ background: '#e2e8f0', borderRadius: 4, height: 8, overflow: 'hidden' }}>
+                <div style={{ width: `${Math.min(val, 100)}%`, height: '100%',
+                  background: val <= 90 ? '#16a34a' : val <= 100 ? '#d97706' : '#dc2626', transition: 'width .4s' }} />
+              </div>
+            </div>
+          ))}
+          <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>
+            목표: {fmt(data.target_amount)} / 현재: {fmt(data.current_amount)}
+            {data.final_amount != null && ` / 예상: ${fmt(data.final_amount)}`}
+          </div>
+        </div>
+      )}
+
+      {/* 품목군별 구매 현황 */}
+      {data.by_category && data.by_category.length > 0 && (
+        <div style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: 10, padding: 16, marginBottom: 20 }}>
+          <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 12 }}>품목군별 구매 현황</div>
+          <div className="table-wrap">
+            <table>
+              <thead><tr>
+                <th>품목군</th>
+                <th style={{ textAlign: 'right' }}>구매액</th>
+                <th style={{ textAlign: 'right' }}>비중</th>
+              </tr></thead>
+              <tbody>
+                {data.by_category.map((c, i) => (
+                  <tr key={i}>
+                    <td>{c.category || '기타'}</td>
+                    <td style={{ textAlign: 'right', fontFamily: 'monospace' }}>{fmt(c.amount)}</td>
+                    <td style={{ textAlign: 'right' }}>{c.ratio != null ? `${c.ratio}%` : '-'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* 협력사별 구매 현황 */}
+      {data.by_supplier && data.by_supplier.length > 0 && (
+        <div style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: 10, padding: 16 }}>
+          <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 12 }}>협력사별 구매 TOP 10</div>
+          <div className="table-wrap">
+            <table>
+              <thead><tr>
+                <th>협력사</th>
+                <th style={{ textAlign: 'right' }}>구매액</th>
+                <th style={{ textAlign: 'right' }}>비중</th>
+                <th style={{ textAlign: 'right' }}>발주건</th>
+              </tr></thead>
+              <tbody>
+                {data.by_supplier.slice(0, 10).map((s, i) => (
+                  <tr key={i}>
+                    <td>{s.name || s.partner_id}</td>
+                    <td style={{ textAlign: 'right', fontFamily: 'monospace' }}>{fmt(s.amount)}</td>
+                    <td style={{ textAlign: 'right' }}>{s.ratio != null ? `${s.ratio}%` : '-'}</td>
+                    <td style={{ textAlign: 'right' }}>{s.order_count ?? '-'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+      </>)}
     </div>
   )
 }

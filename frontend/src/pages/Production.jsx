@@ -642,6 +642,153 @@ function FeasibilityPanel() {
   )
 }
 
+function ProductionReportPanel() {
+  const now = new Date()
+  const [ym, setYm] = useState(`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`)
+  const [plans, setPlans] = useState([])
+  const [oee, setOee] = useState(null)
+  const [kaizen, setKaizen] = useState(null)
+  const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    const [y, m] = ym.split('-')
+    setLoading(true)
+    Promise.all([
+      api.get(`/production/monthly-plans?year=${y}&month=${m}`).then(r => setPlans(r.data)).catch(() => setPlans([])),
+      api.get(`/tps/oee/summary?year=${y}&month=${m}`).then(r => setOee(r.data)).catch(() => setOee([])),
+      api.get('/kaizen/summary').then(r => setKaizen(r.data)).catch(() => setKaizen(null)),
+    ]).finally(() => setLoading(false))
+  }, [ym])
+
+  const totalPlan = plans.reduce((s, p) => s + (p.planned_qty || 0), 0)
+  const totalActual = plans.reduce((s, p) => s + (p.total_actual || p.actuals?.reduce((a, d) => a + d.actual_qty, 0) || 0), 0)
+  const achieveRate = totalPlan > 0 ? Math.round(totalActual / totalPlan * 100) : 0
+
+  const KPI = ({ label, value, color, sub }) => (
+    <div style={{ background: '#f8fafc', border: '1px solid var(--border)', borderRadius: 10, padding: '14px 20px', minWidth: 150, flex: 1 }}>
+      <div style={{ fontSize: 11, color: '#64748b', marginBottom: 6, fontWeight: 600 }}>{label}</div>
+      <div style={{ fontSize: 24, fontWeight: 800, color: color || '#1e3a5f' }}>{value}</div>
+      {sub && <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>{sub}</div>}
+    </div>
+  )
+  const BarKPI = ({ label, value, max=100, color='#1d4ed8' }) => (
+    <div style={{ marginBottom: 12 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 4 }}>
+        <span style={{ color: '#374151' }}>{label}</span>
+        <span style={{ fontWeight: 700, color }}>{value}%</span>
+      </div>
+      <div style={{ background: '#e2e8f0', borderRadius: 4, height: 8, overflow: 'hidden' }}>
+        <div style={{ width: `${Math.min(value, 100)}%`, height: '100%', background: value >= 85 ? '#16a34a' : value >= 60 ? '#d97706' : '#dc2626', transition: 'width .4s' }} />
+      </div>
+    </div>
+  )
+
+  return (
+    <div style={{ padding: '0 0 32px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
+        <span style={{ fontWeight: 700, fontSize: 15 }}>생산 KPI 보고서</span>
+        <input type="month" value={ym} onChange={e => setYm(e.target.value)}
+          style={{ border: '1px solid var(--border)', borderRadius: 4, padding: '4px 8px', fontSize: 13 }} />
+      </div>
+      {loading ? <div style={{ textAlign: 'center', padding: 40, color: '#94a3b8' }}>로딩 중...</div> : (<>
+      {/* 생산 KPI */}
+      <div style={{ display: 'flex', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
+        <KPI label="월 계획수량" value={totalPlan.toLocaleString()} sub="EA" />
+        <KPI label="월 실적수량" value={totalActual.toLocaleString()} color="#059669" sub="EA" />
+        <KPI label="달성률" value={`${achieveRate}%`} color={achieveRate >= 90 ? '#059669' : achieveRate >= 70 ? '#d97706' : '#dc2626'} sub={achieveRate >= 90 ? '목표달성' : '미달'} />
+        {kaizen && <KPI label="카이젠 과제" value={`${kaizen.total}건`} sub={`완료 ${kaizen.by_status?.완료 || 0}건`} />}
+        {kaizen && kaizen.overdue > 0 && <KPI label="지연 과제" value={`${kaizen.overdue}건`} color="#dc2626" sub="기한초과" />}
+      </div>
+
+      {/* 품번별 계획 vs 실적 */}
+      <div style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: 10, padding: 16, marginBottom: 20 }}>
+        <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 12 }}>품번별 생산 실적 vs 계획</div>
+        {plans.length === 0 ? (
+          <div style={{ textAlign: 'center', color: '#94a3b8', padding: 24 }}>월간 계획 없음</div>
+        ) : (
+          <div style={{ display: 'grid', gap: 10 }}>
+            {plans.map(p => {
+              const actual = p.total_actual || 0
+              const rate = p.planned_qty > 0 ? Math.round(actual / p.planned_qty * 100) : 0
+              return (
+                <div key={p.id}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 3 }}>
+                    <span style={{ fontWeight: 600 }}>{p.part_no} <span style={{ color: '#94a3b8', fontWeight: 400 }}>{p.item?.name}</span></span>
+                    <span style={{ color: '#374151' }}>{actual.toLocaleString()} / {p.planned_qty.toLocaleString()} EA</span>
+                  </div>
+                  <BarKPI label="" value={rate} />
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* OEE 현황 */}
+      {oee && oee.length > 0 && (
+        <div style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: 10, padding: 16, marginBottom: 20 }}>
+          <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 12 }}>설비별 OEE 현황 ({ym})</div>
+          <div className="table-wrap">
+            <table>
+              <thead><tr>
+                <th>설비번호</th><th>가동일수</th>
+                <th style={{ textAlign: 'right' }}>가동률</th>
+                <th style={{ textAlign: 'right' }}>성능률</th>
+                <th style={{ textAlign: 'right' }}>양품률</th>
+                <th style={{ textAlign: 'right' }}>OEE</th>
+                <th>등급</th>
+              </tr></thead>
+              <tbody>
+                {oee.map(r => (
+                  <tr key={r.machine_no}>
+                    <td style={{ fontFamily: 'monospace' }}>{r.machine_no}</td>
+                    <td>{r.days_recorded}일</td>
+                    <td style={{ textAlign: 'right' }}>{r.avg_availability}%</td>
+                    <td style={{ textAlign: 'right' }}>{r.avg_performance}%</td>
+                    <td style={{ textAlign: 'right' }}>{r.avg_quality}%</td>
+                    <td style={{ textAlign: 'right', fontWeight: 700,
+                      color: r.avg_oee >= 85 ? '#059669' : r.avg_oee >= 60 ? '#d97706' : '#dc2626' }}>
+                      {r.avg_oee}%
+                    </td>
+                    <td><span className={`badge ${r.avg_oee >= 85 ? 'badge-green' : r.avg_oee >= 80 ? 'badge-blue' : r.avg_oee >= 60 ? 'badge-amber' : 'badge-red'}`}>
+                      {r.avg_oee >= 85 ? 'A' : r.avg_oee >= 80 ? 'B' : r.avg_oee >= 60 ? 'C' : 'D'}
+                    </span></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* 카이젠 과제 현황 */}
+      {kaizen && (
+        <div style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: 10, padding: 16 }}>
+          <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 12 }}>카이젠 과제 현황</div>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            {Object.entries(kaizen.by_status || {}).map(([status, cnt]) => (
+              <div key={status} style={{ background: '#f8fafc', border: '1px solid var(--border)', borderRadius: 8, padding: '10px 16px', textAlign: 'center' }}>
+                <div style={{ fontSize: 20, fontWeight: 800, color: status === '완료' ? '#059669' : status === '진행중' ? '#1d4ed8' : '#374151' }}>{cnt}</div>
+                <div style={{ fontSize: 11, color: '#64748b' }}>{status}</div>
+              </div>
+            ))}
+            {kaizen.overdue > 0 && (
+              <div style={{ background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: 8, padding: '10px 16px', textAlign: 'center' }}>
+                <div style={{ fontSize: 20, fontWeight: 800, color: '#dc2626' }}>{kaizen.overdue}</div>
+                <div style={{ fontSize: 11, color: '#dc2626' }}>기한초과</div>
+              </div>
+            )}
+          </div>
+          <div style={{ marginTop: 10, fontSize: 12, color: '#64748b' }}>
+            완료율: <strong style={{ color: '#059669' }}>{kaizen.completion_rate}%</strong>
+          </div>
+        </div>
+      )}
+      </>)}
+    </div>
+  )
+}
+
 export default function Production() {
   const [orders, setOrders] = useState([])
   const [molds, setMolds] = useState([])
@@ -663,7 +810,7 @@ export default function Production() {
       <div className="erp-panel" style={{marginBottom:8}}>
         <div className="erp-actions">
           <div className="qdate-bar">
-            {[['orders','생산오더'],['feasibility','가용성 검사'],['molds','금형 관리'],['upload','실적 업로드'],['cost','원가분석']].map(([v,l])=>(
+            {[['orders','생산오더'],['feasibility','가용성 검사'],['molds','금형 관리'],['upload','실적 업로드'],['cost','원가분석'],['report','보고서']].map(([v,l])=>(
               <button key={v} className={`qdate-btn${tab===v?' active':''}`} onClick={()=>setTab(v)}>{l}</button>
             ))}
           </div>
@@ -738,6 +885,7 @@ export default function Production() {
 
       {tab === 'upload' && <ExcelUpload onDone={load} />}
       {tab === 'cost' && <CostAnalysis />}
+      {tab === 'report' && <ProductionReportPanel />}
 
       {showPord && <PordModal onClose={() => setShowPord(false)} onSaved={() => { setShowPord(false); load() }} />}
       {showMold && <MoldModal onClose={() => setShowMold(false)} onSaved={() => { setShowMold(false); load() }} />}

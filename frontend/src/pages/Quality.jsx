@@ -867,6 +867,105 @@ const APPR_BADGE = {
   '반려': 'badge-red', '승인완료': 'badge-blue', '최종확정': 'badge-green',
 }
 
+function QualityReportPanel() {
+  const now = new Date()
+  const [ym, setYm] = useState(`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`)
+  const [summary, setSummary] = useState(null)
+  const [defectRate, setDefectRate] = useState([])
+  const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    const [y, m] = ym.split('-')
+    setLoading(true)
+    Promise.all([
+      api.get('/dashboard/quality-summary').then(r => setSummary(r.data)).catch(() => setSummary(null)),
+      api.get(`/quality/defect-rate?year=${y}&month=${m}`).then(r => setDefectRate(r.data)).catch(() => setDefectRate([])),
+    ]).finally(() => setLoading(false))
+  }, [ym])
+
+  const KPI = ({ label, value, color, sub }) => (
+    <div style={{ background: '#f8fafc', border: '1px solid var(--border)', borderRadius: 10, padding: '14px 20px', minWidth: 140, flex: 1 }}>
+      <div style={{ fontSize: 11, color: '#64748b', marginBottom: 6, fontWeight: 600 }}>{label}</div>
+      <div style={{ fontSize: 24, fontWeight: 800, color: color || '#1e3a5f' }}>{value}</div>
+      {sub && <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>{sub}</div>}
+    </div>
+  )
+
+  return (
+    <div style={{ padding: '0 0 32px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
+        <span style={{ fontWeight: 700, fontSize: 15 }}>품질 KPI 보고서</span>
+        <input type="month" value={ym} onChange={e => setYm(e.target.value)}
+          style={{ border: '1px solid var(--border)', borderRadius: 4, padding: '4px 8px', fontSize: 13 }} />
+      </div>
+      {loading ? <div style={{ textAlign: 'center', padding: 40, color: '#94a3b8' }}>로딩 중...</div> : (<>
+      {summary && (
+        <div style={{ display: 'flex', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
+          <KPI label="전체 클레임" value={`${summary.claims?.total ?? 0}건`} />
+          <KPI label="처리중" value={`${(summary.claims?.total ?? 0) - (summary.claims?.completed ?? 0)}건`} color="#d97706" />
+          <KPI label="완료" value={`${summary.claims?.completed ?? 0}건`} color="#059669" />
+          {summary.incoming && <KPI label="수입검사 합격률" value={`${summary.incoming.pass_rate ?? '-'}%`}
+            color={(summary.incoming.pass_rate ?? 0) >= 95 ? '#059669' : '#d97706'} sub={`${summary.incoming.total ?? 0}건 검사`} />}
+          {summary.defect && <KPI label="공정불량률" value={`${summary.defect.rate ?? '-'}%`}
+            color={(summary.defect.rate ?? 0) <= 1 ? '#059669' : (summary.defect.rate ?? 0) <= 3 ? '#d97706' : '#dc2626'}
+            sub="목표 ≤ 1.0%" />}
+        </div>
+      )}
+
+      {/* 협력사별 불량률 */}
+      {defectRate.length > 0 && (
+        <div style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: 10, padding: 16, marginBottom: 20 }}>
+          <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 12 }}>협력사별 불량률 현황</div>
+          <div className="table-wrap">
+            <table>
+              <thead><tr>
+                <th>협력사</th><th style={{ textAlign: 'right' }}>검사수량</th>
+                <th style={{ textAlign: 'right' }}>불량수량</th>
+                <th style={{ textAlign: 'right' }}>불량률</th><th>평가</th>
+              </tr></thead>
+              <tbody>
+                {defectRate.slice(0, 15).map((r, i) => (
+                  <tr key={i}>
+                    <td>{r.partner_name || r.partner_id}</td>
+                    <td style={{ textAlign: 'right' }}>{(r.total_qty || 0).toLocaleString()}</td>
+                    <td style={{ textAlign: 'right', color: '#dc2626' }}>{(r.defect_qty || 0).toLocaleString()}</td>
+                    <td style={{ textAlign: 'right', fontWeight: 700,
+                      color: (r.defect_rate || 0) <= 1 ? '#059669' : (r.defect_rate || 0) <= 3 ? '#d97706' : '#dc2626' }}>
+                      {(r.defect_rate || 0).toFixed(2)}%
+                    </td>
+                    <td><span className={`badge ${(r.defect_rate || 0) <= 1 ? 'badge-green' : (r.defect_rate || 0) <= 3 ? 'badge-amber' : 'badge-red'}`}>
+                      {(r.defect_rate || 0) <= 1 ? '우수' : (r.defect_rate || 0) <= 3 ? '보통' : '주의'}
+                    </span></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* 클레임 처리 현황 */}
+      {summary?.claims && (
+        <div style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: 10, padding: 16 }}>
+          <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 12 }}>클레임 처리 현황</div>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            {Object.entries(summary.claims.by_status || {}).map(([st, cnt]) => (
+              <div key={st} style={{ background: '#f8fafc', border: '1px solid var(--border)', borderRadius: 8, padding: '10px 20px', textAlign: 'center' }}>
+                <div style={{ fontSize: 22, fontWeight: 800 }}>{cnt}</div>
+                <div style={{ fontSize: 11, color: '#64748b' }}>{st}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      {(!summary && defectRate.length === 0) && (
+        <div style={{ textAlign: 'center', color: '#94a3b8', padding: 40 }}>데이터 없음</div>
+      )}
+      </>)}
+    </div>
+  )
+}
+
 export default function Quality() {
   const role = getRole()
   const isManager = role === 'admin' || role === 'quality_manager'
@@ -955,7 +1054,8 @@ export default function Quality() {
               ['inspections','입고검사'], ['standards','검사기준'], ['ncr','부적합관리'],
               ['claims','클레임 목록'], ['rates','외주처별 불량율'], ['loss','공정불량 로스'],
               ['spc','SPC 관리도'], ['cp','관리계획서'], ['pfmea','PFMEA'],
-              ['calib','교정관리'], ['audit','내부감사'], ['ppap','PPAP'], ['msa','MSA']
+              ['calib','교정관리'], ['audit','내부감사'], ['ppap','PPAP'], ['msa','MSA'],
+              ['report','보고서']
             ].map(([v,l])=>(
               <button key={v} className={`qdate-btn${tab===v?' active':''}`} onClick={()=>setTab(v)}>{l}</button>
             ))}
@@ -1733,6 +1833,8 @@ export default function Quality() {
           </div>
         </div>
       )}
+
+      {tab === 'report' && <QualityReportPanel />}
 
       {showNcrModal && (
         <NcrCreateModal onClose={()=>setShowNcrModal(false)} onSaved={()=>{setShowNcrModal(false);load()}} />

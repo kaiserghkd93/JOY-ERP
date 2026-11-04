@@ -761,6 +761,110 @@ function HyundaiImportModal({ onClose, onDone }) {
   )
 }
 
+function SalesReportPanel() {
+  const now = new Date()
+  const [year, setYear] = useState(now.getFullYear())
+  const [month, setMonth] = useState(now.getMonth() + 1)
+  const [data, setData] = useState(null)
+  const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    setLoading(true)
+    api.get(`/dashboard/sales-vs-target?year=${year}&month=${month}`)
+      .then(r => setData(r.data))
+      .catch(() => setData(null))
+      .finally(() => setLoading(false))
+  }, [year, month])
+
+  const KPI = ({ label, value, color, sub }) => (
+    <div style={{ background: '#f8fafc', border: '1px solid var(--border)', borderRadius: 10, padding: '14px 20px', minWidth: 150, flex: 1 }}>
+      <div style={{ fontSize: 11, color: '#64748b', marginBottom: 6, fontWeight: 600 }}>{label}</div>
+      <div style={{ fontSize: 24, fontWeight: 800, color: color || '#1e3a5f' }}>{value}</div>
+      {sub && <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>{sub}</div>}
+    </div>
+  )
+
+  const fmt = (v) => v != null ? Math.round(v / 10000).toLocaleString() + '만원' : '-'
+
+  return (
+    <div style={{ padding: '0 0 32px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
+        <span style={{ fontWeight: 700, fontSize: 15 }}>영업 KPI 보고서</span>
+        <select value={year} onChange={e => setYear(Number(e.target.value))}
+          style={{ border: '1px solid var(--border)', borderRadius: 4, padding: '4px 8px', fontSize: 13 }}>
+          {[now.getFullYear()-1, now.getFullYear(), now.getFullYear()+1].map(y => <option key={y}>{y}</option>)}
+        </select>
+        <select value={month} onChange={e => setMonth(Number(e.target.value))}
+          style={{ border: '1px solid var(--border)', borderRadius: 4, padding: '4px 8px', fontSize: 13 }}>
+          {Array.from({length:12},(_,i)=>i+1).map(m => <option key={m} value={m}>{m}월</option>)}
+        </select>
+      </div>
+      {loading ? <div style={{ textAlign: 'center', padding: 40, color: '#94a3b8' }}>로딩 중...</div> : !data ? (
+        <div style={{ textAlign: 'center', color: '#94a3b8', padding: 40 }}>데이터 없음</div>
+      ) : (<>
+      {/* 달성률 KPI */}
+      <div style={{ display: 'flex', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
+        <KPI label="매출 목표" value={fmt(data.target)} sub={`${year}년 ${month}월`} />
+        <KPI label="현재 매출" value={fmt(data.actual)} color="#059669" />
+        <KPI label="달성률" value={`${data.achieve_rate ?? 0}%`}
+          color={(data.achieve_rate ?? 0) >= 90 ? '#059669' : (data.achieve_rate ?? 0) >= 70 ? '#d97706' : '#dc2626'}
+          sub={(data.achieve_rate ?? 0) >= 100 ? '목표초과' : '진행중'} />
+        {data.inhouse_amount != null && <KPI label="자체생산 매출" value={fmt(data.inhouse_amount)} sub="사출 직접 출하" />}
+        {data.outsource_amount != null && <KPI label="외주 매출" value={fmt(data.outsource_amount)} sub="외주 출하" />}
+      </div>
+
+      {/* 달성률 바 */}
+      <div style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: 10, padding: 16, marginBottom: 20 }}>
+        <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 12 }}>월 매출 목표 달성 현황</div>
+        <div style={{ marginBottom: 8, fontSize: 12, color: '#374151', display: 'flex', justifyContent: 'space-between' }}>
+          <span>달성률</span><span style={{ fontWeight: 700 }}>{data.achieve_rate ?? 0}%</span>
+        </div>
+        <div style={{ background: '#e2e8f0', borderRadius: 6, height: 20, overflow: 'hidden' }}>
+          <div style={{
+            width: `${Math.min(data.achieve_rate ?? 0, 100)}%`, height: '100%',
+            background: (data.achieve_rate ?? 0) >= 90 ? '#16a34a' : (data.achieve_rate ?? 0) >= 70 ? '#d97706' : '#dc2626',
+            transition: 'width .4s', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', paddingRight: 8,
+          }}>
+            {(data.achieve_rate ?? 0) >= 20 && <span style={{ color: '#fff', fontSize: 11, fontWeight: 700 }}>{data.achieve_rate}%</span>}
+          </div>
+        </div>
+        <div style={{ marginTop: 8, fontSize: 11, color: '#94a3b8' }}>
+          목표: {fmt(data.target)} / 현재: {fmt(data.actual)}
+          {data.remain != null && ` / 잔여: ${fmt(data.remain)}`}
+        </div>
+      </div>
+
+      {/* 고객사별 현황 */}
+      {data.by_customer && data.by_customer.length > 0 && (
+        <div style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: 10, padding: 16 }}>
+          <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 12 }}>고객사별 매출 현황</div>
+          <div className="table-wrap">
+            <table>
+              <thead><tr>
+                <th>고객사</th>
+                <th style={{ textAlign: 'right' }}>매출액</th>
+                <th style={{ textAlign: 'right' }}>비중</th>
+                <th>구분</th>
+              </tr></thead>
+              <tbody>
+                {data.by_customer.map((c, i) => (
+                  <tr key={i}>
+                    <td>{c.name || c.partner_id}</td>
+                    <td style={{ textAlign: 'right', fontFamily: 'monospace' }}>{fmt(c.amount)}</td>
+                    <td style={{ textAlign: 'right' }}>{c.ratio != null ? `${c.ratio}%` : '-'}</td>
+                    <td><span className={`badge ${c.type === '자체' ? 'badge-blue' : 'badge-green'}`}>{c.type || '-'}</span></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+      </>)}
+    </div>
+  )
+}
+
 export default function Sales() {
   const [orders, setOrders] = useState([])
   const [remaining, setRemaining] = useState([])
@@ -878,7 +982,7 @@ export default function Sales() {
         </div>
         <div className="erp-actions">
           <div className="qdate-bar">
-            {[['orders','수주 목록'],['remaining','미납 잔량'],['ship','출하 내역']].map(([v,l])=>(
+            {[['orders','수주 목록'],['remaining','미납 잔량'],['ship','출하 내역'],['report','보고서']].map(([v,l])=>(
               <button key={v} className={`qdate-btn${tab===v?' active':''}`} onClick={()=>setTab(v)}>{l}</button>
             ))}
           </div>
@@ -1151,6 +1255,8 @@ export default function Sales() {
           </>
         )
       })()}
+
+      {tab === 'report' && <SalesReportPanel />}
 
       {showSO && <SalesOrderModal onClose={() => setShowSO(false)} onSaved={() => { setShowSO(false); load() }} />}
       {shipSO && <ShipModal so={shipSO} onClose={() => setShipSO(null)} onSaved={() => { setShipSO(null); load() }} />}
