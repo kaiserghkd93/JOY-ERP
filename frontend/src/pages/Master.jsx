@@ -9,7 +9,7 @@ function ItemModal({ item, onClose, onSaved }) {
   const editing = !!item
   const [form, setForm] = useState(item || {
     part_no: '', name: '', spec: '', supplier: '', unit: 'EA', item_type: 'outsourced',
-    std_buy_price: '', std_sell_price: '', safety_stock: '', moq: '', location: '',
+    std_buy_price: '', std_sell_price: '', safety_stock: '', moq: '', lead_time_days: '', location: '',
   })
   const [suppliers, setSuppliers] = useState([])
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
@@ -27,6 +27,7 @@ function ItemModal({ item, onClose, onSaved }) {
       std_sell_price: form.std_sell_price ? +form.std_sell_price : 0,
       safety_stock: form.safety_stock ? +form.safety_stock : 0,
       moq: form.moq ? +form.moq : 1,
+      lead_time_days: form.lead_time_days ? +form.lead_time_days : 7,
     }
     try {
       if (editing) await api.patch(`/master/items/${form.part_no}`, payload)
@@ -102,6 +103,7 @@ function ItemModal({ item, onClose, onSaved }) {
         <div className="grid-2">
           <div className="form-group"><label>안전재고</label><input type="number" value={form.safety_stock || ''} onChange={e => set('safety_stock', e.target.value)} placeholder="0" /></div>
           <div className="form-group"><label>MOQ (최소발주수량)</label><input type="number" value={form.moq || ''} onChange={e => set('moq', e.target.value)} placeholder="1" /></div>
+          <div className="form-group"><label>리드타임 (일)</label><input type="number" value={form.lead_time_days || ''} onChange={e => set('lead_time_days', e.target.value)} placeholder="7" /></div>
         </div>
         <div className="form-group">
           <label>보관 창고</label>

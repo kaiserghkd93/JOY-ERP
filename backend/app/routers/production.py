@@ -508,7 +508,7 @@ def gantt_data(year: int, month: int, db: Session = Depends(get_db)):
         ),
     ).order_by(ProductionOrder.mold_no, ProductionOrder.plan_date).all()
 
-    item_map = {i.part_no: i.name for i in db.query(Item).all()}
+    items = {i.part_no: i for i in db.query(Item).all()}
 
     return {
         "year": year,
@@ -517,13 +517,14 @@ def gantt_data(year: int, month: int, db: Session = Depends(get_db)):
         "orders": [{
             "pord_no": o.pord_no,
             "part_no": o.part_no,
-            "part_name": item_map.get(o.part_no, o.part_no),
+            "part_name": items[o.part_no].name if o.part_no in items else o.part_no,
             "mold_no": o.mold_no or "미지정",
             "plan_date": o.plan_date.isoformat() if o.plan_date else None,
             "complete_date": o.complete_date.isoformat() if o.complete_date else None,
             "planned_qty": o.planned_qty,
             "actual_qty": o.actual_qty,
             "status": o.status.value if o.status else None,
-            "progress": round(o.actual_qty / o.planned_qty * 100, 1) if o.planned_qty > 0 else 0,
+            "progress": round(o.actual_qty / o.planned_qty * 100, 1) if o.planned_qty and o.planned_qty > 0 else 0,
+            "lead_days": int(items[o.part_no].lead_time_days) if o.part_no in items and items[o.part_no].lead_time_days else 7,
         } for o in orders],
     }

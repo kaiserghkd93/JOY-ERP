@@ -36,12 +36,13 @@ export default function ProductionGantt() {
     else setMonth(m => m + 1)
   }
 
-  // 호기별 그룹화
+  // 품번별 그룹화
   const rows = {}
   if (data?.orders) {
     for (const o of data.orders) {
-      if (!rows[o.mold_no]) rows[o.mold_no] = []
-      rows[o.mold_no].push(o)
+      const key = o.part_no || '미지정'
+      if (!rows[key]) rows[key] = { label: o.part_name || o.part_no || '미지정', orders: [] }
+      rows[key].orders.push(o)
     }
   }
   const molds = Object.keys(rows).sort()
@@ -61,8 +62,8 @@ export default function ProductionGantt() {
     const start = dayOffset(order.plan_date)
     const end = order.complete_date
       ? Math.min(days, dayOffset(order.complete_date) + 1)
-      : Math.min(days, start + 1)
-    return Math.max(1, end - start)
+      : Math.min(days, start + (order.lead_days || 7))  // 완료일 없으면 7일 기본폭
+    return Math.max(2, end - start)
   }
 
   const todayDay = (new Date().getFullYear() === year && new Date().getMonth() + 1 === month)
@@ -105,7 +106,7 @@ export default function ProductionGantt() {
             {/* 날짜 헤더 */}
             <div style={{ display: 'flex', borderBottom: '1px solid var(--border)' }}>
               <div style={{ width: 160, flexShrink: 0, fontSize: 12, color: 'var(--text-secondary)', padding: '4px 8px' }}>
-                호기 / 금형
+                품번 / 품명
               </div>
               <div style={{ display: 'flex', position: 'relative' }}>
                 {Array.from({ length: days }, (_, i) => {
@@ -130,7 +131,7 @@ export default function ProductionGantt() {
               </div>
             </div>
 
-            {/* 호기별 행 */}
+            {/* 품번별 행 */}
             {molds.length === 0 ? (
               <div style={{ padding: 48, textAlign: 'center', color: 'var(--text-secondary)' }}>
                 해당 월 작업지시 없음
@@ -146,14 +147,14 @@ export default function ProductionGantt() {
                   width: 160,
                   flexShrink: 0,
                   padding: '4px 8px',
-                  fontSize: 13,
-                  fontWeight: 500,
                   borderRight: '1px solid var(--border)',
-                  color: 'var(--text-primary)',
                 }}>
-                  {mold}
+                  <div style={{ fontSize: 11, fontFamily: 'monospace', color: 'var(--text-secondary)' }}>{mold}</div>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)', marginTop: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {rows[mold].label}
+                  </div>
                 </div>
-                <div style={{ position: 'relative', height: 36, flex: 1 }}>
+                <div style={{ position: 'relative', height: Math.max(36, rows[mold].orders.length * 34 + 4), flex: 1 }}>
                   {/* 오늘 선 */}
                   {todayDay >= 0 && (
                     <div style={{
@@ -186,7 +187,7 @@ export default function ProductionGantt() {
                     return null
                   })}
                   {/* 작업지시 바 */}
-                  {rows[mold].map((order, idx) => {
+                  {rows[mold].orders.map((order, idx) => {
                     const left = dayOffset(order.plan_date) * DAY_W
                     const w = barWidth(order) * DAY_W
                     const c = STATUS_COLOR[order.status] || STATUS_COLOR['계획']
