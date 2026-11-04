@@ -241,20 +241,21 @@ export function downloadProductionReport(plans, oee, kaizen, machineData, lossDa
     s3.addTable(rows, { x: 0.3, y: 1.05, w: 9.4, colW: [1.9, 1.3, 1.4, 1.4, 1.4, 1.2, 0.8] })
   }
 
-  // ── Slide 4: 호기별 C/T 분석 — 금액환산 요약 ─────────────────────
+  // ── Slide 4+: 호기별 C/T 분석 — 금액환산 (10호기씩 분할) ──────────
   const machines = machineData?.machines || []
   if (machines.length > 0) {
     const totals = machineData.totals || {}
-    const s4 = addContentSlide(pres, '호기별 생산실적 C/T 분석 — 금액환산', monthLabel)
+    const CT_PAGE = 10
 
-    addKpiCard(s4, 0.2,  1.0, 3.0, 1.0, '총 실적금액', fmtKRW(totals.actual_revenue), NAVY)
-    addKpiCard(s4, 3.45, 1.0, 3.0, 1.0, '이론최대금액', fmtKRW(totals.ideal_revenue), BLUE, '표준 C/T 100% 달성 시')
-    addKpiCard(s4, 6.7,  1.0, 3.0, 1.0, '기회손실금액', fmtKRW(totals.opportunity_loss), totals.opportunity_loss > 0 ? RED : GREEN, 'C/T 로스로 인한 미실현 매출')
+    // 첫 슬라이드만 KPI 카드 표시
+    const s4first = addContentSlide(pres, '호기별 C/T 분석 / 기회손실금액 (1)', monthLabel)
+    addKpiCard(s4first, 0.2,  1.0, 3.0, 1.0, '총 실적금액', fmtKRW(totals.actual_revenue), NAVY)
+    addKpiCard(s4first, 3.45, 1.0, 3.0, 1.0, '이론최대금액', fmtKRW(totals.ideal_revenue), BLUE, '표준 C/T 100% 달성 시')
+    addKpiCard(s4first, 6.7,  1.0, 3.0, 1.0, '기회손실금액', fmtKRW(totals.opportunity_loss), totals.opportunity_loss > 0 ? RED : GREEN, 'C/T 로스로 인한 미실현 매출')
 
-    s4.addText('호기별 요약 (실적 상위)', { x: 0.2, y: 2.2, w: 9.5, h: 0.28, fontSize: 11, bold: true, color: NAVY, fontFace: 'Arial', isTextBox: true })
-    const rows4 = [
+    const makeCtRows = (chunk) => [
       [hdr('호기'), hdr('품번', 'left'), hdr('실적수량'), hdr('이론최대'), hdr('표준C/T'), hdr('실제C/T'), hdr('C/T효율'), hdr('실적금액'), hdr('기회손실')],
-      ...machines.slice(0, 10).map((m, i) => {
+      ...chunk.map((m, i) => {
         const ctColor = (m.ct_efficiency_pct != null && m.ct_efficiency_pct < 85) ? RED : G900
         const f = altFill(i)
         return [
@@ -270,18 +271,34 @@ export function downloadProductionReport(plans, oee, kaizen, machineData, lossDa
         ]
       }),
     ]
-    s4.addTable(rows4, { x: 0.2, y: 2.55, w: 9.6, colW: [0.95, 1.0, 1.0, 1.0, 0.85, 0.85, 0.85, 1.6, 1.5] })
-    s4.addText('이론최대수량 = 순가동시간(분) × 60 ÷ 표준C/T(초)  |  C/T효율 = 표준C/T ÷ 실제C/T × 100', {
+
+    // 첫 번째 슬라이드 테이블 (1~10호기)
+    s4first.addTable(makeCtRows(machines.slice(0, CT_PAGE)), { x: 0.2, y: 2.55, w: 9.6, colW: [0.95, 1.0, 1.0, 1.0, 0.85, 0.85, 0.85, 1.6, 1.5] })
+    s4first.addText('이론최대수량 = 순가동시간(분) × 60 ÷ 표준C/T(초)  |  C/T효율 = 표준C/T ÷ 실제C/T × 100', {
       x: 0.2, y: 5.2, w: 9.6, h: 0.22, fontSize: 7.5, color: G400, fontFace: 'Arial', isTextBox: true,
     })
+
+    // 11~20호기 — 추가 슬라이드
+    for (let pg = 1; pg * CT_PAGE < machines.length; pg++) {
+      const chunk = machines.slice(pg * CT_PAGE, (pg + 1) * CT_PAGE)
+      const sN = addContentSlide(pres, `호기별 C/T 분석 / 기회손실금액 (${pg + 1})`, monthLabel)
+      sN.addText(`${pg * CT_PAGE + 1}~${pg * CT_PAGE + chunk.length}호기`, {
+        x: 0.2, y: 1.0, w: 9.5, h: 0.3, fontSize: 11, bold: true, color: NAVY, fontFace: 'Arial', isTextBox: true,
+      })
+      sN.addTable(makeCtRows(chunk), { x: 0.2, y: 1.35, w: 9.6, colW: [0.95, 1.0, 1.0, 1.0, 0.85, 0.85, 0.85, 1.6, 1.5] })
+      sN.addText('이론최대수량 = 순가동시간(분) × 60 ÷ 표준C/T(초)  |  C/T효율 = 표준C/T ÷ 실제C/T × 100', {
+        x: 0.2, y: 5.2, w: 9.6, h: 0.22, fontSize: 7.5, color: G400, fontFace: 'Arial', isTextBox: true,
+      })
+    }
   }
 
-  // ── Slide 5: 호기별 OEE + 달성률 상세 ───────────────────────────
+  // ── Slide 5+: 호기별 OEE + 달성률 상세 (10호기씩 분할) ──────────
   if (machines.length > 0) {
-    const s5 = addContentSlide(pres, '호기별 생산달성률 및 OEE 상세', monthLabel)
-    const rows5 = [
+    const OEE_PAGE = 10
+
+    const makeOeeRows = (chunk) => [
       [hdr('호기'), hdr('품번', 'left'), hdr('품명', 'left'), hdr('계획수량'), hdr('실적수량'), hdr('달성률'), hdr('불량수량'), hdr('가동률'), hdr('OEE')],
-      ...machines.slice(0, 14).map((m, i) => {
+      ...chunk.map((m, i) => {
         const achieveRate = m.achieve_rate_pct != null ? Math.round(m.achieve_rate_pct) : null
         const achColor = achieveRate == null ? G400 : achieveRate >= 90 ? GREEN : achieveRate >= 70 ? AMBER : RED
         const oeeVal = m.avg_oee_pct != null ? Math.round(m.avg_oee_pct) : null
@@ -300,7 +317,18 @@ export function downloadProductionReport(plans, oee, kaizen, machineData, lossDa
         ]
       }),
     ]
-    s5.addTable(rows5, { x: 0.2, y: 1.05, w: 9.6, colW: [0.95, 0.9, 1.5, 1.0, 1.0, 0.85, 0.9, 0.85, 0.85] })
+
+    for (let pg = 0; pg * OEE_PAGE < machines.length; pg++) {
+      const chunk = machines.slice(pg * OEE_PAGE, (pg + 1) * OEE_PAGE)
+      const pageLabel = machines.length > OEE_PAGE ? ` (${pg + 1})` : ''
+      const sOee = addContentSlide(pres, `호기별 생산달성률 및 OEE 상세${pageLabel}`, monthLabel)
+      if (pg > 0) {
+        sOee.addText(`${pg * OEE_PAGE + 1}~${pg * OEE_PAGE + chunk.length}호기`, {
+          x: 0.2, y: 0.9, w: 9.5, h: 0.22, fontSize: 10, color: NAVY, fontFace: 'Arial', isTextBox: true,
+        })
+      }
+      sOee.addTable(makeOeeRows(chunk), { x: 0.2, y: pg > 0 ? 1.15 : 1.05, w: 9.6, colW: [0.95, 0.9, 1.5, 1.0, 1.0, 0.85, 0.9, 0.85, 0.85] })
+    }
   }
 
   // ── Slide 6: 비가동 원인별 집계 ─────────────────────────────────
