@@ -16,6 +16,7 @@ from app.routers import lot
 from app.routers import supplier_score, audit as audit_router
 from app.routers import tps as tps_router, kaizen as kaizen_router
 from app.routers import improvement as improvement_router
+from app.routers import purchase_request as pr_router
 from app.models import improvement as _improvement_models  # noqa: ensure table
 from app.models import quality_advanced as _qa_models  # noqa: ensure tables
 from app.models import inventory_adj as _inv_adj_models  # noqa: ensure tables registered
@@ -110,6 +111,11 @@ with engine.connect() as _conn:
         "CREATE INDEX IF NOT EXISTS ix_shipment_date ON shipment(ship_date)",
         "CREATE INDEX IF NOT EXISTS ix_process_defect_date ON process_outgoing_defect(defect_date)",
         "CREATE INDEX IF NOT EXISTS ix_process_defect_status ON process_outgoing_defect(status)",
+        # MRP 개선 — 리드타임, 구매요청(PR)
+        "ALTER TABLE item ADD COLUMN IF NOT EXISTS lead_time_days INTEGER DEFAULT 7",
+        "CREATE INDEX IF NOT EXISTS ix_purchase_request_part_no ON purchase_request(part_no)",
+        "CREATE INDEX IF NOT EXISTS ix_purchase_request_status ON purchase_request(status)",
+        "CREATE INDEX IF NOT EXISTS ix_purchase_request_need_date ON purchase_request(need_date)",
     ]:
         try:
             _conn.execute(_text(_sql))
@@ -208,6 +214,7 @@ app.include_router(mes_sync.router)
 app.include_router(sales_target.router)
 app.include_router(material.router)
 app.include_router(mrp.router)
+app.include_router(pr_router.router)
 app.include_router(cost_actual.router)
 app.include_router(lot.router)
 app.include_router(supplier_score.router)

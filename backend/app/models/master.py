@@ -34,6 +34,7 @@ class Item(Base):
     std_sell_price: Mapped[float] = mapped_column(Numeric(15, 2), default=0)
     safety_stock: Mapped[int] = mapped_column(Integer, default=0)
     moq: Mapped[int] = mapped_column(Integer, default=1)
+    lead_time_days: Mapped[int] = mapped_column(Integer, default=7)
     location: Mapped[str | None] = mapped_column(String(20), default=None)
     weight_g: Mapped[float | None] = mapped_column(Float)          # 제품 중량 (g)
     raw_material: Mapped[str | None] = mapped_column(String(200))  # 사용 원재료명

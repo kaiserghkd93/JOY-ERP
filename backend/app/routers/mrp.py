@@ -10,7 +10,7 @@ from app.models.auth import User
 from app.models.sales import SalesOrder, Shipment
 from app.models.production import MonthlyPlan, DailyActual, ProductionOrder, POrdStatus
 from app.models.master import BomLine, Item, Partner
-from app.models.purchase import PurchaseOrder, Receipt
+from app.models.purchase import PurchaseOrder, Receipt, PurchaseRequest, PRStatus
 from app.routers.auth import get_current_user
 from app.services.ledger_service import get_stock_bulk
 from app.services.doc_no import next_doc_no
@@ -122,7 +122,9 @@ def _build_req_list(
     supply_map: dict,
     demand_source: dict,
     req_type: str,
+    need_date: date_type,
 ) -> list[dict]:
+    today = date_type.today()
     rows = []
     for part_no, gross_req in demand.items():
         item = all_item_map.get(part_no)
@@ -130,6 +132,7 @@ def _build_req_list(
         on_supply = supply_map.get(part_no, 0)
         safety = int(item.safety_stock) if item else 0
         moq = max(1, int(item.moq) if item else 1)
+        lead_time = int(item.lead_time_days) if item and item.lead_time_days else 7
         avg_cost = float(item.avg_cost or 0) if item else 0
         std_price = float(item.std_buy_price or 0) if item else 0
         use_price = avg_cost if avg_cost > 0 else std_price
@@ -140,6 +143,9 @@ def _build_req_list(
             order_qty = int(((net_with_safety + moq - 1) // moq) * moq)
         else:
             order_qty = 0
+
+        order_by_date = need_date - timedelta(days=lead_time)
+        days_to_order = (order_by_date - today).days
 
         rows.append({
             "part_no": part_no,
@@ -154,6 +160,12 @@ def _build_req_list(
             "net_requirement": round(max(0, net_req), 2),
             "order_qty": order_qty,
             "moq": moq,
+            "lead_time_days": lead_time,
+            "need_date": str(need_date),
+            "order_by_date": str(order_by_date),
+            "days_to_order": days_to_order,
+            "is_overdue": days_to_order < 0,
+            "is_urgent": 0 <= days_to_order <= 3,
             "std_price": std_price,
             "avg_cost": avg_cost,
             "estimated_amount": round(order_qty * use_price, 0),
@@ -161,7 +173,7 @@ def _build_req_list(
             "req_type": req_type,
             "sources": demand_source.get(part_no, []),
         })
-    rows.sort(key=lambda x: (-x["order_qty"], x["part_no"]))
+    rows.sort(key=lambda x: (x["days_to_order"], -x["order_qty"], x["part_no"]))
     return rows
 
 
@@ -277,10 +289,10 @@ def run_mrp(
 
         # 5. 순소요량 계산
         purchase_requirements = _build_req_list(
-            purchase_demand, all_item_map, stock_map, open_po_map, demand_source, "buy"
+            purchase_demand, all_item_map, stock_map, open_po_map, demand_source, "buy", month_end
         )
         production_requirements = _build_req_list(
-            prod_demand, all_item_map, stock_map, open_pord_map, demand_source, "make"
+            prod_demand, all_item_map, stock_map, open_pord_map, demand_source, "make", month_end
         )
 
         buy_amt = sum(r["estimated_amount"] for r in purchase_requirements if r["need_order"])
@@ -381,3 +393,159 @@ def generate_production_orders(
         created.append({"pord_no": pord_no, "part_no": part_no, "qty": qty})
     db.commit()
     return {"ok": True, "created": created, "count": len(created)}
+
+
+# ── MRP → 구매요청(PR) 생성 ───────────────────────────────────────
+class MRPPrReq(BaseModel):
+    year: int
+    month: int
+    lines: list[dict]
+
+
+@router.post("/generate-purchase-requests")
+def generate_purchase_requests(
+    body: MRPPrReq,
+    db: Session = Depends(get_db),
+    user: User = Depends(_require_mrp),
+):
+    from app.models.purchase import PurchaseRequest, PRStatus
+    import calendar as _cal
+    need_date = date_type(body.year, body.month,
+                          _cal.monthrange(body.year, body.month)[1])
+    source_ref = f"{body.year}-{body.month:02d}"
+    created = []
+    for line in body.lines:
+        part_no = line.get("part_no")
+        qty = int(line.get("qty", 0))
+        if not qty or not part_no:
+            continue
+        if not db.get(Item, part_no):
+            continue
+        item = db.get(Item, part_no)
+        lead_time = int(item.lead_time_days) if item and item.lead_time_days else 7
+        order_by = need_date - timedelta(days=lead_time)
+        pr_no = next_doc_no(db, "PR", "purchase_request", "pr_no")
+        pr = PurchaseRequest(
+            pr_no=pr_no,
+            part_no=part_no,
+            partner_id=line.get("partner_id") or None,
+            qty=qty,
+            unit_price=float(line.get("unit_price") or 0) or None,
+            need_date=need_date,
+            order_by_date=order_by,
+            status=PRStatus.pending,
+            source="MRP",
+            source_ref=source_ref,
+            note=f"MRP 자동생성 {source_ref}",
+            requested_by=user.name,
+        )
+        db.add(pr)
+        db.flush()
+        created.append({"pr_no": pr_no, "part_no": part_no, "qty": qty,
+                        "order_by_date": str(order_by)})
+    db.commit()
+    return {"ok": True, "created": created, "count": len(created)}
+
+
+# ── 예외사항 모니터링 ─────────────────────────────────────────────
+@router.get("/exceptions")
+def mrp_exceptions(db: Session = Depends(get_db), user: User = Depends(_require_mrp)):
+    today = date_type.today()
+
+    # 1. 납기 지연 PO (오픈 상태인데 due_date 경과)
+    late_pos = db.query(PurchaseOrder).filter(
+        PurchaseOrder.status.in_(["open", "partial"]),
+        PurchaseOrder.due_date < today,
+    ).order_by(PurchaseOrder.due_date.asc()).all()
+    late_po_list = []
+    for po in late_pos:
+        item = db.get(Item, po.part_no)
+        from app.models.master import Partner as _P
+        partner = db.get(_P, po.partner_id)
+        delay_days = (today - po.due_date).days
+        late_po_list.append({
+            "po_no": po.po_no,
+            "part_no": po.part_no,
+            "item_name": item.name if item else po.part_no,
+            "partner_name": partner.name if partner else po.partner_id,
+            "qty": po.qty,
+            "due_date": str(po.due_date),
+            "delay_days": delay_days,
+            "status": po.status.value if hasattr(po.status, 'value') else po.status,
+        })
+
+    # 2. 안전재고 미달 품목
+    from app.services.ledger_service import get_stock_bulk
+    all_items = db.query(Item).filter(Item.active == True, Item.safety_stock > 0).all()
+    part_nos = [i.part_no for i in all_items]
+    stock_map = get_stock_bulk(db, part_nos)
+    safety_alerts = []
+    for item in all_items:
+        stock = stock_map.get(item.part_no, 0)
+        if stock < item.safety_stock:
+            safety_alerts.append({
+                "part_no": item.part_no,
+                "item_name": item.name,
+                "item_type": item.item_type,
+                "current_stock": stock,
+                "safety_stock": int(item.safety_stock),
+                "shortage": int(item.safety_stock) - stock,
+                "lead_time_days": int(item.lead_time_days) if item.lead_time_days else 7,
+                "supplier": item.supplier,
+            })
+    safety_alerts.sort(key=lambda x: -x["shortage"])
+
+    # 3. 미처리 구매요청 (승인대기 + 발주해야 할 날짜 임박/초과)
+    urgent_prs = db.query(PurchaseRequest).filter(
+        PurchaseRequest.status.in_([PRStatus.pending, PRStatus.approved]),
+    ).order_by(PurchaseRequest.order_by_date.asc()).all()
+    urgent_pr_list = []
+    for pr in urgent_prs:
+        item = db.get(Item, pr.part_no)
+        days = (pr.order_by_date - today).days if pr.order_by_date else None
+        if days is None or days > 7:
+            continue  # 7일 이상 여유있으면 제외
+        urgent_pr_list.append({
+            "pr_no": pr.pr_no,
+            "part_no": pr.part_no,
+            "item_name": item.name if item else pr.part_no,
+            "qty": pr.qty,
+            "need_date": str(pr.need_date),
+            "order_by_date": str(pr.order_by_date) if pr.order_by_date else None,
+            "days_to_order": days,
+            "status": pr.status.value,
+            "source": pr.source,
+        })
+
+    # 4. 미완료 생산오더 중 납기 지연
+    late_pords = db.query(ProductionOrder).filter(
+        ProductionOrder.status.in_(["계획", "진행중"]),
+        ProductionOrder.plan_date < today,
+    ).order_by(ProductionOrder.plan_date.asc()).all()
+    late_pord_list = []
+    for pord in late_pords:
+        item = db.get(Item, pord.part_no)
+        delay = (today - pord.plan_date).days
+        late_pord_list.append({
+            "pord_no": pord.pord_no,
+            "part_no": pord.part_no,
+            "item_name": item.name if item else pord.part_no,
+            "planned_qty": pord.planned_qty,
+            "actual_qty": pord.actual_qty,
+            "remaining": max(0, pord.planned_qty - pord.actual_qty),
+            "plan_date": str(pord.plan_date),
+            "delay_days": delay,
+            "status": pord.status.value if hasattr(pord.status, 'value') else pord.status,
+        })
+
+    return {
+        "as_of": str(today),
+        "late_po": late_po_list,
+        "late_po_count": len(late_po_list),
+        "safety_stock_alerts": safety_alerts,
+        "safety_stock_alert_count": len(safety_alerts),
+        "urgent_pr": urgent_pr_list,
+        "urgent_pr_count": len(urgent_pr_list),
+        "late_production_order": late_pord_list,
+        "late_pord_count": len(late_pord_list),
+    }

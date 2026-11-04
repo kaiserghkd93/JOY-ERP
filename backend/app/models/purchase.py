@@ -90,6 +90,36 @@ class Receipt(Base):
     item: Mapped["Item"] = relationship(back_populates="receipts")
 
 
+class PRStatus(str, enum.Enum):
+    draft    = "작성중"
+    pending  = "승인대기"
+    approved = "승인"
+    rejected = "반려"
+    ordered  = "PO전환"
+
+
+class PurchaseRequest(Base):
+    """구매요청(PR) — MRP 제안 또는 수동 등록 → 승인 → PO 전환"""
+    __tablename__ = "purchase_request"
+
+    pr_no: Mapped[str] = mapped_column(String(30), primary_key=True)
+    part_no: Mapped[str] = mapped_column(ForeignKey("item.part_no"), nullable=False)
+    partner_id: Mapped[str | None] = mapped_column(ForeignKey("partner.partner_id"), nullable=True)
+    qty: Mapped[int] = mapped_column(Integer, nullable=False)
+    unit_price: Mapped[float | None] = mapped_column(Numeric(15, 2), nullable=True)
+    need_date: Mapped[date] = mapped_column(Date, nullable=False)
+    order_by_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    status: Mapped[PRStatus] = mapped_column(SAEnum(PRStatus), default=PRStatus.pending)
+    source: Mapped[str] = mapped_column(String(20), default="수동")  # "MRP", "수동"
+    source_ref: Mapped[str | None] = mapped_column(String(20), nullable=True)  # "2025-11"
+    note: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    requested_by: Mapped[str] = mapped_column(String(50), nullable=False)
+    approved_by: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    po_no: Mapped[str | None] = mapped_column(ForeignKey("purchase_order.po_no"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+
+
 class Carryover(Base):
     __tablename__ = "carryover"
 
