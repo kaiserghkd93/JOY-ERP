@@ -20,7 +20,7 @@ if not SECRET:
     import logging; logging.getLogger("uvicorn").warning(
         "⚠️  JWT_SECRET 환경변수 미설정 — 재시작 시 모든 토큰 무효화됩니다. Railway 환경변수에 JWT_SECRET을 설정하세요.")
 
-EXPIRE_HOURS = 8   # 8시간 (기존 7일 → 단축)
+EXPIRE_HOURS = 72  # 72시간(3일)
 
 # ── rate limiter (IP별 로그인 실패 추적) ─────────────────────────
 _fail_log: dict[str, list[float]] = defaultdict(list)
