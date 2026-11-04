@@ -376,6 +376,151 @@ def get_oee_summary(
     return sorted(result, key=lambda x: x["avg_oee"])
 
 
+@router.get("/machine-analysis")
+def machine_analysis(year: int = Query(...), month: int = Query(...), db: Session = Depends(get_db)):
+    """
+    호기별 월간 생산실적 종합 분석
+    - 계획수량 / 실적수량 / 이론최대수량 (가동시간 ÷ 표준C/T)
+    - 표준C/T vs 실제C/T 비교 → C/T효율%
+    - 금액환산: 실적금액 / 이론최대금액 / 기회손실금액
+    """
+    import calendar as cal
+    first_day = date(year, month, 1)
+    last_day  = date(year, month, cal.monthrange(year, month)[1])
+
+    oee_rows = db.query(OeeDaily).filter(
+        OeeDaily.prod_date >= first_day,
+        OeeDaily.prod_date <= last_day,
+    ).all()
+
+    # OeeDaily 없으면 MesProductionLog로 대체
+    if not oee_rows:
+        mes = db.query(MesProductionLog).filter(
+            MesProductionLog.prod_date >= first_day,
+            MesProductionLog.prod_date <= last_day,
+        ).all()
+        # MesProductionLog → OeeDaily-호환 임시 객체로 변환
+        from types import SimpleNamespace
+        oee_rows = [SimpleNamespace(
+            prod_date=r.prod_date,
+            machine_no=r.machine_no,
+            part_no=r.part_no,
+            plan_qty=r.plan_qty,
+            actual_qty=r.actual_qty,
+            defect_qty=r.defect_qty,
+            run_time_min=r.run_time_min or 0,
+            planned_time_min=(r.run_time_min or 0) + (r.down_time_min or 0) or 480,
+            machine_ct_sec=None,
+            actual_ct_sec=r.actual_ct_sec,
+            oee=None,
+            availability=None,
+            performance=None,
+            quality_rate=None,
+        ) for r in mes]
+
+    # ── 호기 × 품번 집계 ──────────────────────────────────────────
+    grp: dict[tuple, dict] = {}
+    for r in oee_rows:
+        key = (r.machine_no or '미지정', r.part_no)
+        if key not in grp:
+            grp[key] = {
+                "machine_no": r.machine_no or '미지정',
+                "part_no": r.part_no,
+                "days": 0,
+                "plan_qty": 0, "actual_qty": 0, "defect_qty": 0,
+                "run_time_min": 0.0, "planned_time_min": 0.0,
+                "machine_ct_sec": r.machine_ct_sec,
+                "act_ct_sum": 0.0, "act_ct_cnt": 0,
+                "oee_sum": 0.0, "oee_cnt": 0,
+                "avail_sum": 0.0, "perf_sum": 0.0,
+            }
+        g = grp[key]
+        g["days"] += 1
+        g["plan_qty"] += r.plan_qty or 0
+        g["actual_qty"] += r.actual_qty or 0
+        g["defect_qty"] += r.defect_qty or 0
+        g["run_time_min"] += r.run_time_min or 0
+        g["planned_time_min"] += r.planned_time_min or 0
+        if r.machine_ct_sec and not g["machine_ct_sec"]:
+            g["machine_ct_sec"] = r.machine_ct_sec
+        if r.actual_ct_sec:
+            g["act_ct_sum"] += r.actual_ct_sec
+            g["act_ct_cnt"] += 1
+        if r.oee is not None:
+            g["oee_sum"] += r.oee
+            g["oee_cnt"] += 1
+        if r.availability is not None:
+            g["avail_sum"] += r.availability
+        if r.performance is not None:
+            g["perf_sum"] += r.performance
+
+    result = []
+    tot_actual_rev = 0
+    tot_ideal_rev  = 0
+
+    for (mn, pn), g in grp.items():
+        item = db.query(Item).filter(Item.part_no == pn).first()
+        item_name  = item.name if item else None
+        std_ct     = g["machine_ct_sec"] or (float(item.machine_ct_sec) if item and item.machine_ct_sec else None)
+        sell_price = float(item.std_sell_price or 0) if item else 0.0
+
+        avg_act_ct = round(g["act_ct_sum"] / g["act_ct_cnt"], 2) if g["act_ct_cnt"] > 0 else None
+
+        # 이론최대수량: 순가동시간(분) × 60초 ÷ 표준C/T(초)
+        ideal_qty  = int(g["run_time_min"] * 60 / std_ct) if (std_ct and g["run_time_min"] > 0) else None
+
+        actual_rev = round(g["actual_qty"] * sell_price)
+        ideal_rev  = round(ideal_qty * sell_price)  if ideal_qty is not None else None
+        opp_loss   = round((ideal_qty - g["actual_qty"]) * sell_price) if ideal_qty is not None else None
+
+        n = g["days"] or 1
+        avg_oee    = round(g["oee_sum"]   / n * 100, 1) if g["oee_cnt"] > 0 else None
+        avg_avail  = round(g["avail_sum"] / n * 100, 1) if n > 0 else None
+        avg_perf   = round(g["perf_sum"]  / n * 100, 1) if n > 0 else None
+
+        ct_eff = round(std_ct / avg_act_ct * 100, 1) if (std_ct and avg_act_ct and avg_act_ct > 0) else None
+        achieve = round(g["actual_qty"] / g["plan_qty"] * 100, 1) if g["plan_qty"] > 0 else None
+
+        tot_actual_rev += actual_rev
+        tot_ideal_rev  += ideal_rev or actual_rev
+
+        result.append({
+            "machine_no": mn,
+            "part_no": pn,
+            "part_name": item_name,
+            "working_days": g["days"],
+            "plan_qty": g["plan_qty"],
+            "actual_qty": g["actual_qty"],
+            "defect_qty": g["defect_qty"],
+            "total_run_time_min": round(g["run_time_min"], 1),
+            "std_ct_sec": std_ct,
+            "avg_actual_ct_sec": avg_act_ct,
+            "ct_efficiency_pct": ct_eff,       # 표준/실제 × 100 — 100 이상이면 표준보다 빠름
+            "ideal_qty": ideal_qty,
+            "achieve_rate_pct": achieve,
+            "std_sell_price": sell_price,
+            "actual_revenue": actual_rev,
+            "ideal_revenue": ideal_rev,
+            "opportunity_loss": opp_loss,
+            "avg_oee_pct": avg_oee,
+            "avg_availability_pct": avg_avail,
+            "avg_performance_pct": avg_perf,
+        })
+
+    result.sort(key=lambda x: x["actual_revenue"], reverse=True)
+
+    return {
+        "year": year,
+        "month": month,
+        "machines": result,
+        "totals": {
+            "actual_revenue": tot_actual_rev,
+            "ideal_revenue": tot_ideal_rev,
+            "opportunity_loss": tot_ideal_rev - tot_actual_rev,
+        },
+    }
+
+
 # ════════════════════════════════════════════════════════════════════
 # PATCH 4 — SMED (금형 교체 시간 추적)
 # ════════════════════════════════════════════════════════════════════

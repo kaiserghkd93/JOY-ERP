@@ -649,6 +649,7 @@ function ProductionReportPanel() {
   const [plans, setPlans] = useState([])
   const [oee, setOee] = useState(null)
   const [kaizen, setKaizen] = useState(null)
+  const [machineData, setMachineData] = useState(null)
   const [loading, setLoading] = useState(false)
   const [downloading, setDownloading] = useState(false)
 
@@ -665,6 +666,7 @@ function ProductionReportPanel() {
       api.get(`/production/monthly-plans?year=${y}&month=${m}`).then(r => setPlans(r.data)).catch(() => setPlans([])),
       api.get(`/tps/oee/summary?year=${y}&month=${m}`).then(r => setOee(r.data)).catch(() => setOee([])),
       api.get('/kaizen/summary').then(r => setKaizen(r.data)).catch(() => setKaizen(null)),
+      api.get(`/tps/machine-analysis?year=${y}&month=${m}`).then(r => setMachineData(r.data)).catch(() => setMachineData(null)),
     ]).finally(() => setLoading(false))
   }, [ym])
 
@@ -774,6 +776,117 @@ function ProductionReportPanel() {
           </div>
         </div>
       )}
+
+      {/* 호기별 상세 생산실적 + C/T 비교 + 금액환산 */}
+      {machineData && machineData.machines?.length > 0 && (() => {
+        const machines = machineData.machines
+        const tot = machineData.totals || {}
+        const fmtW = v => v != null ? `${Math.round(v/10000).toLocaleString()}만원` : '-'
+        const ctColor = pct => pct == null ? '#94a3b8' : pct >= 95 ? '#059669' : pct >= 85 ? '#d97706' : '#dc2626'
+        return (
+          <div style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: 10, padding: 16, marginBottom: 20 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
+              <span style={{ fontWeight: 800, fontSize: 13, color: '#1e3a5f' }}>호기별 생산실적 / C/T 분석 / 금액환산</span>
+            </div>
+            {/* 요약 KPI */}
+            <div style={{ display: 'flex', gap: 10, marginBottom: 14, flexWrap: 'wrap' }}>
+              {[
+                { label: '총 실적금액', value: fmtW(tot.actual_revenue), color: '#059669', sub: '실적수량 × 판매단가' },
+                { label: '이론최대금액', value: fmtW(tot.ideal_revenue), color: '#1e3a5f', sub: '가동시간 ÷ 표준C/T × 단가' },
+                { label: '기회손실금액', value: fmtW(tot.opportunity_loss), color: (tot.opportunity_loss || 0) > 0 ? '#dc2626' : '#059669', sub: 'C/T 손실분 금액' },
+              ].map((k, i) => (
+                <div key={i} style={{ background: '#f8fafc', border: '1px solid var(--border)', borderRadius: 8, padding: '12px 16px', flex: 1, minWidth: 160 }}>
+                  <div style={{ fontSize: 10, color: '#64748b', fontWeight: 700, textTransform: 'uppercase', marginBottom: 4 }}>{k.label}</div>
+                  <div style={{ fontSize: 20, fontWeight: 800, color: k.color }}>{k.value}</div>
+                  <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 3 }}>{k.sub}</div>
+                </div>
+              ))}
+            </div>
+            {/* 상세 테이블 */}
+            <div className="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th rowSpan={2}>호기번호</th>
+                    <th rowSpan={2}>품번 / 품명</th>
+                    <th rowSpan={2} style={{ textAlign: 'right' }}>가동<br/>일수</th>
+                    <th colSpan={3} style={{ textAlign: 'center', background: '#1e3a5f1a', borderBottom: '1px solid var(--border)' }}>수량 (EA)</th>
+                    <th colSpan={2} style={{ textAlign: 'center', background: '#0596691a', borderBottom: '1px solid var(--border)' }}>C/T (초)</th>
+                    <th rowSpan={2} style={{ textAlign: 'right' }}>C/T<br/>효율</th>
+                    <th colSpan={3} style={{ textAlign: 'center', background: '#dc26261a', borderBottom: '1px solid var(--border)' }}>금액 (만원)</th>
+                    <th rowSpan={2} style={{ textAlign: 'right' }}>OEE</th>
+                  </tr>
+                  <tr>
+                    <th style={{ textAlign: 'right', fontSize: 10 }}>계획</th>
+                    <th style={{ textAlign: 'right', fontSize: 10 }}>실적</th>
+                    <th style={{ textAlign: 'right', fontSize: 10 }}>이론최대</th>
+                    <th style={{ textAlign: 'right', fontSize: 10 }}>표준</th>
+                    <th style={{ textAlign: 'right', fontSize: 10 }}>실제평균</th>
+                    <th style={{ textAlign: 'right', fontSize: 10 }}>실적</th>
+                    <th style={{ textAlign: 'right', fontSize: 10 }}>이론최대</th>
+                    <th style={{ textAlign: 'right', fontSize: 10 }}>기회손실</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {machines.map((m, i) => {
+                    const achieve = m.achieve_rate_pct
+                    const aColor = achieve == null ? '#94a3b8' : achieve >= 90 ? '#059669' : achieve >= 70 ? '#d97706' : '#dc2626'
+                    return (
+                      <tr key={i}>
+                        <td style={{ fontFamily: 'monospace', fontWeight: 700, color: '#1e3a5f' }}>{m.machine_no}</td>
+                        <td>
+                          <div style={{ fontWeight: 600, fontSize: 12 }}>{m.part_no}</div>
+                          {m.part_name && <div style={{ fontSize: 10, color: '#94a3b8' }}>{m.part_name}</div>}
+                        </td>
+                        <td style={{ textAlign: 'right', color: '#64748b' }}>{m.working_days}일</td>
+                        {/* 수량 */}
+                        <td style={{ textAlign: 'right' }}>{(m.plan_qty || 0).toLocaleString()}</td>
+                        <td style={{ textAlign: 'right', fontWeight: 700, color: aColor }}>
+                          {(m.actual_qty || 0).toLocaleString()}
+                          {achieve != null && <div style={{ fontSize: 10, color: aColor }}>{achieve}%</div>}
+                        </td>
+                        <td style={{ textAlign: 'right', color: '#64748b' }}>
+                          {m.ideal_qty != null ? m.ideal_qty.toLocaleString() : <span style={{ color: '#e2e8f0' }}>-</span>}
+                        </td>
+                        {/* C/T */}
+                        <td style={{ textAlign: 'right', color: '#374151' }}>{m.std_ct_sec != null ? `${m.std_ct_sec}s` : '-'}</td>
+                        <td style={{ textAlign: 'right', color: m.avg_actual_ct_sec != null && m.std_ct_sec != null && m.avg_actual_ct_sec > m.std_ct_sec * 1.1 ? '#dc2626' : '#374151' }}>
+                          {m.avg_actual_ct_sec != null ? `${m.avg_actual_ct_sec}s` : '-'}
+                        </td>
+                        {/* C/T 효율 */}
+                        <td style={{ textAlign: 'right', fontWeight: 700, color: ctColor(m.ct_efficiency_pct) }}>
+                          {m.ct_efficiency_pct != null ? `${m.ct_efficiency_pct}%` : '-'}
+                        </td>
+                        {/* 금액 */}
+                        <td style={{ textAlign: 'right', fontWeight: 700, color: '#059669' }}>
+                          {fmtW(m.actual_revenue)}
+                        </td>
+                        <td style={{ textAlign: 'right', color: '#64748b' }}>
+                          {fmtW(m.ideal_revenue)}
+                        </td>
+                        <td style={{ textAlign: 'right', fontWeight: 700, color: (m.opportunity_loss || 0) > 0 ? '#dc2626' : '#059669' }}>
+                          {m.opportunity_loss != null ? fmtW(m.opportunity_loss) : '-'}
+                        </td>
+                        {/* OEE */}
+                        <td style={{ textAlign: 'right' }}>
+                          {m.avg_oee_pct != null ? (
+                            <span style={{ fontWeight: 700, color: m.avg_oee_pct >= 85 ? '#059669' : m.avg_oee_pct >= 60 ? '#d97706' : '#dc2626' }}>
+                              {m.avg_oee_pct}%
+                            </span>
+                          ) : '-'}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <div style={{ marginTop: 10, fontSize: 10, color: '#94a3b8' }}>
+              * 이론최대수량 = 순가동시간(분) × 60 ÷ 표준C/T(초) &nbsp;|&nbsp; C/T효율 = 표준C/T ÷ 실제C/T × 100 &nbsp;|&nbsp; 기회손실 = (이론최대 − 실적) × 판매단가
+            </div>
+          </div>
+        )
+      })()}
 
       {/* 카이젠 과제 현황 */}
       {kaizen && (
