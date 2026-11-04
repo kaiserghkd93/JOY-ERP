@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback, useRef, Fragment } from 'react'
 import api from '../api'
+import { downloadPurchaseReport } from '../utils/reportPptx'
 import { isMaster, getRole } from '../auth'
 
 const today = () => { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0') }
@@ -944,6 +945,14 @@ function MatReportPanel({ month }) {
   const [ym, setYm] = useState(defaultYm)
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(false)
+  const [downloading, setDownloading] = useState(false)
+
+  const handlePptDownload = async () => {
+    if (!data) return
+    setDownloading(true)
+    const [y, m] = ym.split('-')
+    try { await downloadPurchaseReport(data, `${y}년 ${Number(m)}월`) } finally { setDownloading(false) }
+  }
 
   useEffect(() => {
     if (month) setYm(month)
@@ -979,10 +988,16 @@ function MatReportPanel({ month }) {
 
   return (
     <div style={{ padding: '0 0 32px' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
         <span style={{ fontWeight: 700, fontSize: 15 }}>자재구매 KPI 보고서</span>
         <input type="month" value={ym} onChange={e => setYm(e.target.value)}
           style={{ border: '1px solid var(--border)', borderRadius: 4, padding: '4px 8px', fontSize: 13 }} />
+        <button onClick={handlePptDownload} disabled={downloading || loading || !data}
+          style={{ marginLeft: 'auto', padding: '5px 14px', fontSize: 12, fontWeight: 700,
+            background: downloading ? '#94a3b8' : '#1e3a5f', color: '#fff',
+            border: 'none', borderRadius: 6, cursor: 'pointer' }}>
+          {downloading ? '생성 중...' : '📊 PPT 다운로드'}
+        </button>
       </div>
       {loading ? <div style={{ textAlign: 'center', padding: 40, color: '#94a3b8' }}>로딩 중...</div> : !data ? (
         <div style={{ textAlign: 'center', color: '#94a3b8', padding: 40 }}>데이터 없음</div>

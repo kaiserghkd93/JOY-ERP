@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react'
 import api from '../api'
+import { downloadQualityReport } from '../utils/reportPptx'
 import { getRole, isMaster } from '../auth'
 import { SpcPanel, ControlPlanPanel, PfmeaPanel, CalibrationPanel, AuditPanel, PpapPanel, MsaPanel } from './QualityAdvanced'
 
@@ -873,6 +874,13 @@ function QualityReportPanel() {
   const [summary, setSummary] = useState(null)
   const [defectRate, setDefectRate] = useState([])
   const [loading, setLoading] = useState(false)
+  const [downloading, setDownloading] = useState(false)
+
+  const handlePptDownload = async () => {
+    setDownloading(true)
+    const [y, m] = ym.split('-')
+    try { await downloadQualityReport(summary, defectRate, `${y}년 ${Number(m)}월`) } finally { setDownloading(false) }
+  }
 
   useEffect(() => {
     const [y, m] = ym.split('-')
@@ -893,10 +901,16 @@ function QualityReportPanel() {
 
   return (
     <div style={{ padding: '0 0 32px' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
         <span style={{ fontWeight: 700, fontSize: 15 }}>품질 KPI 보고서</span>
         <input type="month" value={ym} onChange={e => setYm(e.target.value)}
           style={{ border: '1px solid var(--border)', borderRadius: 4, padding: '4px 8px', fontSize: 13 }} />
+        <button onClick={handlePptDownload} disabled={downloading || loading}
+          style={{ marginLeft: 'auto', padding: '5px 14px', fontSize: 12, fontWeight: 700,
+            background: downloading ? '#94a3b8' : '#1e3a5f', color: '#fff',
+            border: 'none', borderRadius: 6, cursor: 'pointer' }}>
+          {downloading ? '생성 중...' : '📊 PPT 다운로드'}
+        </button>
       </div>
       {loading ? <div style={{ textAlign: 'center', padding: 40, color: '#94a3b8' }}>로딩 중...</div> : (<>
       {summary && (
