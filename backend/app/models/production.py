@@ -1,5 +1,5 @@
 from datetime import date, datetime
-from sqlalchemy import String, Integer, Numeric, Text, Date, DateTime, ForeignKey, Enum as SAEnum, UniqueConstraint
+from sqlalchemy import String, Integer, Numeric, Float, Text, Date, DateTime, ForeignKey, Enum as SAEnum, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database import Base
 import enum
@@ -63,6 +63,7 @@ class MonthlyPlan(Base):
     month: Mapped[int] = mapped_column(Integer, nullable=False)
     part_no: Mapped[str] = mapped_column(ForeignKey("item.part_no"), nullable=False)
     planned_qty: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    work_time_min: Mapped[float] = mapped_column(Float, default=480)  # 일 계획 가동시간(분)
     created_at: Mapped[date] = mapped_column(Date, default=date.today)
 
     item: Mapped["Item"] = relationship()
@@ -78,6 +79,8 @@ class DailyActual(Base):
     plan_id: Mapped[int] = mapped_column(ForeignKey("monthly_plan.id"), nullable=False)
     prod_date: Mapped[date] = mapped_column(Date, nullable=False)
     actual_qty: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    stop_time_min: Mapped[float | None] = mapped_column(Float)     # 비가동시간(분)
+    loss_code: Mapped[str | None] = mapped_column(String(2))       # 로스코드 01~09
     note: Mapped[str | None] = mapped_column(String(200))
 
     plan: Mapped["MonthlyPlan"] = relationship(back_populates="actuals")

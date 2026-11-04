@@ -88,6 +88,8 @@ class MesProductionLog(Base):
     run_time_min: Mapped[float | None] = mapped_column(Float)       # 가동시간(분)
     down_time_min: Mapped[float | None] = mapped_column(Float)      # 비가동시간(분)
     down_reason: Mapped[str | None] = mapped_column(String(200))    # 비가동원인
+    actual_ct_sec: Mapped[float | None] = mapped_column(Float)     # 실제 C/T (초)
+    loss_code: Mapped[str | None] = mapped_column(String(2))       # 로스코드 01~09
     worker: Mapped[str | None] = mapped_column(String(50))          # 작업자
     mes_order_no: Mapped[str | None] = mapped_column(String(50))    # MES 작업지시번호
     synced_to_erp: Mapped[bool] = mapped_column(Boolean, default=False)

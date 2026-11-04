@@ -14,9 +14,11 @@ from app.routers import inventory_adj
 from app.routers import quality_advanced
 from app.routers import lot
 from app.routers import supplier_score, audit as audit_router
+from app.routers import tps as tps_router, kaizen as kaizen_router
 from app.models import quality_advanced as _qa_models  # noqa: ensure tables
 from app.models import inventory_adj as _inv_adj_models  # noqa: ensure tables registered
 from app.models import audit as _audit_models  # noqa: ensure audit_log table
+from app.models import tps as _tps_models  # noqa: ensure TPS tables
 
 Base.metadata.create_all(bind=engine)
 
@@ -87,6 +89,16 @@ with engine.connect() as _conn:
         "ALTER TABLE process_outgoing_defect ADD COLUMN IF NOT EXISTS improvement_note TEXT",
         "ALTER TABLE process_outgoing_defect ADD COLUMN IF NOT EXISTS reviewer VARCHAR(50)",
         "ALTER TABLE process_outgoing_defect ADD COLUMN IF NOT EXISTS reviewed_at DATE",
+        # TPS — C/T 필드 (자체생산 기준)
+        "ALTER TABLE item ADD COLUMN IF NOT EXISTS machine_ct_sec FLOAT",
+        "ALTER TABLE item ADD COLUMN IF NOT EXISTS manual_ct_sec FLOAT",
+        # TPS — MES 실제 C/T & 로스코드
+        "ALTER TABLE mes_production_log ADD COLUMN IF NOT EXISTS actual_ct_sec FLOAT",
+        "ALTER TABLE mes_production_log ADD COLUMN IF NOT EXISTS loss_code VARCHAR(2)",
+        # TPS — 월간계획 가동시간, 일실적 비가동/로스
+        "ALTER TABLE monthly_plan ADD COLUMN IF NOT EXISTS work_time_min FLOAT DEFAULT 480",
+        "ALTER TABLE daily_actual ADD COLUMN IF NOT EXISTS stop_time_min FLOAT",
+        "ALTER TABLE daily_actual ADD COLUMN IF NOT EXISTS loss_code VARCHAR(2)",
         # 성능 최적화 인덱스
         "CREATE INDEX IF NOT EXISTS ix_stock_ledger_part_no ON stock_ledger(part_no)",
         "CREATE INDEX IF NOT EXISTS ix_stock_ledger_txn_date ON stock_ledger(txn_date)",
@@ -198,6 +210,8 @@ app.include_router(cost_actual.router)
 app.include_router(lot.router)
 app.include_router(supplier_score.router)
 app.include_router(audit_router.router)
+app.include_router(tps_router.router)
+app.include_router(kaizen_router.router)
 
 
 @app.on_event("startup")
