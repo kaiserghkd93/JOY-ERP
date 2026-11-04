@@ -477,24 +477,35 @@ function InspectionModal({ onClose, onSaved, prefill }) {
           </div>
         )}
 
-        <div className="grid-2">
-          <div className="form-group">
-            <label>처리방법</label>
-            <select value={form.disposal} onChange={e => set('disposal', e.target.value)}>
-              <option value="보류">보류</option>
-              <option value="반품">반품</option>
-              <option value="폐기">폐기</option>
-              <option value="특채">특채</option>
-            </select>
+        {/* 불합격일 때만 처리방법/불량내용 표시 */}
+        {(+form.fail_qty > 0) && (
+          <div className="grid-2">
+            <div className="form-group">
+              <label>처리방법</label>
+              <select value={form.disposal} onChange={e => set('disposal', e.target.value)}>
+                <option value="보류">보류</option>
+                <option value="반품">반품</option>
+                <option value="폐기">폐기</option>
+                <option value="특채">특채</option>
+              </select>
+            </div>
+            <div className="form-group">
+              <label>불량내용</label>
+              <input value={form.defect_note} onChange={e => set('defect_note', e.target.value)} placeholder="치수불량 등..." />
+            </div>
           </div>
-          <div className="form-group">
-            <label>불량내용</label>
-            <input value={form.defect_note} onChange={e => set('defect_note', e.target.value)} placeholder="치수불량 등..." />
-          </div>
-        </div>
+        )}
         <div className="modal-footer">
           <button className="btn btn-outline" onClick={onClose}>취소</button>
-          <button className="btn btn-primary" onClick={submit}>등록</button>
+          {(+form.fail_qty === 0 || autoJudge === '합격') ? (
+            <button className="btn btn-primary"
+              style={{ background: '#16a34a', borderColor: '#16a34a' }}
+              onClick={() => { set('disposal', '보류'); submit() }}>
+              ✅ 합격 처리
+            </button>
+          ) : (
+            <button className="btn btn-primary" onClick={submit}>불합격 등록</button>
+          )}
         </div>
       </div>
     </div>

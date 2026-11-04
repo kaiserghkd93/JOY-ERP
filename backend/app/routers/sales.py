@@ -77,6 +77,38 @@ def list_so(
     return result
 
 
+@router.get("/orders/{so_no}/invoice-print")
+def so_invoice_print(so_no: str, db: Session = Depends(get_db)):
+    """출하완료 수주의 가장 최근 발행된 거래명세서 PDF 출력 (리다이렉트)"""
+    from fastapi.responses import RedirectResponse
+    from app.models.sales import Invoice, InvoiceStatus
+    so = db.get(SalesOrder, so_no)
+    if not so:
+        raise HTTPException(404, f"수주 없음: {so_no}")
+    # 같은 거래처의 발행완료 명세서 중 가장 최근 것
+    inv = (db.query(Invoice)
+           .filter(Invoice.partner_id == so.partner_id, Invoice.status == InvoiceStatus.issued)
+           .order_by(Invoice.issue_date.desc())
+           .first())
+    if not inv:
+        raise HTTPException(404, "발행된 거래명세서가 없습니다. 먼저 거래명세서를 발행해주세요.")
+    return RedirectResponse(url=f"/invoices/{inv.inv_no}/print")
+
+
+@router.get("/orders/{so_no}/invoice-list")
+def so_invoice_list(so_no: str, db: Session = Depends(get_db)):
+    """출하완료 수주에 연결된 거래명세서 목록"""
+    from app.models.sales import Invoice, InvoiceStatus
+    so = db.get(SalesOrder, so_no)
+    if not so:
+        raise HTTPException(404)
+    invs = (db.query(Invoice)
+            .filter(Invoice.partner_id == so.partner_id, Invoice.status == InvoiceStatus.issued)
+            .order_by(Invoice.issue_date.desc())
+            .limit(10).all())
+    return [{"inv_no": i.inv_no, "issue_date": str(i.issue_date), "status": i.status.value} for i in invs]
+
+
 @router.get("/orders/{so_no}/summary", response_model=SOSummary)
 def so_summary(so_no: str, db: Session = Depends(get_db)):
     so = db.get(SalesOrder, so_no)

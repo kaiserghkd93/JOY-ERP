@@ -279,7 +279,8 @@ function ShipModal({ so, onClose, onSaved }) {
   )
 }
 
-const STATUS_BADGE = { '수주': 'badge-blue', '일부출하': 'badge-amber', '완료': 'badge-green', '취소': 'badge-gray' }
+const STATUS_BADGE = { 'open': 'badge-blue', 'partial': 'badge-amber', 'closed': 'badge-green', 'cancelled': 'badge-gray' }
+const STATUS_LABEL = { 'open': '수주', 'partial': '일부출하', 'closed': '출하완료', 'cancelled': '취소' }
 
 function LsImportModal({ onClose, onDone }) {
   const [partners, setPartners] = useState([])
@@ -1087,8 +1088,19 @@ export default function Sales() {
                           style={{ padding: '2px 4px', border: '1px solid #1d4ed8', borderRadius: 3, fontSize: 12 }} />
                       : o.due_date}
                   </td>
-                  <td><span className={`badge ${STATUS_BADGE[o.status] || 'badge-gray'}`}>{o.status}</span></td>
-                  <td>{(o.status === '수주' || o.status === '일부출하') && <button className="btn btn-sm btn-primary" onClick={() => setShipSO(o)}>출하</button>}</td>
+                  <td><span className={`badge ${STATUS_BADGE[o.status] || 'badge-gray'}`}>{STATUS_LABEL[o.status] || o.status}</span></td>
+                  <td>
+                    {(o.status === 'open' || o.status === 'partial') && (
+                      <button className="btn btn-sm btn-primary" onClick={() => setShipSO(o)}>출하</button>
+                    )}
+                    {o.status === 'closed' && (
+                      <button className="btn btn-sm btn-outline"
+                        style={{ borderColor: '#0f766e', color: '#0f766e', fontSize: 11 }}
+                        onClick={() => window.open(api.defaults.baseURL + `/sales/orders/${o.so_no}/invoice-print`, '_blank')}>
+                        명세서
+                      </button>
+                    )}
+                  </td>
                   <td>
                     {editSO?.so_no === o.so_no
                       ? <><button className="btn btn-sm btn-primary" onClick={updateSO}>저장</button>{' '}<button className="btn btn-sm btn-outline" onClick={() => setEditSO(null)}>취소</button></>
