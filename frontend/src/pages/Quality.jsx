@@ -872,6 +872,7 @@ function QualityReportPanel() {
   const now = new Date()
   const [ym, setYm] = useState(`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`)
   const [vda, setVda] = useState(null)
+  const [iatfData, setIatfData] = useState(null)
   const [improvements, setImprovements] = useState([])
   const [loading, setLoading] = useState(false)
   const [downloading, setDownloading] = useState(false)
@@ -884,13 +885,14 @@ function QualityReportPanel() {
 
   const handlePptDownload = async () => {
     setDownloading(true)
-    try { await downloadQualityReport(vda, `${y}년 ${m}월`) } finally { setDownloading(false) }
+    try { await downloadQualityReport(vda, iatfData, `${y}년 ${m}월`) } finally { setDownloading(false) }
   }
 
   useEffect(() => {
     setLoading(true)
     Promise.all([
       api.get(`/quality/vda-analysis?year=${y}&month=${m}`).then(r => setVda(r.data)).catch(() => setVda(null)),
+      api.get(`/quality-adv/iatf-summary?year=${y}&month=${m}`).then(r => setIatfData(r.data)).catch(() => setIatfData(null)),
       api.get(`/improvement?year=${y}&month=${m}&source_module=quality`).then(r => setImprovements(r.data)).catch(() => setImprovements([])),
     ]).finally(() => setLoading(false))
   }, [ym])
@@ -1203,8 +1205,136 @@ function QualityReportPanel() {
           )
         })()}
 
-        {/* ── SECTION 6: 부서별 개선과제 등록 ────── */}
-        <SectionHeader num="6" title="부서별 개선과제 등록" sub="품질 담당자 직접 입력" />
+        {/* ── SECTION 6: IATF 16949 현황 ─────────── */}
+        {iatfData && (<>
+          <SectionHeader num="6" title="IATF 16949 현황" sub="SPC · 교정 · 감사 · PPAP · MSA" />
+
+          {/* SPC / Cpk */}
+          <div style={{ fontWeight: 700, fontSize: 12, color: '#1e3a5f', marginBottom: 8 }}>SPC / Cpk 현황</div>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 12 }}>
+            <KPI label="활성 관리도" value={`${iatfData.spc.total_active}개`} color="#1e3a5f" />
+            <KPI label="Cpk ≥ 1.33" value={`${iatfData.spc.cpk_ok}건`} color="#059669" sub="공정 능력 충분" />
+            <KPI label="1.0 ≤ Cpk < 1.33" value={`${iatfData.spc.cpk_warn}건`} color="#d97706" sub="개선 필요" />
+            <KPI label="Cpk < 1.0" value={`${iatfData.spc.cpk_ng}건`} color="#dc2626" sub="불합격" />
+          </div>
+          {iatfData.spc.items.length > 0 && (
+            <div style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: 10, padding: 14, marginBottom: 14 }}>
+              <div className="table-wrap">
+                <table>
+                  <thead><tr>
+                    <th>품번</th><th>특성</th><th style={{ textAlign: 'right' }}>USL</th><th style={{ textAlign: 'right' }}>LSL</th>
+                    <th style={{ textAlign: 'right' }}>Cpk</th><th style={{ textAlign: 'right' }}>표본수</th><th>판정</th>
+                  </tr></thead>
+                  <tbody>
+                    {iatfData.spc.items.map((s, i) => (
+                      <tr key={i} style={{ background: i % 2 === 1 ? '#f8fafc' : '#fff' }}>
+                        <td style={{ fontFamily: 'monospace', fontSize: 12 }}>{s.part_no}</td>
+                        <td>{s.characteristic}</td>
+                        <td style={{ textAlign: 'right', fontSize: 12 }}>{s.usl ?? '-'}</td>
+                        <td style={{ textAlign: 'right', fontSize: 12 }}>{s.lsl ?? '-'}</td>
+                        <td style={{ textAlign: 'right', fontWeight: 700,
+                          color: s.cpk == null ? '#94a3b8' : s.cpk >= 1.33 ? '#059669' : s.cpk >= 1.0 ? '#d97706' : '#dc2626' }}>
+                          {s.cpk ?? '-'}
+                        </td>
+                        <td style={{ textAlign: 'right' }}>{s.sample_count}</td>
+                        <td><span className={`badge ${s.status === 'ok' ? 'badge-green' : s.status === 'warn' ? 'badge-amber' : 'badge-red'}`}>
+                          {s.status === 'ok' ? '합격' : s.status === 'warn' ? '주의' : 'NG'}
+                        </span></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* 교정 현황 */}
+          <div style={{ fontWeight: 700, fontSize: 12, color: '#1e3a5f', marginBottom: 8 }}>계측기 교정 현황</div>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 12 }}>
+            <KPI label="전체 계측기" value={`${iatfData.calibration.total}개`} color="#1e3a5f" />
+            <KPI label="정상 사용중" value={`${iatfData.calibration.active}개`} color="#059669" />
+            <KPI label="교정임박" value={`${iatfData.calibration.due_soon}개`} color="#d97706" />
+            <KPI label="교정초과" value={`${iatfData.calibration.overdue}개`} color="#dc2626" />
+            <KPI label="교정 준수율" value={iatfData.calibration.compliance_rate != null ? `${iatfData.calibration.compliance_rate}%` : '-'}
+              color={iatfData.calibration.compliance_rate >= 95 ? '#059669' : '#dc2626'} sub="목표: 95% 이상" />
+          </div>
+          {iatfData.calibration.overdue_list.length > 0 && (
+            <div style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: 10, padding: 14, marginBottom: 14 }}>
+              <div style={{ fontWeight: 700, fontSize: 12, color: '#dc2626', marginBottom: 8 }}>교정 조치 필요 계측기</div>
+              <div className="table-wrap">
+                <table>
+                  <thead><tr><th>계측기번호</th><th>명칭</th><th>교정 예정일</th><th>상태</th></tr></thead>
+                  <tbody>
+                    {iatfData.calibration.overdue_list.map((inst, i) => (
+                      <tr key={i} style={{ background: i % 2 === 1 ? '#f8fafc' : '#fff' }}>
+                        <td style={{ fontFamily: 'monospace', fontSize: 12 }}>{inst.instrument_no}</td>
+                        <td>{inst.name}</td>
+                        <td style={{ color: '#dc2626', fontWeight: 600 }}>{inst.next_due || '-'}</td>
+                        <td><span className={`badge ${inst.status === '교정초과' ? 'badge-red' : 'badge-amber'}`}>{inst.status}</span></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* 내부감사 현황 */}
+          <div style={{ fontWeight: 700, fontSize: 12, color: '#1e3a5f', marginBottom: 8 }}>내부감사 현황 ({y}년)</div>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 12 }}>
+            <KPI label="감사 건수" value={`${iatfData.audit.count}건`} color="#1e3a5f" />
+            <KPI label="완료" value={`${iatfData.audit.done}건`} color="#059669" />
+            <KPI label="중대부적합" value={`${iatfData.audit.finding_major}건`} color={iatfData.audit.finding_major > 0 ? '#dc2626' : '#059669'} />
+            <KPI label="경미부적합" value={`${iatfData.audit.finding_minor}건`} color={iatfData.audit.finding_minor > 0 ? '#d97706' : '#059669'} />
+            <KPI label="부적합 종결률" value={iatfData.audit.close_rate != null ? `${iatfData.audit.close_rate}%` : '-'}
+              color={iatfData.audit.close_rate >= 80 ? '#059669' : '#dc2626'} sub="목표: 80% 이상" />
+          </div>
+          {iatfData.audit.overdue_findings.length > 0 && (
+            <div style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: 10, padding: 14, marginBottom: 14 }}>
+              <div style={{ fontWeight: 700, fontSize: 12, color: '#dc2626', marginBottom: 8 }}>기한 초과 부적합 사항</div>
+              <div className="table-wrap">
+                <table>
+                  <thead><tr><th>조항번호</th><th>유형</th><th>완료기한</th></tr></thead>
+                  <tbody>
+                    {iatfData.audit.overdue_findings.map((f, i) => (
+                      <tr key={i} style={{ background: i % 2 === 1 ? '#f8fafc' : '#fff' }}>
+                        <td style={{ fontFamily: 'monospace' }}>{f.clause_no || '-'}</td>
+                        <td><span className={`badge ${f.finding_type === '중대부적합' ? 'badge-red' : 'badge-amber'}`}>{f.finding_type}</span></td>
+                        <td style={{ color: '#dc2626', fontWeight: 600 }}>{f.due_date || '-'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* PPAP + MSA */}
+          <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginBottom: 14 }}>
+            <div style={{ flex: 1, minWidth: 220 }}>
+              <div style={{ fontWeight: 700, fontSize: 12, color: '#1e3a5f', marginBottom: 8 }}>PPAP 현황</div>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <KPI label="전체" value={`${iatfData.ppap.total}건`} color="#1e3a5f" />
+                <KPI label="승인" value={`${iatfData.ppap.approved}건`} color="#059669" />
+                <KPI label="대기/준비" value={`${iatfData.ppap.pending}건`} color="#d97706" />
+                <KPI label="승인율" value={iatfData.ppap.approval_rate != null ? `${iatfData.ppap.approval_rate}%` : '-'}
+                  color={iatfData.ppap.approval_rate >= 80 ? '#059669' : '#dc2626'} />
+              </div>
+            </div>
+            <div style={{ flex: 1, minWidth: 220 }}>
+              <div style={{ fontWeight: 700, fontSize: 12, color: '#1e3a5f', marginBottom: 8 }}>MSA 현황 (GRR)</div>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <KPI label="전체 연구" value={`${iatfData.msa.total}건`} color="#1e3a5f" />
+                <KPI label="GRR < 10%" value={`${iatfData.msa.ok}건`} color="#059669" sub="우수" />
+                <KPI label="10~30%" value={`${iatfData.msa.warn}건`} color="#d97706" sub="조건부" />
+                <KPI label="GRR ≥ 30%" value={`${iatfData.msa.ng}건`} color="#dc2626" sub="불합격" />
+              </div>
+            </div>
+          </div>
+        </>)}
+
+        {/* ── SECTION 7: 부서별 개선과제 등록 ────── */}
+        <SectionHeader num="7" title="부서별 개선과제 등록" sub="품질 담당자 직접 입력" />
 
         {improvements.length > 0 && (
           <div style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: 10, padding: 14, marginBottom: 14 }}>

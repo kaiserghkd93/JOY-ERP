@@ -869,3 +869,140 @@ def calculate_msa(study_id: int, user: User = Depends(get_current_user), db: Ses
     s.result = calc["result"]
     db.commit()
     return calc
+
+
+# ═══════════════════════════════════════════════════════════════════
+# IATF 16949 종합 요약
+# ═══════════════════════════════════════════════════════════════════
+
+@router.get("/iatf-summary")
+def iatf_summary(year: int, month: int, db: Session = Depends(get_db)):
+    import calendar as _cal
+    from sqlalchemy import func as _func, extract
+    today = date.today()
+    first_day = date(year, month, 1)
+    last_day = date(year, month, _cal.monthrange(year, month)[1])
+
+    # ── 1. SPC / Cpk 현황
+    active_charts = db.query(SpcChart).filter(SpcChart.is_active == True).all()
+    spc_items = []
+    cpk_ok = cpk_warn = cpk_ng = 0
+    for chart in active_charts:
+        meas = db.query(SpcMeasurement).filter(
+            SpcMeasurement.chart_id == chart.id,
+            SpcMeasurement.measured_at >= first_day,
+            SpcMeasurement.measured_at <= last_day,
+        ).all()
+        xbars = [m.xbar for m in meas if m.xbar is not None]
+        if not xbars:
+            continue
+        mean_x = statistics.mean(xbars)
+        sigma = statistics.stdev(xbars) if len(xbars) > 1 else 0.0
+        cpk = None
+        if sigma > 0 and chart.usl is not None and chart.lsl is not None:
+            cpk = round(min(
+                (float(chart.usl) - mean_x) / (3 * sigma),
+                (mean_x - float(chart.lsl)) / (3 * sigma),
+            ), 3)
+        if cpk is not None:
+            if cpk >= 1.33: cpk_ok += 1
+            elif cpk >= 1.0: cpk_warn += 1
+            else: cpk_ng += 1
+        spc_items.append({
+            "chart_id": chart.id,
+            "part_no": chart.part_no,
+            "characteristic": chart.characteristic,
+            "usl": float(chart.usl) if chart.usl is not None else None,
+            "lsl": float(chart.lsl) if chart.lsl is not None else None,
+            "cpk": cpk,
+            "sample_count": len(xbars),
+            "status": "ok" if cpk is not None and cpk >= 1.33 else "warn" if cpk is not None and cpk >= 1.0 else "ng",
+        })
+
+    # ── 2. 계측기 교정 현황
+    all_inst = db.query(Instrument).all()
+    cal_total = len(all_inst)
+    cal_active = sum(1 for i in all_inst if i.status == InstrumentStatus.active)
+    cal_due_soon = sum(1 for i in all_inst if i.status == InstrumentStatus.due_soon)
+    cal_overdue = sum(1 for i in all_inst if i.status == InstrumentStatus.overdue)
+    cal_rate = round(cal_active / cal_total * 100, 1) if cal_total > 0 else None
+    overdue_inst = [
+        {"instrument_no": i.instrument_no, "name": i.name,
+         "next_due": str(i.next_due) if i.next_due else None,
+         "status": i.status.value}
+        for i in all_inst if i.status in (InstrumentStatus.overdue, InstrumentStatus.due_soon)
+    ]
+
+    # ── 3. 내부감사 현황 (해당 연도)
+    audits = db.query(AuditPlan).filter(
+        extract('year', AuditPlan.audit_date) == year
+    ).all()
+    audit_count = len(audits)
+    audit_done = sum(1 for a in audits if a.status in (AuditStatus.completed, AuditStatus.closed))
+    all_findings = []
+    for a in audits:
+        all_findings.extend(db.query(AuditFinding).filter(AuditFinding.audit_id == a.id).all())
+    f_major = sum(1 for f in all_findings if f.finding_type == FindingType.major)
+    f_minor = sum(1 for f in all_findings if f.finding_type == FindingType.minor)
+    f_obs = sum(1 for f in all_findings if f.finding_type == FindingType.observation)
+    f_open = sum(1 for f in all_findings if f.status in (FindingStatus.open, FindingStatus.in_progress))
+    f_closed = sum(1 for f in all_findings if f.status in (FindingStatus.completed, FindingStatus.verified))
+    close_rate = round(f_closed / (f_open + f_closed) * 100, 1) if (f_open + f_closed) > 0 else None
+    overdue_findings = [
+        {"clause_no": f.clause_no, "finding_type": f.finding_type.value,
+         "due_date": str(f.due_date) if f.due_date else None}
+        for f in all_findings
+        if f.status in (FindingStatus.open, FindingStatus.in_progress)
+        and f.due_date and f.due_date < today
+    ]
+
+    # ── 4. PPAP 현황
+    all_ppap = db.query(Ppap).all()
+    ppap_total = len(all_ppap)
+    ppap_approved = sum(1 for p in all_ppap if p.status == PpapStatus.approved)
+    ppap_pending = sum(1 for p in all_ppap if p.status in (PpapStatus.preparing, PpapStatus.submitted))
+    ppap_rejected = sum(1 for p in all_ppap if p.status in (PpapStatus.rejected, PpapStatus.interim))
+    ppap_rate = round(ppap_approved / ppap_total * 100, 1) if ppap_total > 0 else None
+
+    # ── 5. MSA 현황
+    all_msa = db.query(MsaStudy).filter(MsaStudy.grr_pct.isnot(None)).all()
+    msa_total = len(all_msa)
+    msa_ok = sum(1 for m in all_msa if float(m.grr_pct) < 10)
+    msa_warn = sum(1 for m in all_msa if 10 <= float(m.grr_pct) < 30)
+    msa_ng = sum(1 for m in all_msa if float(m.grr_pct) >= 30)
+    msa_items = [
+        {"study_no": m.study_no, "part_no": m.part_no, "characteristic": m.characteristic,
+         "grr_pct": float(m.grr_pct), "ndc": m.ndc, "result": m.result.value if m.result else None}
+        for m in all_msa
+    ]
+
+    return {
+        "spc": {
+            "total_active": len(active_charts),
+            "measured_this_month": len(spc_items),
+            "cpk_ok": cpk_ok, "cpk_warn": cpk_warn, "cpk_ng": cpk_ng,
+            "items": spc_items,
+        },
+        "calibration": {
+            "total": cal_total, "active": cal_active,
+            "due_soon": cal_due_soon, "overdue": cal_overdue,
+            "compliance_rate": cal_rate,
+            "overdue_list": overdue_inst,
+        },
+        "audit": {
+            "count": audit_count, "done": audit_done,
+            "finding_major": f_major, "finding_minor": f_minor, "finding_obs": f_obs,
+            "finding_open": f_open, "finding_closed": f_closed,
+            "close_rate": close_rate,
+            "overdue_findings": overdue_findings,
+        },
+        "ppap": {
+            "total": ppap_total, "approved": ppap_approved,
+            "pending": ppap_pending, "rejected": ppap_rejected,
+            "approval_rate": ppap_rate,
+        },
+        "msa": {
+            "total": msa_total, "ok": msa_ok, "warn": msa_warn, "ng": msa_ng,
+            "items": msa_items,
+        },
+    }

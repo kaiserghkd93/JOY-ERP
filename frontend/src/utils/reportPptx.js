@@ -386,7 +386,7 @@ export function downloadProductionReport(plans, oee, kaizen, machineData, lossDa
 // ════════════════════════════════════════════════════════════════════
 // QUALITY REPORT  (VDA 6.3)
 // ════════════════════════════════════════════════════════════════════
-export function downloadQualityReport(vda, monthLabel) {
+export function downloadQualityReport(vda, iatfData, monthLabel) {
   const pres = newPres()
   addCoverSlide(pres, '품질 보고서 (VDA 6.3)', monthLabel)
 
@@ -552,9 +552,127 @@ export function downloadQualityReport(vda, monthLabel) {
     })
   }
 
-  // ── Slide 8: 개선방향 (사용자 작성용 빈 양식) ───────────────────
+  // ── Slides 8+: IATF 16949 ────────────────────────────────────────
+  if (iatfData) {
+    const cal = iatfData.calibration || {}
+    const aud = iatfData.audit || {}
+    const spc = iatfData.spc || {}
+    const ppap = iatfData.ppap || {}
+    const msa  = iatfData.msa || {}
+
+    // IATF KPI 종합 슬라이드
+    const sIatf = addContentSlide(pres, 'IATF 16949 KPI 종합', monthLabel)
+    sIatf.addText('IATF 16949 — 품질시스템 종합지표', {
+      x: 0.2, y: 0.92, w: 9.6, h: 0.24, fontSize: 9, color: G400, fontFace: 'Arial', isTextBox: true,
+    })
+    // Row 1: Calibration / Audit
+    addKpiCard(sIatf, 0.2,  1.2, 3.0, 1.0, '교정 준수율',
+      cal.compliance_rate != null ? `${cal.compliance_rate}%` : '-',
+      cal.compliance_rate >= 95 ? GREEN : RED, `초과 ${cal.overdue||0}개`)
+    addKpiCard(sIatf, 3.45, 1.2, 3.0, 1.0, '감사 부적합 종결률',
+      aud.close_rate != null ? `${aud.close_rate}%` : '-',
+      aud.close_rate >= 80 ? GREEN : RED, `중대 ${aud.finding_major||0} · 경미 ${aud.finding_minor||0}`)
+    addKpiCard(sIatf, 6.7,  1.2, 3.0, 1.0, 'PPAP 승인율',
+      ppap.approval_rate != null ? `${ppap.approval_rate}%` : '-',
+      ppap.approval_rate >= 80 ? GREEN : RED, `전체 ${ppap.total||0}건`)
+    // Row 2: SPC / MSA
+    addKpiCard(sIatf, 0.2,  2.4, 3.0, 1.0, 'SPC Cpk ≥ 1.33',
+      `${spc.cpk_ok||0} / ${spc.measured_this_month||0}`,
+      (spc.cpk_ng||0) === 0 ? GREEN : RED, `NG ${spc.cpk_ng||0}건`)
+    addKpiCard(sIatf, 3.45, 2.4, 3.0, 1.0, 'MSA GRR < 10%',
+      `${msa.ok||0} / ${msa.total||0}`,
+      (msa.ng||0) === 0 ? GREEN : RED, `불합격 ${msa.ng||0}건`)
+    addKpiCard(sIatf, 6.7,  2.4, 3.0, 1.0, '교정 조치 필요',
+      `${(cal.overdue||0) + (cal.due_soon||0)}개`,
+      (cal.overdue||0) > 0 ? RED : (cal.due_soon||0) > 0 ? AMBER : GREEN, '초과+임박')
+
+    // 교정관리 슬라이드
+    const sCal = addContentSlide(pres, 'IATF 16949 — 계측기 교정 현황', monthLabel)
+    addKpiCard(sCal, 0.2,  1.0, 2.9, 1.0, '전체 계측기', `${cal.total||0}개`, NAVY)
+    addKpiCard(sCal, 3.35, 1.0, 2.9, 1.0, '교정초과', `${cal.overdue||0}개`, (cal.overdue||0) > 0 ? RED : GREEN)
+    addKpiCard(sCal, 6.5,  1.0, 3.1, 1.0, '교정임박', `${cal.due_soon||0}개`, (cal.due_soon||0) > 0 ? AMBER : GREEN)
+    const overdueList = cal.overdue_list || []
+    if (overdueList.length > 0) {
+      sCal.addText('교정 조치 필요 계측기', { x: 0.2, y: 2.2, w: 9.5, h: 0.28, fontSize: 11, bold: true, color: NAVY, fontFace: 'Arial', isTextBox: true })
+      const calRows = [
+        [hdr('계측기번호', 'left'), hdr('명칭', 'left'), hdr('교정 예정일'), hdr('상태')],
+        ...overdueList.slice(0, 12).map((inst, i) => {
+          const f = altFill(i)
+          const col = inst.status === '교정초과' ? RED : AMBER
+          return [
+            cell(inst.instrument_no, { fill: f }),
+            cell(inst.name, { fill: f }),
+            cell(inst.next_due || '-', { align: 'center', bold: true, color: col, fill: f }),
+            cell(inst.status, { align: 'center', bold: true, color: col, fill: f }),
+          ]
+        }),
+      ]
+      sCal.addTable(calRows, { x: 0.2, y: 2.55, w: 9.6, colW: [2.4, 3.6, 2.0, 1.6] })
+    } else {
+      sCal.addText('교정 조치 필요 계측기 없음', { x: 0.2, y: 2.5, w: 9.5, h: 0.5, fontSize: 13, color: GREEN, fontFace: 'Arial', align: 'center', isTextBox: true })
+    }
+
+    // 내부감사 부적합 슬라이드
+    const sAud = addContentSlide(pres, 'IATF 16949 — 내부감사 부적합 현황', monthLabel)
+    addKpiCard(sAud, 0.2,  1.0, 2.9, 1.0, '감사 건수', `${aud.count||0}건`, NAVY)
+    addKpiCard(sAud, 3.35, 1.0, 2.9, 1.0, '중대부적합', `${aud.finding_major||0}건`, (aud.finding_major||0) > 0 ? RED : GREEN)
+    addKpiCard(sAud, 6.5,  1.0, 3.1, 1.0, '경미부적합', `${aud.finding_minor||0}건`, (aud.finding_minor||0) > 0 ? AMBER : GREEN)
+    const closeRateStr = aud.close_rate != null ? `${aud.close_rate}%` : '-'
+    sAud.addText(`부적합 종결률: ${closeRateStr}  |  미결: ${aud.finding_open||0}건  |  종결: ${aud.finding_closed||0}건`, {
+      x: 0.2, y: 2.1, w: 9.5, h: 0.28, fontSize: 10, color: NAVY, fontFace: 'Arial', bold: true, isTextBox: true,
+    })
+    const overdueFindings = aud.overdue_findings || []
+    if (overdueFindings.length > 0) {
+      sAud.addText('기한 초과 부적합 사항', { x: 0.2, y: 2.45, w: 9.5, h: 0.25, fontSize: 10, bold: true, color: RED, fontFace: 'Arial', isTextBox: true })
+      const fRows = [
+        [hdr('조항번호'), hdr('유형'), hdr('완료기한')],
+        ...overdueFindings.slice(0, 10).map((f, i) => {
+          const f2 = altFill(i)
+          const col = f.finding_type === '중대부적합' ? RED : AMBER
+          return [
+            cell(f.clause_no || '-', { align: 'center', fill: f2 }),
+            cell(f.finding_type, { bold: true, color: col, fill: f2 }),
+            cell(f.due_date || '-', { align: 'center', bold: true, color: RED, fill: f2 }),
+          ]
+        }),
+      ]
+      sAud.addTable(fRows, { x: 0.2, y: 2.75, w: 9.6, colW: [2.4, 4.0, 3.2] })
+    } else {
+      sAud.addText('기한 초과 부적합 없음', { x: 0.2, y: 2.75, w: 9.5, h: 0.5, fontSize: 13, color: GREEN, fontFace: 'Arial', align: 'center', isTextBox: true })
+    }
+
+    // SPC Cpk 슬라이드
+    const sSpc = addContentSlide(pres, 'IATF 16949 — SPC Cpk 현황', monthLabel)
+    addKpiCard(sSpc, 0.2,  1.0, 2.9, 1.0, 'Cpk ≥ 1.33', `${spc.cpk_ok||0}건`, GREEN, '공정 능력 충분')
+    addKpiCard(sSpc, 3.35, 1.0, 2.9, 1.0, '1.0 ≤ Cpk < 1.33', `${spc.cpk_warn||0}건`, AMBER, '개선 필요')
+    addKpiCard(sSpc, 6.5,  1.0, 3.1, 1.0, 'Cpk < 1.0', `${spc.cpk_ng||0}건`, (spc.cpk_ng||0) > 0 ? RED : GREEN, '불합격')
+    const spcItems = (spc.items || []).filter(it => it.cpk != null)
+    if (spcItems.length > 0) {
+      sSpc.addText('관리도별 Cpk', { x: 0.2, y: 2.2, w: 9.5, h: 0.28, fontSize: 11, bold: true, color: NAVY, fontFace: 'Arial', isTextBox: true })
+      const spcRows = [
+        [hdr('품번', 'left'), hdr('특성', 'left'), hdr('USL'), hdr('LSL'), hdr('Cpk'), hdr('표본수'), hdr('판정')],
+        ...spcItems.slice(0, 10).map((s, i) => {
+          const f = altFill(i)
+          const cpkColor = s.cpk >= 1.33 ? GREEN : s.cpk >= 1.0 ? AMBER : RED
+          const verdict = s.cpk >= 1.33 ? '합격' : s.cpk >= 1.0 ? '주의' : 'NG'
+          return [
+            cell(s.part_no, { fill: f }),
+            cell(s.characteristic, { fill: f }),
+            cell(s.usl != null ? String(s.usl) : '-', { align: 'right', fill: f }),
+            cell(s.lsl != null ? String(s.lsl) : '-', { align: 'right', fill: f }),
+            cell(String(s.cpk), { align: 'right', bold: true, color: cpkColor, fill: f }),
+            cell(String(s.sample_count), { align: 'right', fill: f }),
+            cell(verdict, { align: 'center', bold: true, color: cpkColor, fill: f }),
+          ]
+        }),
+      ]
+      sSpc.addTable(spcRows, { x: 0.2, y: 2.55, w: 9.6, colW: [1.8, 2.2, 1.0, 1.0, 1.1, 1.0, 1.5] })
+    }
+  }
+
+  // ── 개선방향 (사용자 작성용 빈 양식) ───────────────────
   const s6 = addContentSlide(pres, '차월 개선방향 (담당자 작성)', monthLabel)
-  const sections = ['공정불량 개선방향', '입고검사 불합격 외주처 조치', '클레임 고객 실패비용 개선', '수입검사 강화 방안']
+  const sections = ['공정불량 개선방향', '입고검사 불합격 외주처 조치', '클레임 고객 실패비용 개선', 'IATF 16949 개선 조치']
   sections.forEach((title, i) => {
     const yPos = 1.0 + i * 1.1
     s6.addShape('rect', { x: 0.2, y: yPos, w: 9.6, h: 0.95, fill: { color: G50 }, line: { color: G200, width: 1 } })
