@@ -388,7 +388,7 @@ export function downloadProductionReport(plans, oee, kaizen, machineData, lossDa
 // ════════════════════════════════════════════════════════════════════
 export function downloadQualityReport(vda, iatfData, monthLabel) {
   const pres = newPres()
-  addCoverSlide(pres, '품질 보고서 (VDA 6.3)', monthLabel)
+  addCoverSlide(pres, '공정·공급망 품질 보고서', monthLabel)
 
   const ds   = vda?.defect_summary   || {}
   const insp = vda?.incoming_inspection || {}
@@ -561,8 +561,8 @@ export function downloadQualityReport(vda, iatfData, monthLabel) {
     const msa  = iatfData.msa || {}
 
     // IATF KPI 종합 슬라이드
-    const sIatf = addContentSlide(pres, 'IATF 16949 KPI 종합', monthLabel)
-    sIatf.addText('IATF 16949 — 품질시스템 종합지표', {
+    const sIatf = addContentSlide(pres, '품질시스템 KPI 종합', monthLabel)
+    sIatf.addText('품질시스템 종합지표', {
       x: 0.2, y: 0.92, w: 9.6, h: 0.24, fontSize: 9, color: G400, fontFace: 'Arial', isTextBox: true,
     })
     // Row 1: Calibration / Audit
@@ -587,7 +587,7 @@ export function downloadQualityReport(vda, iatfData, monthLabel) {
       (cal.overdue||0) > 0 ? RED : (cal.due_soon||0) > 0 ? AMBER : GREEN, '초과+임박')
 
     // 교정관리 슬라이드
-    const sCal = addContentSlide(pres, 'IATF 16949 — 계측기 교정 현황', monthLabel)
+    const sCal = addContentSlide(pres, '계측기 교정 현황', monthLabel)
     addKpiCard(sCal, 0.2,  1.0, 2.9, 1.0, '전체 계측기', `${cal.total||0}개`, NAVY)
     addKpiCard(sCal, 3.35, 1.0, 2.9, 1.0, '교정초과', `${cal.overdue||0}개`, (cal.overdue||0) > 0 ? RED : GREEN)
     addKpiCard(sCal, 6.5,  1.0, 3.1, 1.0, '교정임박', `${cal.due_soon||0}개`, (cal.due_soon||0) > 0 ? AMBER : GREEN)
@@ -613,7 +613,7 @@ export function downloadQualityReport(vda, iatfData, monthLabel) {
     }
 
     // 내부감사 부적합 슬라이드
-    const sAud = addContentSlide(pres, 'IATF 16949 — 내부감사 부적합 현황', monthLabel)
+    const sAud = addContentSlide(pres, '내부감사 부적합 현황', monthLabel)
     addKpiCard(sAud, 0.2,  1.0, 2.9, 1.0, '감사 건수', `${aud.count||0}건`, NAVY)
     addKpiCard(sAud, 3.35, 1.0, 2.9, 1.0, '중대부적합', `${aud.finding_major||0}건`, (aud.finding_major||0) > 0 ? RED : GREEN)
     addKpiCard(sAud, 6.5,  1.0, 3.1, 1.0, '경미부적합', `${aud.finding_minor||0}건`, (aud.finding_minor||0) > 0 ? AMBER : GREEN)
@@ -642,7 +642,7 @@ export function downloadQualityReport(vda, iatfData, monthLabel) {
     }
 
     // SPC Cpk 슬라이드
-    const sSpc = addContentSlide(pres, 'IATF 16949 — SPC Cpk 현황', monthLabel)
+    const sSpc = addContentSlide(pres, 'SPC Cpk 현황', monthLabel)
     addKpiCard(sSpc, 0.2,  1.0, 2.9, 1.0, 'Cpk ≥ 1.33', `${spc.cpk_ok||0}건`, GREEN, '공정 능력 충분')
     addKpiCard(sSpc, 3.35, 1.0, 2.9, 1.0, '1.0 ≤ Cpk < 1.33', `${spc.cpk_warn||0}건`, AMBER, '개선 필요')
     addKpiCard(sSpc, 6.5,  1.0, 3.1, 1.0, 'Cpk < 1.0', `${spc.cpk_ng||0}건`, (spc.cpk_ng||0) > 0 ? RED : GREEN, '불합격')
@@ -672,7 +672,7 @@ export function downloadQualityReport(vda, iatfData, monthLabel) {
 
   // ── 개선방향 (사용자 작성용 빈 양식) ───────────────────
   const s6 = addContentSlide(pres, '차월 개선방향 (담당자 작성)', monthLabel)
-  const sections = ['공정불량 개선방향', '입고검사 불합격 외주처 조치', '클레임 고객 실패비용 개선', 'IATF 16949 개선 조치']
+  const sections = ['공정불량 개선방향', '입고검사 불합격 외주처 조치', '클레임 고객 실패비용 개선', '품질시스템 개선 조치']
   sections.forEach((title, i) => {
     const yPos = 1.0 + i * 1.1
     s6.addShape('rect', { x: 0.2, y: yPos, w: 9.6, h: 0.95, fill: { color: G50 }, line: { color: G200, width: 1 } })
@@ -680,7 +680,7 @@ export function downloadQualityReport(vda, iatfData, monthLabel) {
     s6.addText('[ 담당자 작성 ] :', { x: 0.35, y: yPos + 0.38, w: 9.0, h: 0.45, fontSize: 9, color: G400, fontFace: 'Arial', isTextBox: true })
   })
 
-  pres.writeFile({ fileName: `품질_VDA63_보고서_${monthLabel}.pptx` })
+  pres.writeFile({ fileName: `품질보고서_${monthLabel}.pptx` })
 }
 
 // ════════════════════════════════════════════════════════════════════

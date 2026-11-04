@@ -945,7 +945,7 @@ function QualityReportPanel() {
   return (
     <div style={{ padding: '0 0 40px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
-        <span style={{ fontWeight: 700, fontSize: 15 }}>품질 보고서 (VDA 6.3)</span>
+        <span style={{ fontWeight: 700, fontSize: 15 }}>공정·공급망 품질 보고서</span>
         <input type="month" value={ym} onChange={e => setYm(e.target.value)}
           style={{ border: '1px solid var(--border)', borderRadius: 4, padding: '4px 8px', fontSize: 13 }} />
         <button onClick={handlePptDownload} disabled={downloading || loading || !vda}
@@ -962,12 +962,15 @@ function QualityReportPanel() {
       ) : (<>
 
         {/* ── SECTION 1: 공정/출하 불량 ───────────── */}
-        <SectionHeader num="1" title="공정 / 출하 불량 현황" sub="VDA 6.3 P5 — 공정 프로세스" />
+        <SectionHeader num="1" title="공정 / 출하 불량 현황" sub="공정 불량 분석" />
         <div style={{ display: 'flex', gap: 10, marginBottom: 14, flexWrap: 'wrap' }}>
           <KPI label="총 불량수량" value={`${(ds?.total_defect_qty || 0).toLocaleString()} EA`}
             color={(ds?.total_defect_qty || 0) === 0 ? '#059669' : '#dc2626'} />
-          <KPI label="공정불량 로스비용" value={`${Math.round((ds?.total_loss_cost || 0) / 10000).toLocaleString()}만원`}
+          <KPI label="제품비 로스" value={`${Math.round((ds?.total_loss_cost || 0) / 10000).toLocaleString()}만원`}
             color={(ds?.total_loss_cost || 0) === 0 ? '#059669' : '#dc2626'} sub="불량수량 × 단가" />
+          <KPI label="공수 로스" value={`${(ds?.total_labor_loss_min || 0).toLocaleString()}분`}
+            color={(ds?.total_labor_loss_min || 0) === 0 ? '#059669' : '#b45309'}
+            sub={`${Math.floor((ds?.total_labor_loss_min||0)/60)}h ${Math.round((ds?.total_labor_loss_min||0)%60)}m`} />
           <KPI label="불량유형 수" value={`${ds?.by_type?.length || 0}종`} color="#1e3a5f" />
         </div>
 
@@ -981,7 +984,8 @@ function QualityReportPanel() {
                   <th style={{ textAlign: 'right' }}>불량수량</th>
                   <th style={{ textAlign: 'right' }}>비중</th>
                   <th style={{ textAlign: 'right' }}>누적비율</th>
-                  <th style={{ textAlign: 'right' }}>로스비용</th>
+                  <th style={{ textAlign: 'right' }}>제품비 로스</th>
+                  <th style={{ textAlign: 'right' }}>공수 로스</th>
                 </tr></thead>
                 <tbody>
                   {ds.by_type.map((t, i) => (
@@ -1000,6 +1004,9 @@ function QualityReportPanel() {
                       <td style={{ textAlign: 'right', color: '#94a3b8' }}>{t.cumulative_rate}%</td>
                       <td style={{ textAlign: 'right', fontWeight: 700, color: t.loss_cost > 0 ? '#dc2626' : '#64748b' }}>
                         {t.loss_cost > 0 ? Math.round(t.loss_cost / 10000).toLocaleString() + '만원' : '-'}
+                      </td>
+                      <td style={{ textAlign: 'right', color: (t.labor_loss_min||0) > 0 ? '#b45309' : '#64748b' }}>
+                        {(t.labor_loss_min||0) > 0 ? `${t.labor_loss_min}분` : '-'}
                       </td>
                     </tr>
                   ))}
@@ -1039,7 +1046,7 @@ function QualityReportPanel() {
         )}
 
         {/* ── SECTION 2: 입고검사 불합격 ──────────── */}
-        <SectionHeader num="2" title="입고검사 불합격 현황" sub="VDA 6.3 P4 — 협력사 프로세스" />
+        <SectionHeader num="2" title="입고검사 불합격 현황" sub="협력사 품질 관리" />
         <div style={{ display: 'flex', gap: 10, marginBottom: 14, flexWrap: 'wrap' }}>
           <KPI label="전체 검사건수" value={`${insp?.total_count || 0}건`} color="#1e3a5f" />
           <KPI label="불합격 건수" value={`${insp?.fail_count || 0}건`}
@@ -1080,7 +1087,7 @@ function QualityReportPanel() {
         )}
 
         {/* ── SECTION 3: 클레임 현황 ───────────────── */}
-        <SectionHeader num="3" title="클레임 현황 (고객 실패비용)" sub="VDA 6.3 P6 — 고객 만족" />
+        <SectionHeader num="3" title="클레임 현황 (고객 실패비용)" sub="고객 만족도 관리" />
         <div style={{ display: 'flex', gap: 10, marginBottom: 14, flexWrap: 'wrap' }}>
           <KPI label="총 클레임" value={`${clm?.total || 0}건`}
             color={(clm?.total || 0) === 0 ? '#059669' : '#dc2626'} />
@@ -1218,7 +1225,7 @@ function QualityReportPanel() {
 
         {/* ── SECTION 6: IATF 16949 현황 ─────────── */}
         {iatfData && (<>
-          <SectionHeader num="6" title="IATF 16949 현황" sub="SPC · 교정 · 감사 · PPAP · MSA" />
+          <SectionHeader num="6" title="품질시스템 운영 현황" sub="SPC · 교정 · 감사 · PPAP · MSA" />
 
           {/* SPC / Cpk */}
           <div style={{ fontWeight: 700, fontSize: 12, color: '#1e3a5f', marginBottom: 8 }}>SPC / Cpk 현황</div>

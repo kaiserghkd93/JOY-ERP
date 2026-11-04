@@ -434,10 +434,17 @@ function CostAnalysis() {
             { label: '총 매출', value: fmt(summary.total_revenue) + ' 원', color: '#059669' },
             { label: '총 마진', value: fmt(summary.total_margin) + ' 원', color: summary.total_margin >= 0 ? '#059669' : '#dc2626' },
             { label: '마진율', value: fmtR(summary.margin_rate), color: summary.margin_rate >= 0 ? '#059669' : '#dc2626' },
+            {
+              label: '불량 공수 로스',
+              value: `${(summary.defect_labor_loss_min || 0).toLocaleString()}분`,
+              color: (summary.defect_labor_loss_min || 0) === 0 ? '#059669' : '#b45309',
+              sub: `${Math.floor((summary.defect_labor_loss_min||0)/60)}h ${Math.round((summary.defect_labor_loss_min||0)%60)}m · 불량 ${fmt(summary.defect_qty||0)}EA`,
+            },
           ].map(k => (
             <div key={k.label} className="card" style={{ textAlign: 'center', padding: '12px 8px' }}>
               <div style={{ fontSize: 11, color: '#6b7280', marginBottom: 4 }}>{k.label}</div>
               <div style={{ fontSize: 16, fontWeight: 700, color: k.color }}>{k.value}</div>
+              {k.sub && <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 2 }}>{k.sub}</div>}
             </div>
           ))}
         </div>

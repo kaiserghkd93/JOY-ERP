@@ -279,6 +279,7 @@ class ProcessOutgoingDefect(Base):
     defect_qty: Mapped[int] = mapped_column(Integer, default=0)
     inspect_qty: Mapped[int] = mapped_column(Integer, default=0)
     unit_price: Mapped[int] = mapped_column(Integer, default=0)
+    labor_loss_min: Mapped[float] = mapped_column(Float, default=0)   # 공수 로스 (분) = defect_qty × manual_ct_sec / 60
     line_no: Mapped[str | None] = mapped_column(String(50))
     cause: Mapped[str | None] = mapped_column(Text)
     action_taken: Mapped[str | None] = mapped_column(Text)

@@ -67,6 +67,7 @@ class MesDefectDetail(Base):
     defect_cost: Mapped[float] = mapped_column(Numeric(18, 2), default=0) # 불량금액 = defect_qty × unit_cost
     production_cost: Mapped[float] = mapped_column(Numeric(18, 2), default=0) # 생산금액 = production_qty × unit_cost
     loss_rate: Mapped[float | None] = mapped_column(Float)          # 로스율 % = defect_cost / production_cost × 100
+    labor_loss_min: Mapped[float] = mapped_column(Float, default=0) # 공수 로스(분) = defect_qty × std_labor_min / 60
     mes_log_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("mes_production_log.id"))
     calc_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
 

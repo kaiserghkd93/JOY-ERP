@@ -537,6 +537,7 @@ class DefectRegCreate(BaseModel):
     defect_qty: int
     inspect_qty: int = 0
     unit_price: int = 0
+    labor_loss_min: float | None = None   # None이면 품목 C/T에서 자동 계산
     line_no: str | None = None
     cause: str | None = None
     action_taken: str | None = None
@@ -563,6 +564,7 @@ def _defect_row(r) -> dict:
         "defect_rate": round(r.defect_qty / r.inspect_qty * 100, 2) if r.inspect_qty else None,
         "unit_price": r.unit_price or 0,
         "loss_amount": r.defect_qty * (r.unit_price or 0),
+        "labor_loss_min": round(r.labor_loss_min or 0, 1),
         "line_no": r.line_no,
         "cause": r.cause,
         "action_taken": r.action_taken,
@@ -603,6 +605,12 @@ def list_defect_reg(
 @router.post("/defect-reg", status_code=201)
 def create_defect_reg(body: DefectRegCreate, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     from app.models.quality import DefectSourceType
+    # 공수 로스 자동 계산: 명시 입력 없으면 품목 manual_ct_sec 사용
+    labor_loss = body.labor_loss_min
+    if labor_loss is None:
+        item = db.query(Item).filter(Item.part_no == body.part_no).first()
+        ct_sec = (item.manual_ct_sec or 0) if item else 0
+        labor_loss = round(body.defect_qty * ct_sec / 60, 1)
     row = ProcessOutgoingDefect(
         defect_date=body.defect_date,
         inspect_type=body.inspect_type,
@@ -614,6 +622,7 @@ def create_defect_reg(body: DefectRegCreate, current_user: User = Depends(get_cu
         defect_qty=body.defect_qty,
         inspect_qty=body.inspect_qty,
         unit_price=body.unit_price,
+        labor_loss_min=labor_loss,
         line_no=body.line_no,
         cause=body.cause,
         action_taken=body.action_taken,
@@ -658,12 +667,14 @@ def defect_monthly_summary(
         g["total_inspect"] += r.inspect_qty
         g["total_defect"] += r.defect_qty
         g["total_loss"] += r.defect_qty * (r.unit_price or 0)
+        g["total_labor_loss_min"] = round(g.get("total_labor_loss_min", 0) + (r.labor_loss_min or 0), 1)
         g["items"].append(_defect_row(r))
 
     for g in outsource_map.values():
         g["defect_rate"] = round(g["total_defect"] / g["total_inspect"] * 100, 2) if g["total_inspect"] else None
 
     inhouse_loss = sum(r.defect_qty * (r.unit_price or 0) for r in inhouse)
+    inhouse_labor_loss = round(sum(r.labor_loss_min or 0 for r in inhouse), 1)
     return {
         "year": year,
         "month": month,
@@ -671,6 +682,7 @@ def defect_monthly_summary(
             "total_inspect": sum(r.inspect_qty for r in inhouse),
             "total_defect": sum(r.defect_qty for r in inhouse),
             "total_loss": inhouse_loss,
+            "total_labor_loss_min": inhouse_labor_loss,
             "items": [_defect_row(r) for r in inhouse],
         },
         "outsource": sorted(outsource_map.values(), key=lambda x: x["total_loss"], reverse=True),
@@ -688,6 +700,7 @@ class DefectRegUpdate(BaseModel):
     defect_qty: int | None = None
     inspect_qty: int | None = None
     unit_price: int | None = None
+    labor_loss_min: float | None = None
     line_no: str | None = None
     cause: str | None = None
     action_taken: str | None = None
@@ -744,11 +757,12 @@ def vda_quality_analysis(year: int, month: int, db: Session = Depends(get_db)):
         key = (r.defect_type or '미분류', r.inspect_type.value if hasattr(r.inspect_type, 'value') else str(r.inspect_type))
         if key not in type_map:
             type_map[key] = {"defect_type": r.defect_type or '미분류', "inspect_type": key[1],
-                             "defect_qty": 0, "inspect_qty": 0, "loss_cost": 0, "items": []}
+                             "defect_qty": 0, "inspect_qty": 0, "loss_cost": 0, "labor_loss_min": 0, "items": []}
         g = type_map[key]
         g["defect_qty"] += r.defect_qty
         g["inspect_qty"] += r.inspect_qty
         g["loss_cost"] += r.defect_qty * (r.unit_price or 0)
+        g["labor_loss_min"] = round(g["labor_loss_min"] + (r.labor_loss_min or 0), 1)
         g["items"].append({
             "id": r.id, "part_no": r.part_no, "part_name": r.part_name,
             "defect_qty": r.defect_qty, "cause": r.cause, "action_taken": r.action_taken,
@@ -756,8 +770,9 @@ def vda_quality_analysis(year: int, month: int, db: Session = Depends(get_db)):
         })
 
     defect_by_type = sorted(type_map.values(), key=lambda x: x["defect_qty"], reverse=True)
-    total_defect_qty = sum(d["defect_qty"] for d in defect_by_type)
-    total_loss_cost  = sum(d["loss_cost"]  for d in defect_by_type)
+    total_defect_qty    = sum(d["defect_qty"]    for d in defect_by_type)
+    total_loss_cost     = sum(d["loss_cost"]     for d in defect_by_type)
+    total_labor_loss_min = round(sum(d["labor_loss_min"] for d in defect_by_type), 1)
 
     # 누적비율 추가 (파레토)
     cum = 0
@@ -987,6 +1002,7 @@ def vda_quality_analysis(year: int, month: int, db: Session = Depends(get_db)):
         "defect_summary": {
             "total_defect_qty": total_defect_qty,
             "total_loss_cost": total_loss_cost,
+            "total_labor_loss_min": total_labor_loss_min,
             "by_type": defect_by_type,
             "top_parts": top_parts,
         },

@@ -249,6 +249,11 @@ def _save_defect_detail(db: Session, log: MesProductionLog, unit_cost: float | N
     production_cost = round(production_qty * unit_cost, 2)
     loss_rate = round(defect_cost / production_cost * 100, 2) if production_cost > 0 else None
 
+    # 공수 로스 (분): 표준 공수분 × 불량수량
+    from app.models.cost import ProductCostStd
+    cost_std = db.query(ProductCostStd).filter(ProductCostStd.part_no == log.part_no).first()
+    labor_loss_min = round((float(cost_std.std_labor_min) if cost_std and cost_std.std_labor_min else 0) * defect_qty, 1)
+
     existing = db.query(MesDefectDetail).filter(
         MesDefectDetail.prod_date == log.prod_date,
         MesDefectDetail.part_no == log.part_no,
@@ -264,6 +269,7 @@ def _save_defect_detail(db: Session, log: MesProductionLog, unit_cost: float | N
         existing.defect_cost = defect_cost
         existing.production_cost = production_cost
         existing.loss_rate = loss_rate
+        existing.labor_loss_min = labor_loss_min
         existing.calc_at = datetime.now()
     else:
         db.add(MesDefectDetail(
@@ -279,6 +285,7 @@ def _save_defect_detail(db: Session, log: MesProductionLog, unit_cost: float | N
             defect_cost=defect_cost,
             production_cost=production_cost,
             loss_rate=loss_rate,
+            labor_loss_min=labor_loss_min,
             mes_log_id=log.id,
         ))
     db.flush()
@@ -733,6 +740,13 @@ def get_cost_summary(
         WHERE prod_date BETWEEN :s AND :e
     """), {"s": start, "e": end}).fetchone()
 
+    # 불량 공수 로스 집계
+    dr = db.execute(text("""
+        SELECT SUM(labor_loss_min), SUM(defect_qty), SUM(defect_cost)
+        FROM mes_defect_detail
+        WHERE prod_date BETWEEN :s AND :e AND defect_qty > 0
+    """), {"s": start, "e": end}).fetchone()
+
     revenue = float(r[3] or 0)
     margin  = float(r[4] or 0)
     return {
@@ -745,6 +759,9 @@ def get_cost_summary(
         "part_count": r[5] or 0,
         "bom_ok_count": r[6] or 0,
         "bom_missing_count": r[7] or 0,
+        "defect_labor_loss_min": round(float(dr[0] or 0), 1),
+        "defect_qty": int(dr[1] or 0),
+        "defect_cost": float(dr[2] or 0),
     }
 
 
