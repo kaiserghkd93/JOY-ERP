@@ -1,6 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+from sqlalchemy import func, extract
 from datetime import date, datetime
+import calendar as _calendar
 from pydantic import BaseModel
 from app.database import get_db
 from app.models.quality import (
@@ -9,6 +11,8 @@ from app.models.quality import (
     NonConformance, NcrAppeal, NcrStatus, AppealStatus,
     ProcessOutgoingDefect, InspectType,
 )
+from app.models.master import Partner, Item
+from app.models.purchase import Receipt
 from app.models.auth import User
 from app.schemas.quality import (
     InspectionCreate, InspectionOut,
@@ -711,3 +715,208 @@ def delete_defect_reg(row_id: int, db: Session = Depends(get_db), _: User = Depe
         raise HTTPException(404, "not found")
     db.delete(row)
     db.commit()
+
+
+# ── VDA 6.3 분석 엔드포인트 ────────────────────────────────────────
+
+@router.get("/vda-analysis")
+def vda_quality_analysis(year: int, month: int, db: Session = Depends(get_db)):
+    """
+    VDA 6.3 기준 월별 품질 종합 분석
+    - 공정/출하 불량 유형별 파레토 + 로스비용
+    - 입고검사 불합격 협력사별 분석
+    - 클레임 현황 (고객 실패비용)
+    - ERP 자동진단 (워스트/베스트)
+    """
+    first_day = date(year, month, 1)
+    last_day = date(year, month, _calendar.monthrange(year, month)[1])
+
+    # ── 1. 공정/출하 불량 유형별 파레토 ──────────────────────────
+    defect_rows = db.query(ProcessOutgoingDefect).filter(
+        ProcessOutgoingDefect.defect_date >= first_day,
+        ProcessOutgoingDefect.defect_date <= last_day,
+    ).all()
+
+    # 불량유형별 집계
+    type_map: dict = {}
+    for r in defect_rows:
+        key = (r.defect_type or '미분류', r.inspect_type.value if hasattr(r.inspect_type, 'value') else str(r.inspect_type))
+        if key not in type_map:
+            type_map[key] = {"defect_type": r.defect_type or '미분류', "inspect_type": key[1],
+                             "defect_qty": 0, "inspect_qty": 0, "loss_cost": 0, "items": []}
+        g = type_map[key]
+        g["defect_qty"] += r.defect_qty
+        g["inspect_qty"] += r.inspect_qty
+        g["loss_cost"] += r.defect_qty * (r.unit_price or 0)
+        g["items"].append({
+            "id": r.id, "part_no": r.part_no, "part_name": r.part_name,
+            "defect_qty": r.defect_qty, "cause": r.cause, "action_taken": r.action_taken,
+            "status": r.status,
+        })
+
+    defect_by_type = sorted(type_map.values(), key=lambda x: x["defect_qty"], reverse=True)
+    total_defect_qty = sum(d["defect_qty"] for d in defect_by_type)
+    total_loss_cost  = sum(d["loss_cost"]  for d in defect_by_type)
+
+    # 누적비율 추가 (파레토)
+    cum = 0
+    for d in defect_by_type:
+        cum += d["defect_qty"]
+        d["cumulative_rate"] = round(cum / total_defect_qty * 100, 1) if total_defect_qty else 0
+        d["share_pct"] = round(d["defect_qty"] / total_defect_qty * 100, 1) if total_defect_qty else 0
+
+    # 품번별 로스비용 TOP5
+    part_loss: dict = {}
+    for r in defect_rows:
+        pn = r.part_no
+        if pn not in part_loss:
+            part_loss[pn] = {"part_no": pn, "part_name": r.part_name, "defect_qty": 0, "loss_cost": 0}
+        part_loss[pn]["defect_qty"] += r.defect_qty
+        part_loss[pn]["loss_cost"]  += r.defect_qty * (r.unit_price or 0)
+    top_parts = sorted(part_loss.values(), key=lambda x: x["loss_cost"], reverse=True)[:5]
+
+    # ── 2. 입고검사 불합격 분석 ──────────────────────────────────
+    fail_inspections = db.query(Inspection).filter(
+        Inspection.inspect_date >= first_day,
+        Inspection.inspect_date <= last_day,
+        Inspection.result == "불합격",
+    ).all()
+
+    fail_partner_map: dict = {}
+    for insp in fail_inspections:
+        receipt = insp.receipt
+        pid = receipt.partner_id if receipt else "미지정"
+        try:
+            partner = db.query(Partner).filter(Partner.partner_id == pid).first()
+            pname = partner.name if partner else pid
+        except Exception:
+            pname = pid
+        if pid not in fail_partner_map:
+            fail_partner_map[pid] = {"partner_id": pid, "partner_name": pname,
+                                      "fail_count": 0, "total_fail_qty": 0, "defect_notes": []}
+        fail_partner_map[pid]["fail_count"] += 1
+        fail_partner_map[pid]["total_fail_qty"] += insp.fail_qty or 0
+        if insp.defect_note:
+            fail_partner_map[pid]["defect_notes"].append(insp.defect_note)
+
+    # 전체 입고검사 현황
+    all_inspections = db.query(Inspection).filter(
+        Inspection.inspect_date >= first_day,
+        Inspection.inspect_date <= last_day,
+    ).all()
+    total_inspect_cnt = len(all_inspections)
+    fail_inspect_cnt  = len(fail_inspections)
+    pass_inspect_cnt  = sum(1 for i in all_inspections if str(i.result) in ('합격', 'pass_'))
+    incoming_pass_rate = round(pass_inspect_cnt / total_inspect_cnt * 100, 1) if total_inspect_cnt else None
+
+    fail_by_partner = sorted(fail_partner_map.values(), key=lambda x: x["fail_count"], reverse=True)
+
+    # ── 3. 클레임 현황 (고객 실패비용) ───────────────────────────
+    claims = db.query(QualityClaim).filter(
+        extract("year",  QualityClaim.occur_date) == year,
+        extract("month", QualityClaim.occur_date) == month,
+    ).all()
+
+    claim_by_customer: dict = {}
+    for c in claims:
+        pid = c.partner_id or "미지정"
+        try:
+            partner = db.query(Partner).filter(Partner.partner_id == pid).first()
+            pname = partner.name if partner else pid
+        except Exception:
+            pname = pid
+        if pid not in claim_by_customer:
+            claim_by_customer[pid] = {"partner_id": pid, "partner_name": pname,
+                                       "count": 0, "status_map": {}}
+        claim_by_customer[pid]["count"] += 1
+        st = c.status or "미분류"
+        claim_by_customer[pid]["status_map"][st] = claim_by_customer[pid]["status_map"].get(st, 0) + 1
+
+    claim_status_total: dict = {}
+    for c in claims:
+        st = c.status or "미분류"
+        claim_status_total[st] = claim_status_total.get(st, 0) + 1
+
+    # ── 4. ERP 자동진단 (워스트/베스트) ──────────────────────────
+    auto_insights = []
+
+    # 워스트 불량유형
+    if defect_by_type:
+        worst = defect_by_type[0]
+        auto_insights.append({
+            "level": "critical" if worst["share_pct"] >= 40 else "warn",
+            "category": "공정불량",
+            "title": f"최다 불량유형: {worst['defect_type']}",
+            "detail": f"불량수량 {worst['defect_qty']:,}개 ({worst['share_pct']}%) / 로스비용 {worst['loss_cost']:,}원",
+            "suggestion": f"'{worst['defect_type']}' 불량 원인 집중 분석 및 작업표준 재검토 필요",
+        })
+
+    # 로스비용 경보
+    if total_loss_cost >= 1_000_000:
+        auto_insights.append({
+            "level": "critical",
+            "category": "로스비용",
+            "title": f"공정불량 로스비용 {total_loss_cost:,}원",
+            "detail": f"총 {total_defect_qty:,}개 불량 발생",
+            "suggestion": "월 로스비용 목표 대비 초과 — 차월 개선목표 수립 필요",
+        })
+
+    # 입고검사 불합격 협력사
+    if fail_by_partner:
+        worst_supplier = fail_by_partner[0]
+        auto_insights.append({
+            "level": "warn",
+            "category": "입고검사",
+            "title": f"입고불합격 최다: {worst_supplier['partner_name']}",
+            "detail": f"불합격 {worst_supplier['fail_count']}건 / 불합격수량 {worst_supplier['total_fail_qty']:,}개",
+            "suggestion": f"{worst_supplier['partner_name']} 협력사 긴급 품질개선 요청 발송 필요",
+        })
+
+    # 클레임 경보
+    if len(claims) > 0:
+        open_claims = sum(1 for c in claims if c.status not in ('완료', '종결'))
+        auto_insights.append({
+            "level": "critical" if open_claims > 0 else "info",
+            "category": "클레임",
+            "title": f"고객 클레임 {len(claims)}건 발생",
+            "detail": f"처리중 {open_claims}건 / 완료 {len(claims)-open_claims}건",
+            "suggestion": "8D 보고서 작성 및 고객 실패비용 집계 필요",
+        })
+
+    # 합격률 경보
+    if incoming_pass_rate is not None and incoming_pass_rate < 95:
+        auto_insights.append({
+            "level": "warn",
+            "category": "수입검사",
+            "title": f"입고검사 합격률 {incoming_pass_rate}% (목표: 95% 이상)",
+            "detail": f"전체 {total_inspect_cnt}건 중 불합격 {fail_inspect_cnt}건",
+            "suggestion": "협력사 품질개선 요청 및 수입검사 강화 조치 필요",
+        })
+
+    return {
+        "year": year,
+        "month": month,
+        # 1. 공정/출하 불량
+        "defect_summary": {
+            "total_defect_qty": total_defect_qty,
+            "total_loss_cost": total_loss_cost,
+            "by_type": defect_by_type,
+            "top_parts": top_parts,
+        },
+        # 2. 입고검사
+        "incoming_inspection": {
+            "total_count": total_inspect_cnt,
+            "pass_count": pass_inspect_cnt,
+            "fail_count": fail_inspect_cnt,
+            "pass_rate": incoming_pass_rate,
+            "fail_by_partner": fail_by_partner,
+        },
+        # 3. 클레임
+        "claims": {
+            "total": len(claims),
+            "by_status": claim_status_total,
+            "by_customer": sorted(claim_by_customer.values(), key=lambda x: x["count"], reverse=True),
+        },
+        # 4. 자동진단
+        "auto_insights": auto_insights,
+    }

@@ -265,64 +265,148 @@ export function downloadProductionReport(plans, oee, kaizen, monthLabel) {
 }
 
 // ════════════════════════════════════════════════════════════════════
-// QUALITY REPORT
+// QUALITY REPORT  (VDA 6.3)
 // ════════════════════════════════════════════════════════════════════
-export function downloadQualityReport(summary, defectRate, monthLabel) {
+export function downloadQualityReport(vda, monthLabel) {
   const pres = newPres()
-  addCoverSlide(pres, '품질 KPI 보고서', monthLabel)
+  addCoverSlide(pres, '품질 보고서 (VDA 6.3)', monthLabel)
 
-  const s2 = addContentSlide(pres, '품질 KPI 현황', monthLabel)
+  const ds   = vda?.defect_summary   || {}
+  const insp = vda?.incoming_inspection || {}
+  const clm  = vda?.claims           || {}
+  const insights = vda?.auto_insights || []
 
-  if (summary) {
-    const cards = [
-      { label: '전체 클레임', value: `${summary.claims?.total ?? 0}건`, color: NAVY },
-      { label: '처리중', value: `${(summary.claims?.total ?? 0) - (summary.claims?.completed ?? 0)}건`, color: AMBER },
-      { label: '완료', value: `${summary.claims?.completed ?? 0}건`, color: GREEN },
-    ]
-    if (summary.incoming?.pass_rate != null)
-      cards.push({ label: '수입검사 합격률', value: `${summary.incoming.pass_rate}%`, color: summary.incoming.pass_rate >= 95 ? GREEN : AMBER, sub: `${summary.incoming.total}건` })
-    if (summary.defect?.rate != null)
-      cards.push({ label: '공정불량률', value: `${summary.defect.rate}%`, color: summary.defect.rate <= 1 ? GREEN : summary.defect.rate <= 3 ? AMBER : RED, sub: '목표 ≤ 1.0%' })
+  // ── Slide 2: 공정/출하 불량 KPI + 파레토 ────────────────────────
+  const s2 = addContentSlide(pres, 'P5 — 공정/출하 불량 현황', monthLabel)
+  const totalDefect = ds.total_defect_qty || 0
+  const totalLoss   = ds.total_loss_cost  || 0
+  const byType      = ds.by_type || []
 
-    const n = Math.min(cards.length, 5)
-    const cW = 9.5 / n - 0.1
-    cards.slice(0, n).forEach((c, i) => {
-      addKpiCard(s2, 0.25 + i * (cW + 0.1), 1.0, cW, 1.1, c.label, c.value, c.color, c.sub)
-    })
+  addKpiCard(s2, 0.2,  1.0, 3.0, 1.1, '총 불량수량',      `${totalDefect.toLocaleString()} EA`, totalDefect === 0 ? GREEN : RED)
+  addKpiCard(s2, 3.45, 1.0, 3.0, 1.1, '공정불량 로스비용', `${Math.round(totalLoss/10000).toLocaleString()}만원`, totalLoss === 0 ? GREEN : RED, '불량수량 × 단가')
+  addKpiCard(s2, 6.7,  1.0, 3.0, 1.1, '불량유형 수',       `${byType.length}종`, NAVY)
 
-    if (summary.claims?.by_status) {
-      s2.addText('클레임 처리 현황', { x: 0.2, y: 2.3, w: 9.5, h: 0.3, fontSize: 13, bold: true, color: NAVY, fontFace: 'Arial', isTextBox: true })
-      const sts = Object.entries(summary.claims.by_status)
-      const sW = 9.4 / sts.length - 0.1
-      sts.forEach(([st, cnt], i) => {
-        const col = st === '완료' ? GREEN : st === '접수' ? BLUE : st === '조사중' ? AMBER : G400
-        addKpiCard(s2, 0.2 + i * (sW + 0.1), 2.7, sW, 1.0, st, `${cnt}건`, col)
-      })
-    }
-  }
-
-  if (defectRate?.length > 0) {
-    const s3 = addContentSlide(pres, '협력사별 불량률 현황', monthLabel)
+  if (byType.length > 0) {
+    s2.addText('불량유형별 파레토', { x: 0.2, y: 2.3, w: 9.5, h: 0.3, fontSize: 11, bold: true, color: NAVY, fontFace: 'Arial', isTextBox: true })
     const rows = [
-      [hdr('협력사', 'left'), hdr('검사수량'), hdr('불량수량'), hdr('불량률'), hdr('평가')],
-      ...defectRate.slice(0, 14).map((r, i) => {
-        const rate = r.defect_rate || 0
-        const ev = rate <= 1 ? '우수' : rate <= 3 ? '보통' : '주의'
-        const ec = rate <= 1 ? GREEN : rate <= 3 ? AMBER : RED
-        const f = altFill(i)
+      [hdr('불량유형', 'left'), hdr('공정구분'), hdr('불량수량'), hdr('비중'), hdr('누적비율'), hdr('로스비용')],
+      ...byType.slice(0, 8).map((t, i) => {
+        const lc = t.loss_cost > 0 ? Math.round(t.loss_cost/10000).toLocaleString() + '만원' : '-'
+        const f  = altFill(i)
         return [
-          cell(r.partner_name || r.partner_id, { fill: f }),
-          cell((r.total_qty || 0).toLocaleString(), { align: 'right', fill: f }),
-          cell((r.defect_qty || 0).toLocaleString(), { align: 'right', fill: f }),
-          cell(`${rate.toFixed(2)}%`, { align: 'right', bold: true, color: ec, fill: f }),
-          cell(ev, { align: 'center', bold: true, color: ec, fill: f }),
+          cell(t.defect_type, { bold: true, fill: f }),
+          cell(t.inspect_type, { fill: f }),
+          cell(t.defect_qty.toLocaleString(), { align: 'right', bold: true, color: RED, fill: f }),
+          cell(`${t.share_pct}%`, { align: 'right', bold: true, color: t.cumulative_rate <= 80 ? RED : AMBER, fill: f }),
+          cell(`${t.cumulative_rate}%`, { align: 'right', color: G400, fill: f }),
+          cell(lc, { align: 'right', bold: t.loss_cost > 0, color: t.loss_cost > 0 ? RED : G400, fill: f }),
         ]
       }),
     ]
-    s3.addTable(rows, { x: 0.3, y: 1.05, w: 9.4, colW: [3.2, 1.9, 1.9, 1.5, 0.9] })
+    s2.addTable(rows, { x: 0.2, y: 2.65, w: 9.6, colW: [2.6, 1.6, 1.6, 1.2, 1.3, 1.3] })
+  } else {
+    s2.addText('이 기간 불량 등록 없음', { x: 0.2, y: 2.5, w: 9.5, h: 0.5, fontSize: 13, color: G400, fontFace: 'Arial', align: 'center', isTextBox: true })
   }
 
-  pres.writeFile({ fileName: `품질_KPI_보고서_${monthLabel}.pptx` })
+  // ── Slide 3: 입고검사 불합격 ─────────────────────────────────────
+  const s3 = addContentSlide(pres, 'P4 — 입고검사 불합격 현황', monthLabel)
+  const passRate = insp.pass_rate
+  addKpiCard(s3, 0.2,  1.0, 2.9, 1.1, '전체 검사건수', `${insp.total_count || 0}건`, NAVY)
+  addKpiCard(s3, 3.35, 1.0, 2.9, 1.1, '불합격 건수',   `${insp.fail_count  || 0}건`, (insp.fail_count || 0) === 0 ? GREEN : RED)
+  addKpiCard(s3, 6.5,  1.0, 3.1, 1.1, '입고 합격률',   passRate != null ? `${passRate}%` : '-',
+    passRate == null ? G400 : passRate >= 95 ? GREEN : passRate >= 90 ? AMBER : RED, '목표: 95% 이상')
+
+  const failPartners = insp.fail_by_partner || []
+  if (failPartners.length > 0) {
+    s3.addText('협력사별 불합격 현황 (외주처 개선요청 대상)', { x: 0.2, y: 2.3, w: 9.5, h: 0.3, fontSize: 11, bold: true, color: NAVY, fontFace: 'Arial', isTextBox: true })
+    const rows = [
+      [hdr('협력사', 'left'), hdr('불합격건수'), hdr('불합격수량'), hdr('불량 내용', 'left')],
+      ...failPartners.slice(0, 10).map((p, i) => {
+        const notes = (p.defect_notes || []).slice(0,2).join(' / ') || '-'
+        const f = altFill(i)
+        return [
+          cell(p.partner_name, { bold: true, fill: f }),
+          cell(`${p.fail_count}건`, { align: 'center', bold: true, color: RED, fill: f }),
+          cell((p.total_fail_qty || 0).toLocaleString(), { align: 'right', fill: f }),
+          cell(notes, { fill: f }),
+        ]
+      }),
+    ]
+    s3.addTable(rows, { x: 0.2, y: 2.65, w: 9.6, colW: [2.8, 1.6, 1.8, 3.4] })
+  } else {
+    s3.addText('불합격 없음 — 모든 입고검사 합격', { x: 0.2, y: 2.5, w: 9.5, h: 0.5, fontSize: 13, color: GREEN, fontFace: 'Arial', align: 'center', isTextBox: true })
+  }
+
+  // ── Slide 4: 클레임 현황 (고객 실패비용) ────────────────────────
+  const s4 = addContentSlide(pres, 'P6 — 클레임 현황 (고객 실패비용)', monthLabel)
+  const totalClm = clm.total || 0
+  addKpiCard(s4, 0.2, 1.0, 3.0, 1.1, '총 클레임', `${totalClm}건`, totalClm === 0 ? GREEN : RED)
+
+  const statusEntries = Object.entries(clm.by_status || {})
+  if (statusEntries.length > 0) {
+    const sW = Math.min(9.0 / statusEntries.length - 0.15, 2.8)
+    const startX = 3.5
+    statusEntries.forEach(([st, cnt], i) => {
+      const col = st === '완료' ? GREEN : st === '접수' ? BLUE : AMBER
+      addKpiCard(s4, startX + i * (sW + 0.15), 1.0, sW, 1.1, st, `${cnt}건`, col)
+    })
+  }
+
+  const byCustomer = clm.by_customer || []
+  if (byCustomer.length > 0) {
+    s4.addText('고객사별 클레임 현황', { x: 0.2, y: 2.3, w: 9.5, h: 0.3, fontSize: 11, bold: true, color: NAVY, fontFace: 'Arial', isTextBox: true })
+    const rows = [
+      [hdr('고객사', 'left'), hdr('클레임수'), hdr('처리현황', 'left')],
+      ...byCustomer.slice(0, 12).map((c, i) => {
+        const stSummary = Object.entries(c.status_map || {}).map(([st,n]) => `${st} ${n}건`).join(' / ')
+        const f = altFill(i)
+        return [
+          cell(c.partner_name, { bold: true, fill: f }),
+          cell(`${c.count}건`, { align: 'center', bold: true, color: RED, fill: f }),
+          cell(stSummary || '-', { fill: f }),
+        ]
+      }),
+    ]
+    s4.addTable(rows, { x: 0.2, y: 2.65, w: 9.6, colW: [3.5, 1.6, 4.5] })
+  } else {
+    s4.addText('이 기간 클레임 없음', { x: 0.2, y: 2.5, w: 9.5, h: 0.5, fontSize: 13, color: GREEN, fontFace: 'Arial', align: 'center', isTextBox: true })
+  }
+
+  // ── Slide 5: ERP 자동진단 ────────────────────────────────────────
+  if (insights.length > 0) {
+    const s5 = addContentSlide(pres, 'ERP 자동진단 — 워스트/베스트 & 개선사항', monthLabel)
+    insights.slice(0, 5).forEach((ins, i) => {
+      const col  = ins.level === 'critical' ? RED : ins.level === 'warn' ? AMBER : BLUE
+      const lbl  = ins.level === 'critical' ? '긴급' : ins.level === 'warn' ? '주의' : '정보'
+      const yPos = 1.0 + i * 0.9
+      s5.addShape('rect', { x: 0.2, y: yPos, w: 9.6, h: 0.78, fill: { color: G50 }, line: { color: col, width: 2 } })
+      s5.addShape('rect', { x: 0.2, y: yPos, w: 0.1, h: 0.78, fill: { color: col } })
+      s5.addText(lbl, {
+        x: 0.4, y: yPos + 0.06, w: 0.7, h: 0.22,
+        fontSize: 8, color: WHITE, fontFace: 'Arial', bold: true, fill: { color: col }, align: 'center', isTextBox: true,
+      })
+      s5.addText(`[${ins.category}] ${ins.title}`, {
+        x: 1.2, y: yPos + 0.05, w: 8.4, h: 0.26,
+        fontSize: 11, color: col, fontFace: 'Arial', bold: true, isTextBox: true,
+      })
+      s5.addText(`${ins.detail}  |  💡 ${ins.suggestion}`, {
+        x: 1.2, y: yPos + 0.35, w: 8.4, h: 0.32,
+        fontSize: 9, color: G700, fontFace: 'Arial', isTextBox: true,
+      })
+    })
+  }
+
+  // ── Slide 6: 개선방향 (사용자 작성용 빈 양식) ───────────────────
+  const s6 = addContentSlide(pres, '차월 개선방향 (담당자 작성)', monthLabel)
+  const sections = ['공정불량 개선방향', '입고검사 불합격 외주처 조치', '클레임 고객 실패비용 개선', '수입검사 강화 방안']
+  sections.forEach((title, i) => {
+    const yPos = 1.0 + i * 1.1
+    s6.addShape('rect', { x: 0.2, y: yPos, w: 9.6, h: 0.95, fill: { color: G50 }, line: { color: G200, width: 1 } })
+    s6.addText(title, { x: 0.35, y: yPos + 0.07, w: 3.0, h: 0.25, fontSize: 10, color: NAVY, fontFace: 'Arial', bold: true, isTextBox: true })
+    s6.addText('[ 담당자 작성 ] :', { x: 0.35, y: yPos + 0.38, w: 9.0, h: 0.45, fontSize: 9, color: G400, fontFace: 'Arial', isTextBox: true })
+  })
+
+  pres.writeFile({ fileName: `품질_VDA63_보고서_${monthLabel}.pptx` })
 }
 
 // ════════════════════════════════════════════════════════════════════

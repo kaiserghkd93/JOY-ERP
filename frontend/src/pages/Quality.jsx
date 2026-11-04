@@ -871,110 +871,353 @@ const APPR_BADGE = {
 function QualityReportPanel() {
   const now = new Date()
   const [ym, setYm] = useState(`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`)
-  const [summary, setSummary] = useState(null)
-  const [defectRate, setDefectRate] = useState([])
+  const [vda, setVda] = useState(null)
+  const [improvements, setImprovements] = useState([])
   const [loading, setLoading] = useState(false)
   const [downloading, setDownloading] = useState(false)
+  const [taskForm, setTaskForm] = useState({ open: false, title: '', source_category: '공정불량', root_cause: '', action_plan: '', target_dept: '', target_date: '' })
+  const [savingTask, setSavingTask] = useState(false)
+
+  const ymParts = ym.split('-')
+  const y = Number(ymParts[0])
+  const m = Number(ymParts[1])
 
   const handlePptDownload = async () => {
     setDownloading(true)
-    const [y, m] = ym.split('-')
-    try { await downloadQualityReport(summary, defectRate, `${y}년 ${Number(m)}월`) } finally { setDownloading(false) }
+    try { await downloadQualityReport(vda, `${y}년 ${m}월`) } finally { setDownloading(false) }
   }
 
   useEffect(() => {
-    const [y, m] = ym.split('-')
     setLoading(true)
     Promise.all([
-      api.get('/dashboard/quality-summary').then(r => setSummary(r.data)).catch(() => setSummary(null)),
-      api.get(`/quality/defect-rate?year=${y}&month=${m}`).then(r => setDefectRate(r.data)).catch(() => setDefectRate([])),
+      api.get(`/quality/vda-analysis?year=${y}&month=${m}`).then(r => setVda(r.data)).catch(() => setVda(null)),
+      api.get(`/improvement?year=${y}&month=${m}&source_module=quality`).then(r => setImprovements(r.data)).catch(() => setImprovements([])),
     ]).finally(() => setLoading(false))
   }, [ym])
 
-  const KPI = ({ label, value, color, sub }) => (
-    <div style={{ background: '#f8fafc', border: '1px solid var(--border)', borderRadius: 10, padding: '14px 20px', minWidth: 140, flex: 1 }}>
-      <div style={{ fontSize: 11, color: '#64748b', marginBottom: 6, fontWeight: 600 }}>{label}</div>
-      <div style={{ fontSize: 24, fontWeight: 800, color: color || '#1e3a5f' }}>{value}</div>
-      {sub && <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>{sub}</div>}
+  const handleSaveTask = async () => {
+    if (!taskForm.title.trim()) return
+    setSavingTask(true)
+    try {
+      await api.post('/improvement', { year: y, month: m, source_module: 'quality', source_category: taskForm.source_category, title: taskForm.title, root_cause: taskForm.root_cause || null, action_plan: taskForm.action_plan || null, target_dept: taskForm.target_dept || null, target_date: taskForm.target_date || null })
+      setTaskForm({ open: false, title: '', source_category: '공정불량', root_cause: '', action_plan: '', target_dept: '', target_date: '' })
+      api.get(`/improvement?year=${y}&month=${m}&source_module=quality`).then(r => setImprovements(r.data)).catch(() => {})
+    } catch { alert('등록 실패') } finally { setSavingTask(false) }
+  }
+
+  const insightColor = lvl => lvl === 'critical' ? '#dc2626' : lvl === 'warn' ? '#d97706' : '#1d4ed8'
+  const insightBg = lvl => lvl === 'critical' ? '#fef2f2' : lvl === 'warn' ? '#fffbeb' : '#eff6ff'
+
+  const SectionHeader = ({ num, title, sub }) => (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '24px 0 12px', borderBottom: '2px solid #1e3a5f', paddingBottom: 6 }}>
+      <span style={{ background: '#1e3a5f', color: '#fff', borderRadius: '50%', width: 22, height: 22, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800, flexShrink: 0 }}>{num}</span>
+      <span style={{ fontWeight: 800, fontSize: 14, color: '#1e3a5f' }}>{title}</span>
+      {sub && <span style={{ fontSize: 11, color: '#64748b', marginLeft: 4 }}>{sub}</span>}
     </div>
   )
 
+  const KPI = ({ label, value, color, sub }) => (
+    <div style={{ background: '#f8fafc', border: '1px solid var(--border)', borderRadius: 8, padding: '12px 16px', minWidth: 130, flex: 1 }}>
+      <div style={{ fontSize: 10, color: '#64748b', fontWeight: 700, marginBottom: 4, textTransform: 'uppercase' }}>{label}</div>
+      <div style={{ fontSize: 22, fontWeight: 800, color: color || '#1e3a5f' }}>{value}</div>
+      {sub && <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 3 }}>{sub}</div>}
+    </div>
+  )
+
+  const ds = vda?.defect_summary
+  const insp = vda?.incoming_inspection
+  const clm = vda?.claims
+  const insights = vda?.auto_insights || []
+
   return (
-    <div style={{ padding: '0 0 32px' }}>
+    <div style={{ padding: '0 0 40px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
-        <span style={{ fontWeight: 700, fontSize: 15 }}>품질 KPI 보고서</span>
+        <span style={{ fontWeight: 700, fontSize: 15 }}>품질 보고서 (VDA 6.3)</span>
         <input type="month" value={ym} onChange={e => setYm(e.target.value)}
           style={{ border: '1px solid var(--border)', borderRadius: 4, padding: '4px 8px', fontSize: 13 }} />
-        <button onClick={handlePptDownload} disabled={downloading || loading}
+        <button onClick={handlePptDownload} disabled={downloading || loading || !vda}
           style={{ marginLeft: 'auto', padding: '5px 14px', fontSize: 12, fontWeight: 700,
-            background: downloading ? '#94a3b8' : '#1e3a5f', color: '#fff',
-            border: 'none', borderRadius: 6, cursor: 'pointer' }}>
+            background: downloading ? '#94a3b8' : '#1e3a5f', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer' }}>
           {downloading ? '생성 중...' : '📊 PPT 다운로드'}
         </button>
       </div>
-      {loading ? <div style={{ textAlign: 'center', padding: 40, color: '#94a3b8' }}>로딩 중...</div> : (<>
-      {summary && (
-        <div style={{ display: 'flex', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
-          <KPI label="전체 클레임" value={`${summary.claims?.total ?? 0}건`} />
-          <KPI label="처리중" value={`${(summary.claims?.total ?? 0) - (summary.claims?.completed ?? 0)}건`} color="#d97706" />
-          <KPI label="완료" value={`${summary.claims?.completed ?? 0}건`} color="#059669" />
-          {summary.incoming && <KPI label="수입검사 합격률" value={`${summary.incoming.pass_rate ?? '-'}%`}
-            color={(summary.incoming.pass_rate ?? 0) >= 95 ? '#059669' : '#d97706'} sub={`${summary.incoming.total ?? 0}건 검사`} />}
-          {summary.defect && <KPI label="공정불량률" value={`${summary.defect.rate ?? '-'}%`}
-            color={(summary.defect.rate ?? 0) <= 1 ? '#059669' : (summary.defect.rate ?? 0) <= 3 ? '#d97706' : '#dc2626'}
-            sub="목표 ≤ 1.0%" />}
-        </div>
-      )}
 
-      {/* 협력사별 불량률 */}
-      {defectRate.length > 0 && (
-        <div style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: 10, padding: 16, marginBottom: 20 }}>
-          <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 12 }}>협력사별 불량률 현황</div>
-          <div className="table-wrap">
-            <table>
-              <thead><tr>
-                <th>협력사</th><th style={{ textAlign: 'right' }}>검사수량</th>
-                <th style={{ textAlign: 'right' }}>불량수량</th>
-                <th style={{ textAlign: 'right' }}>불량률</th><th>평가</th>
-              </tr></thead>
-              <tbody>
-                {defectRate.slice(0, 15).map((r, i) => (
-                  <tr key={i}>
-                    <td>{r.partner_name || r.partner_id}</td>
-                    <td style={{ textAlign: 'right' }}>{(r.total_qty || 0).toLocaleString()}</td>
-                    <td style={{ textAlign: 'right', color: '#dc2626' }}>{(r.defect_qty || 0).toLocaleString()}</td>
-                    <td style={{ textAlign: 'right', fontWeight: 700,
-                      color: (r.defect_rate || 0) <= 1 ? '#059669' : (r.defect_rate || 0) <= 3 ? '#d97706' : '#dc2626' }}>
-                      {(r.defect_rate || 0).toFixed(2)}%
-                    </td>
-                    <td><span className={`badge ${(r.defect_rate || 0) <= 1 ? 'badge-green' : (r.defect_rate || 0) <= 3 ? 'badge-amber' : 'badge-red'}`}>
-                      {(r.defect_rate || 0) <= 1 ? '우수' : (r.defect_rate || 0) <= 3 ? '보통' : '주의'}
-                    </span></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+      {loading ? (
+        <div style={{ textAlign: 'center', padding: 40, color: '#94a3b8' }}>로딩 중...</div>
+      ) : !vda ? (
+        <div style={{ textAlign: 'center', color: '#94a3b8', padding: 40 }}>데이터가 없습니다.</div>
+      ) : (<>
+
+        {/* ── SECTION 1: 공정/출하 불량 ───────────── */}
+        <SectionHeader num="1" title="공정 / 출하 불량 현황" sub="VDA 6.3 P5 — 공정 프로세스" />
+        <div style={{ display: 'flex', gap: 10, marginBottom: 14, flexWrap: 'wrap' }}>
+          <KPI label="총 불량수량" value={`${(ds?.total_defect_qty || 0).toLocaleString()} EA`}
+            color={(ds?.total_defect_qty || 0) === 0 ? '#059669' : '#dc2626'} />
+          <KPI label="공정불량 로스비용" value={`${Math.round((ds?.total_loss_cost || 0) / 10000).toLocaleString()}만원`}
+            color={(ds?.total_loss_cost || 0) === 0 ? '#059669' : '#dc2626'} sub="불량수량 × 단가" />
+          <KPI label="불량유형 수" value={`${ds?.by_type?.length || 0}종`} color="#1e3a5f" />
+        </div>
+
+        {ds?.by_type?.length > 0 ? (
+          <div style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: 10, padding: 14, marginBottom: 14 }}>
+            <div style={{ fontWeight: 700, fontSize: 12, color: '#1e3a5f', marginBottom: 10 }}>불량유형별 파레토 분석</div>
+            <div className="table-wrap">
+              <table>
+                <thead><tr>
+                  <th>불량유형</th><th>공정구분</th>
+                  <th style={{ textAlign: 'right' }}>불량수량</th>
+                  <th style={{ textAlign: 'right' }}>비중</th>
+                  <th style={{ textAlign: 'right' }}>누적비율</th>
+                  <th style={{ textAlign: 'right' }}>로스비용</th>
+                </tr></thead>
+                <tbody>
+                  {ds.by_type.map((t, i) => (
+                    <tr key={i}>
+                      <td><b>{t.defect_type}</b></td>
+                      <td>{t.inspect_type}</td>
+                      <td style={{ textAlign: 'right', color: '#dc2626', fontWeight: 700 }}>{t.defect_qty.toLocaleString()}</td>
+                      <td style={{ textAlign: 'right' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, justifyContent: 'flex-end' }}>
+                          <div style={{ width: 60, height: 8, background: '#e2e8f0', borderRadius: 4, overflow: 'hidden' }}>
+                            <div style={{ width: `${t.share_pct}%`, height: '100%', background: t.cumulative_rate <= 80 ? '#dc2626' : '#d97706', borderRadius: 4 }} />
+                          </div>
+                          <span style={{ fontWeight: 700, color: t.cumulative_rate <= 80 ? '#dc2626' : '#64748b' }}>{t.share_pct}%</span>
+                        </div>
+                      </td>
+                      <td style={{ textAlign: 'right', color: '#94a3b8' }}>{t.cumulative_rate}%</td>
+                      <td style={{ textAlign: 'right', fontWeight: 700, color: t.loss_cost > 0 ? '#dc2626' : '#64748b' }}>
+                        {t.loss_cost > 0 ? Math.round(t.loss_cost / 10000).toLocaleString() + '만원' : '-'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
-        </div>
-      )}
+        ) : (
+          <div style={{ background: '#f8fafc', borderRadius: 8, padding: 16, marginBottom: 14, color: '#94a3b8', textAlign: 'center' }}>이 기간 불량 등록 없음</div>
+        )}
 
-      {/* 클레임 처리 현황 */}
-      {summary?.claims && (
-        <div style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: 10, padding: 16 }}>
-          <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 12 }}>클레임 처리 현황</div>
-          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-            {Object.entries(summary.claims.by_status || {}).map(([st, cnt]) => (
-              <div key={st} style={{ background: '#f8fafc', border: '1px solid var(--border)', borderRadius: 8, padding: '10px 20px', textAlign: 'center' }}>
-                <div style={{ fontSize: 22, fontWeight: 800 }}>{cnt}</div>
-                <div style={{ fontSize: 11, color: '#64748b' }}>{st}</div>
+        {ds?.top_parts?.length > 0 && (
+          <div style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: 10, padding: 14, marginBottom: 8 }}>
+            <div style={{ fontWeight: 700, fontSize: 12, color: '#1e3a5f', marginBottom: 10 }}>로스비용 TOP 5 품번</div>
+            <div className="table-wrap">
+              <table>
+                <thead><tr>
+                  <th>품번</th><th>품명</th>
+                  <th style={{ textAlign: 'right' }}>불량수량</th>
+                  <th style={{ textAlign: 'right' }}>로스비용</th>
+                </tr></thead>
+                <tbody>
+                  {ds.top_parts.map((p, i) => (
+                    <tr key={i}>
+                      <td><b>{p.part_no}</b></td>
+                      <td>{p.part_name || '-'}</td>
+                      <td style={{ textAlign: 'right', color: '#dc2626' }}>{p.defect_qty.toLocaleString()}</td>
+                      <td style={{ textAlign: 'right', fontWeight: 700, color: p.loss_cost > 0 ? '#dc2626' : '#64748b' }}>
+                        {p.loss_cost > 0 ? Math.round(p.loss_cost / 10000).toLocaleString() + '만원' : '-'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* ── SECTION 2: 입고검사 불합격 ──────────── */}
+        <SectionHeader num="2" title="입고검사 불합격 현황" sub="VDA 6.3 P4 — 협력사 프로세스" />
+        <div style={{ display: 'flex', gap: 10, marginBottom: 14, flexWrap: 'wrap' }}>
+          <KPI label="전체 검사건수" value={`${insp?.total_count || 0}건`} color="#1e3a5f" />
+          <KPI label="불합격 건수" value={`${insp?.fail_count || 0}건`}
+            color={(insp?.fail_count || 0) === 0 ? '#059669' : '#dc2626'} />
+          <KPI label="입고 합격률" value={insp?.pass_rate != null ? `${insp.pass_rate}%` : '-'}
+            color={insp?.pass_rate == null ? '#94a3b8' : insp.pass_rate >= 95 ? '#059669' : insp.pass_rate >= 90 ? '#d97706' : '#dc2626'}
+            sub="목표: 95% 이상" />
+        </div>
+
+        {insp?.fail_by_partner?.length > 0 ? (
+          <div style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: 10, padding: 14, marginBottom: 8 }}>
+            <div style={{ fontWeight: 700, fontSize: 12, color: '#1e3a5f', marginBottom: 10 }}>협력사별 불합격 현황 (외주처 개선요청 대상)</div>
+            <div className="table-wrap">
+              <table>
+                <thead><tr>
+                  <th>협력사</th>
+                  <th style={{ textAlign: 'right' }}>불합격건수</th>
+                  <th style={{ textAlign: 'right' }}>불합격수량</th>
+                  <th>불량 내용</th>
+                </tr></thead>
+                <tbody>
+                  {insp.fail_by_partner.map((p, i) => (
+                    <tr key={i}>
+                      <td><b>{p.partner_name}</b></td>
+                      <td style={{ textAlign: 'right', color: '#dc2626', fontWeight: 700 }}>{p.fail_count}건</td>
+                      <td style={{ textAlign: 'right' }}>{(p.total_fail_qty || 0).toLocaleString()}</td>
+                      <td style={{ fontSize: 11, color: '#64748b' }}>{p.defect_notes?.slice(0, 2).join(' / ') || '-'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        ) : (
+          <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, padding: 14, marginBottom: 14, color: '#059669', textAlign: 'center', fontWeight: 700 }}>
+            불합격 없음 — 모든 입고검사 합격
+          </div>
+        )}
+
+        {/* ── SECTION 3: 클레임 현황 ───────────────── */}
+        <SectionHeader num="3" title="클레임 현황 (고객 실패비용)" sub="VDA 6.3 P6 — 고객 만족" />
+        <div style={{ display: 'flex', gap: 10, marginBottom: 14, flexWrap: 'wrap' }}>
+          <KPI label="총 클레임" value={`${clm?.total || 0}건`}
+            color={(clm?.total || 0) === 0 ? '#059669' : '#dc2626'} />
+          {Object.entries(clm?.by_status || {}).map(([st, cnt]) => (
+            <KPI key={st} label={st} value={`${cnt}건`}
+              color={st === '완료' ? '#059669' : st === '접수' ? '#1d4ed8' : '#d97706'} />
+          ))}
+        </div>
+
+        {clm?.by_customer?.length > 0 ? (
+          <div style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: 10, padding: 14, marginBottom: 8 }}>
+            <div style={{ fontWeight: 700, fontSize: 12, color: '#1e3a5f', marginBottom: 10 }}>고객사별 클레임 현황</div>
+            <div className="table-wrap">
+              <table>
+                <thead><tr>
+                  <th>고객사</th>
+                  <th style={{ textAlign: 'right' }}>클레임수</th>
+                  <th>처리 현황</th>
+                </tr></thead>
+                <tbody>
+                  {clm.by_customer.map((c, i) => (
+                    <tr key={i}>
+                      <td><b>{c.partner_name}</b></td>
+                      <td style={{ textAlign: 'right', fontWeight: 700, color: '#dc2626' }}>{c.count}건</td>
+                      <td>
+                        {Object.entries(c.status_map || {}).map(([st, n]) => (
+                          <span key={st} className={`badge ${st === '완료' ? 'badge-green' : st === '접수' ? 'badge-blue' : 'badge-amber'}`}
+                            style={{ marginRight: 4 }}>{st} {n}</span>
+                        ))}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        ) : (
+          <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, padding: 14, marginBottom: 14, color: '#059669', textAlign: 'center', fontWeight: 700 }}>
+            이 기간 클레임 없음
+          </div>
+        )}
+
+        {/* ── SECTION 4: ERP 자동진단 ──────────────── */}
+        <SectionHeader num="4" title="ERP 자동진단" sub="워스트 / 베스트 선정 및 개선사항" />
+        {insights.length > 0 ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 8 }}>
+            {insights.map((ins, i) => (
+              <div key={i} style={{ background: insightBg(ins.level), border: `1px solid ${insightColor(ins.level)}40`, borderLeft: `4px solid ${insightColor(ins.level)}`, borderRadius: 8, padding: '12px 16px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                  <span style={{ background: insightColor(ins.level), color: '#fff', fontSize: 10, fontWeight: 800, padding: '2px 7px', borderRadius: 4 }}>
+                    {ins.level === 'critical' ? '🔴 긴급' : ins.level === 'warn' ? '🟡 주의' : '🔵 정보'}
+                  </span>
+                  <span style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>{ins.category}</span>
+                </div>
+                <div style={{ fontWeight: 700, fontSize: 13, color: insightColor(ins.level), marginBottom: 4 }}>{ins.title}</div>
+                <div style={{ fontSize: 12, color: '#475569', marginBottom: 6 }}>{ins.detail}</div>
+                <div style={{ fontSize: 11, color: '#64748b', background: 'rgba(255,255,255,0.6)', padding: '5px 10px', borderRadius: 4, borderLeft: '3px solid #94a3b8' }}>
+                  💡 {ins.suggestion}
+                </div>
               </div>
             ))}
           </div>
-        </div>
-      )}
-      {(!summary && defectRate.length === 0) && (
-        <div style={{ textAlign: 'center', color: '#94a3b8', padding: 40 }}>데이터 없음</div>
-      )}
+        ) : (
+          <div style={{ background: '#f8fafc', borderRadius: 8, padding: 16, marginBottom: 14, color: '#94a3b8', textAlign: 'center' }}>자동진단 항목 없음 (데이터 부족)</div>
+        )}
+
+        {/* ── SECTION 5: 부서별 개선과제 등록 ────── */}
+        <SectionHeader num="5" title="부서별 개선과제 등록" sub="품질 담당자 직접 입력" />
+
+        {improvements.length > 0 && (
+          <div style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: 10, padding: 14, marginBottom: 14 }}>
+            <div style={{ fontWeight: 700, fontSize: 12, color: '#1e3a5f', marginBottom: 10 }}>{y}년 {m}월 개선과제 ({improvements.length}건)</div>
+            <div className="table-wrap">
+              <table>
+                <thead><tr>
+                  <th>분류</th><th>제목</th><th>담당부서</th><th>목표일</th><th>상태</th>
+                </tr></thead>
+                <tbody>
+                  {improvements.map((imp) => (
+                    <tr key={imp.id}>
+                      <td><span className="badge badge-blue">{imp.source_category}</span></td>
+                      <td style={{ fontWeight: 600 }}>{imp.title}</td>
+                      <td>{imp.target_dept || '-'}</td>
+                      <td style={{ color: '#64748b', fontSize: 12 }}>{imp.target_date || '-'}</td>
+                      <td><span className={`badge ${imp.status === '완료' ? 'badge-green' : imp.status === '진행중' ? 'badge-blue' : imp.status === '보류' ? 'badge-gray' : 'badge-amber'}`}>{imp.status}</span></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {!taskForm.open ? (
+          <button onClick={() => setTaskForm(f => ({ ...f, open: true }))}
+            style={{ padding: '8px 18px', fontSize: 13, fontWeight: 700, background: '#1d4ed8', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', marginBottom: 8 }}>
+            + 개선과제 등록
+          </button>
+        ) : (
+          <div style={{ background: '#fff', border: '1px solid #1d4ed8', borderRadius: 10, padding: 20, marginBottom: 8 }}>
+            <div style={{ fontWeight: 700, fontSize: 13, color: '#1e3a5f', marginBottom: 14 }}>새 개선과제 등록</div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
+              <div>
+                <label style={{ fontSize: 11, fontWeight: 700, color: '#64748b', display: 'block', marginBottom: 4 }}>분류</label>
+                <select value={taskForm.source_category} onChange={e => setTaskForm(f => ({ ...f, source_category: e.target.value }))}
+                  style={{ width: '100%', padding: '6px 8px', border: '1px solid var(--border)', borderRadius: 4, fontSize: 13 }}>
+                  {['공정불량','출하불량','입고불합격','클레임','수입검사','기타'].map(o => <option key={o}>{o}</option>)}
+                </select>
+              </div>
+              <div>
+                <label style={{ fontSize: 11, fontWeight: 700, color: '#64748b', display: 'block', marginBottom: 4 }}>담당부서</label>
+                <input value={taskForm.target_dept} onChange={e => setTaskForm(f => ({ ...f, target_dept: e.target.value }))}
+                  placeholder="예: 품질팀" style={{ width: '100%', padding: '6px 8px', border: '1px solid var(--border)', borderRadius: 4, fontSize: 13, boxSizing: 'border-box' }} />
+              </div>
+            </div>
+            <div style={{ marginBottom: 10 }}>
+              <label style={{ fontSize: 11, fontWeight: 700, color: '#64748b', display: 'block', marginBottom: 4 }}>과제 제목 *</label>
+              <input value={taskForm.title} onChange={e => setTaskForm(f => ({ ...f, title: e.target.value }))}
+                placeholder="개선과제 제목을 입력하세요" style={{ width: '100%', padding: '7px 10px', border: '1px solid var(--border)', borderRadius: 4, fontSize: 13, boxSizing: 'border-box' }} />
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 10 }}>
+              <div>
+                <label style={{ fontSize: 11, fontWeight: 700, color: '#64748b', display: 'block', marginBottom: 4 }}>원인 분석</label>
+                <textarea value={taskForm.root_cause} onChange={e => setTaskForm(f => ({ ...f, root_cause: e.target.value }))}
+                  rows={3} placeholder="불량 원인 분석" style={{ width: '100%', padding: '6px 8px', border: '1px solid var(--border)', borderRadius: 4, fontSize: 12, resize: 'vertical', boxSizing: 'border-box' }} />
+              </div>
+              <div>
+                <label style={{ fontSize: 11, fontWeight: 700, color: '#64748b', display: 'block', marginBottom: 4 }}>개선 계획</label>
+                <textarea value={taskForm.action_plan} onChange={e => setTaskForm(f => ({ ...f, action_plan: e.target.value }))}
+                  rows={3} placeholder="차월 개선 계획 및 조치사항" style={{ width: '100%', padding: '6px 8px', border: '1px solid var(--border)', borderRadius: 4, fontSize: 12, resize: 'vertical', boxSizing: 'border-box' }} />
+              </div>
+            </div>
+            <div style={{ marginBottom: 14 }}>
+              <label style={{ fontSize: 11, fontWeight: 700, color: '#64748b', display: 'block', marginBottom: 4 }}>목표 완료일</label>
+              <input type="date" value={taskForm.target_date} onChange={e => setTaskForm(f => ({ ...f, target_date: e.target.value }))}
+                style={{ padding: '6px 8px', border: '1px solid var(--border)', borderRadius: 4, fontSize: 13 }} />
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={handleSaveTask} disabled={savingTask || !taskForm.title.trim()}
+                style={{ padding: '7px 18px', fontSize: 13, fontWeight: 700, background: savingTask || !taskForm.title.trim() ? '#94a3b8' : '#1d4ed8', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer' }}>
+                {savingTask ? '저장 중...' : '등록'}
+              </button>
+              <button onClick={() => setTaskForm(f => ({ ...f, open: false }))}
+                style={{ padding: '7px 14px', fontSize: 13, background: '#f1f5f9', color: '#475569', border: '1px solid var(--border)', borderRadius: 6, cursor: 'pointer' }}>
+                취소
+              </button>
+            </div>
+          </div>
+        )}
+
       </>)}
     </div>
   )
