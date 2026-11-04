@@ -596,6 +596,99 @@ def smed_end(log_id: int, body: MoldChangeEnd, db: Session = Depends(get_db)):
     }
 
 
+@router.get("/loss-analysis")
+def loss_analysis(year: int = Query(...), month: int = Query(...), db: Session = Depends(get_db)):
+    """호기별·원인별 비가동 시간 집계 (OeeDaily loss_* 필드 활용)"""
+    import calendar as cal
+    first_day = date(year, month, 1)
+    last_day  = date(year, month, cal.monthrange(year, month)[1])
+
+    rows = db.query(OeeDaily).filter(
+        OeeDaily.prod_date >= first_day,
+        OeeDaily.prod_date <= last_day,
+    ).all()
+
+    LOSS_LABELS = {
+        "breakdown":        "설비고장",
+        "planned_change":   "금형교체(계획)",
+        "unplanned_change": "금형교체(비계획)",
+        "material":         "원료교체",
+        "minor_stop":       "순간정지",
+        "speed":            "속도저하",
+        "defect":           "불량",
+        "startup":          "초기유동",
+        "other":            "기타",
+    }
+
+    totals: dict[str, float] = {k: 0.0 for k in LOSS_LABELS}
+    by_machine: dict[str, dict] = {}
+
+    for r in rows:
+        mn = r.machine_no
+        if mn not in by_machine:
+            by_machine[mn] = {k: 0.0 for k in LOSS_LABELS}
+            by_machine[mn]["total_stop"] = 0.0
+            by_machine[mn]["planned_time"] = 0.0
+
+        vals = {
+            "breakdown":        r.loss_breakdown_min,
+            "planned_change":   r.loss_planned_change_min,
+            "unplanned_change": r.loss_unplanned_change_min,
+            "material":         r.loss_material_min,
+            "minor_stop":       r.loss_minor_stop_min,
+            "speed":            r.loss_speed_min,
+            "defect":           r.loss_defect_min,
+            "startup":          r.loss_startup_min,
+            "other":            r.loss_other_min,
+        }
+        for k, v in vals.items():
+            v = v or 0.0
+            totals[k]           += v
+            by_machine[mn][k]   += v
+        by_machine[mn]["total_stop"]    += (r.stop_time_min or 0.0)
+        by_machine[mn]["planned_time"]  += (r.planned_time_min or 480)
+
+    total_stop = sum(totals.values())
+    summary = []
+    for k, label in LOSS_LABELS.items():
+        mins = round(totals[k], 1)
+        summary.append({
+            "loss_code":  k,
+            "label":      label,
+            "total_min":  mins,
+            "share_pct":  round(mins / total_stop * 100, 1) if total_stop > 0 else 0,
+        })
+    summary.sort(key=lambda x: -x["total_min"])
+
+    machine_list = []
+    for mn, d in sorted(by_machine.items()):
+        m_total = sum(d.get(k, 0) for k in LOSS_LABELS)
+        pt = d["planned_time"] or 480
+        machine_list.append({
+            "machine_no": mn,
+            "planned_time_min": round(d["planned_time"], 0),
+            "total_stop_min":   round(d["total_stop"], 1),
+            "stop_rate_pct":    round(d["total_stop"] / pt * 100, 1) if pt > 0 else 0,
+            "breakdown": round(d["breakdown"], 1),
+            "planned_change": round(d["planned_change"], 1),
+            "unplanned_change": round(d["unplanned_change"], 1),
+            "material": round(d["material"], 1),
+            "minor_stop": round(d["minor_stop"], 1),
+            "speed": round(d["speed"], 1),
+            "defect": round(d["defect"], 1),
+            "startup": round(d["startup"], 1),
+            "other": round(d["other"], 1),
+            "top_loss": max(LOSS_LABELS, key=lambda k: d.get(k, 0)) if m_total > 0 else None,
+        })
+
+    return {
+        "year": year, "month": month,
+        "total_stop_min": round(total_stop, 1),
+        "summary": summary,
+        "by_machine": machine_list,
+    }
+
+
 @router.get("/smed/analysis")
 def smed_analysis(
     start: str = Query(...),

@@ -13,6 +13,7 @@ from app.models.quality import (
 )
 from app.models.master import Partner, Item
 from app.models.purchase import Receipt
+from app.models.sales import Shipment
 from app.models.auth import User
 from app.schemas.quality import (
     InspectionCreate, InspectionOut,
@@ -893,6 +894,79 @@ def vda_quality_analysis(year: int, month: int, db: Session = Depends(get_db)):
             "suggestion": "협력사 품질개선 요청 및 수입검사 강화 조치 필요",
         })
 
+    # ── 5. PPM 지수 계산 ─────────────────────────────────────────────
+    # 출하수량 조회
+    total_ship_qty = db.query(func.sum(Shipment.qty)).filter(
+        Shipment.ship_date >= first_day,
+        Shipment.ship_date <= last_day,
+        Shipment.status == "confirmed",
+    ).scalar() or 0
+
+    # 출하불량 (inspect_type = 출하/출하검사)
+    outgoing_defect_qty = sum(
+        d["defect_qty"] for d in defect_by_type
+        if d.get("inspect_type") in ("출하", "출하검사", "P5-출하")
+    )
+    outgoing_ppm = round(outgoing_defect_qty / total_ship_qty * 1_000_000, 0) if total_ship_qty > 0 else None
+
+    # 공정불량률 (공정불량 / 전체 불량건의 대표 지표)
+    process_defect_qty = sum(
+        d["defect_qty"] for d in defect_by_type
+        if d.get("inspect_type") not in ("출하", "출하검사", "P5-출하")
+    )
+    claim_ppm = round(len(claims) / total_ship_qty * 1_000_000 * 1000, 0) if total_ship_qty > 0 else None
+
+    ppm_data = {
+        "total_ship_qty": int(total_ship_qty),
+        "outgoing_defect_qty": outgoing_defect_qty,
+        "outgoing_ppm": outgoing_ppm,
+        "process_defect_qty": process_defect_qty,
+        "claim_count": len(claims),
+        "claim_ppm": claim_ppm,
+        "ppm_target": 100,
+    }
+
+    # ── 6. 3개월 불량률 추이 ─────────────────────────────────────────
+    trend_months = []
+    for delta in range(2, -1, -1):
+        tm = month - delta
+        ty = year
+        if tm <= 0:
+            tm += 12
+            ty -= 1
+        t_first = date(ty, tm, 1)
+        t_last  = date(ty, tm, _calendar.monthrange(ty, tm)[1])
+
+        t_defects = db.query(func.sum(ProcessOutgoingDefect.defect_qty)).filter(
+            ProcessOutgoingDefect.defect_date >= t_first,
+            ProcessOutgoingDefect.defect_date <= t_last,
+        ).scalar() or 0
+        t_ship = db.query(func.sum(Shipment.qty)).filter(
+            Shipment.ship_date >= t_first,
+            Shipment.ship_date <= t_last,
+            Shipment.status == "confirmed",
+        ).scalar() or 0
+        t_claims = db.query(func.count(QualityClaim.id)).filter(
+            extract("year",  QualityClaim.occur_date) == ty,
+            extract("month", QualityClaim.occur_date) == tm,
+        ).scalar() or 0
+        t_fail_insp = db.query(func.count(Inspection.id)).filter(
+            Inspection.inspect_date >= t_first,
+            Inspection.inspect_date <= t_last,
+            Inspection.result == "불합격",
+        ).scalar() or 0
+
+        trend_months.append({
+            "year": ty, "month": tm,
+            "label": f"{ty}년 {tm}월",
+            "defect_qty": int(t_defects),
+            "ship_qty": int(t_ship),
+            "defect_rate_pct": round(t_defects / t_ship * 100, 3) if t_ship > 0 else 0,
+            "ppm": round(t_defects / t_ship * 1_000_000, 0) if t_ship > 0 else 0,
+            "claim_count": int(t_claims),
+            "fail_inspection": int(t_fail_insp),
+        })
+
     return {
         "year": year,
         "month": month,
@@ -919,4 +993,8 @@ def vda_quality_analysis(year: int, month: int, db: Session = Depends(get_db)):
         },
         # 4. 자동진단
         "auto_insights": auto_insights,
+        # 5. PPM 지수
+        "ppm_data": ppm_data,
+        # 6. 3개월 추이
+        "trend": trend_months,
     }

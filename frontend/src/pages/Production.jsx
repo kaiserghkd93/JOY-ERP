@@ -650,13 +650,14 @@ function ProductionReportPanel() {
   const [oee, setOee] = useState(null)
   const [kaizen, setKaizen] = useState(null)
   const [machineData, setMachineData] = useState(null)
+  const [lossData, setLossData] = useState(null)
   const [loading, setLoading] = useState(false)
   const [downloading, setDownloading] = useState(false)
 
   const handlePptDownload = async () => {
     setDownloading(true)
     const [y, m] = ym.split('-')
-    try { await downloadProductionReport(plans, oee || [], kaizen, `${y}년 ${Number(m)}월`) } finally { setDownloading(false) }
+    try { await downloadProductionReport(plans, oee || [], kaizen, machineData, lossData, `${y}년 ${Number(m)}월`) } finally { setDownloading(false) }
   }
 
   useEffect(() => {
@@ -667,6 +668,7 @@ function ProductionReportPanel() {
       api.get(`/tps/oee/summary?year=${y}&month=${m}`).then(r => setOee(r.data)).catch(() => setOee([])),
       api.get('/kaizen/summary').then(r => setKaizen(r.data)).catch(() => setKaizen(null)),
       api.get(`/tps/machine-analysis?year=${y}&month=${m}`).then(r => setMachineData(r.data)).catch(() => setMachineData(null)),
+      api.get(`/tps/loss-analysis?year=${y}&month=${m}`).then(r => setLossData(r.data)).catch(() => setLossData(null)),
     ]).finally(() => setLoading(false))
   }, [ym])
 
@@ -884,6 +886,52 @@ function ProductionReportPanel() {
             <div style={{ marginTop: 10, fontSize: 10, color: '#94a3b8' }}>
               * 이론최대수량 = 순가동시간(분) × 60 ÷ 표준C/T(초) &nbsp;|&nbsp; C/T효율 = 표준C/T ÷ 실제C/T × 100 &nbsp;|&nbsp; 기회손실 = (이론최대 − 실적) × 판매단가
             </div>
+          </div>
+        )
+      })()}
+
+      {/* 비가동 원인별 집계 */}
+      {lossData && lossData.summary?.length > 0 && (() => {
+        const totalStop = lossData.total_stop_min || 0
+        const COLOR_MAP = {
+          breakdown: '#dc2626', planned_change: '#1d4ed8', unplanned_change: '#7c3aed',
+          material: '#d97706', minor_stop: '#059669', speed: '#0891b2',
+          defect: '#dc2626', startup: '#78716c', other: '#94a3b8',
+        }
+        return (
+          <div style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: 10, padding: 16 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+              <span style={{ fontWeight: 700, fontSize: 13, color: '#1e3a5f' }}>비가동 원인별 집계</span>
+              <span style={{ fontSize: 11, color: '#64748b' }}>총 비가동 {totalStop.toLocaleString()}분</span>
+            </div>
+            {/* 파레토 바 */}
+            <div style={{ display: 'flex', gap: 4, marginBottom: 12 }}>
+              {lossData.summary.filter(s => s.total_min > 0).map(s => (
+                <div key={s.loss_code} title={`${s.label}: ${s.total_min}분 (${s.share_pct}%)`}
+                  style={{ height: 20, flex: s.share_pct, background: COLOR_MAP[s.loss_code] || '#94a3b8', borderRadius: 3 }} />
+              ))}
+            </div>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+              <thead>
+                <tr style={{ background: '#f8fafc' }}>
+                  <th style={{ textAlign: 'left', padding: '5px 8px', borderBottom: '1px solid #e2e8f0' }}>원인</th>
+                  <th style={{ textAlign: 'right', padding: '5px 8px', borderBottom: '1px solid #e2e8f0' }}>비가동(분)</th>
+                  <th style={{ textAlign: 'right', padding: '5px 8px', borderBottom: '1px solid #e2e8f0' }}>비중</th>
+                </tr>
+              </thead>
+              <tbody>
+                {lossData.summary.filter(s => s.total_min > 0).map((s, i) => (
+                  <tr key={s.loss_code} style={{ background: i % 2 === 1 ? '#f8fafc' : '#fff' }}>
+                    <td style={{ padding: '4px 8px', display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <span style={{ width: 10, height: 10, borderRadius: 2, background: COLOR_MAP[s.loss_code] || '#94a3b8', flexShrink: 0, display: 'inline-block' }} />
+                      {s.label}
+                    </td>
+                    <td style={{ textAlign: 'right', padding: '4px 8px' }}>{s.total_min.toLocaleString()}</td>
+                    <td style={{ textAlign: 'right', padding: '4px 8px', fontWeight: 700, color: s.share_pct >= 30 ? '#dc2626' : s.share_pct >= 15 ? '#d97706' : '#374151' }}>{s.share_pct}%</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         )
       })()}

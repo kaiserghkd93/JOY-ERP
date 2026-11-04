@@ -196,7 +196,7 @@ export function downloadSalesReport(data, monthLabel) {
 // ════════════════════════════════════════════════════════════════════
 // PRODUCTION REPORT
 // ════════════════════════════════════════════════════════════════════
-export function downloadProductionReport(plans, oee, kaizen, monthLabel) {
+export function downloadProductionReport(plans, oee, kaizen, machineData, lossData, monthLabel) {
   const pres = newPres()
   addCoverSlide(pres, '생산 KPI 보고서', monthLabel)
 
@@ -204,6 +204,7 @@ export function downloadProductionReport(plans, oee, kaizen, monthLabel) {
   const totalActual = plans.reduce((s, p) => s + (p.total_actual || 0), 0)
   const ar = totalPlan > 0 ? Math.round(totalActual / totalPlan * 100) : 0
 
+  // ── Slide 2: 월 생산 목표 대비 실적 ─────────────────────────────
   const s2 = addContentSlide(pres, '월 생산 목표 대비 실적', monthLabel)
   addKpiCard(s2, 0.2,  1.0, 2.9, 1.0, '계획 수량', totalPlan.toLocaleString() + ' EA', NAVY)
   addKpiCard(s2, 3.35, 1.0, 2.9, 1.0, '실적 수량', totalActual.toLocaleString() + ' EA', GREEN)
@@ -217,6 +218,7 @@ export function downloadProductionReport(plans, oee, kaizen, monthLabel) {
     addProgressBar(s2, 0.2, 2.6 + i * 0.5, 9.5, lbl, rate)
   })
 
+  // ── Slide 3: 설비별 OEE 현황 ────────────────────────────────────
   if (oee?.length > 0) {
     const s3 = addContentSlide(pres, '설비별 OEE 현황', monthLabel)
     const rows = [
@@ -239,26 +241,115 @@ export function downloadProductionReport(plans, oee, kaizen, monthLabel) {
     s3.addTable(rows, { x: 0.3, y: 1.05, w: 9.4, colW: [1.9, 1.3, 1.4, 1.4, 1.4, 1.2, 0.8] })
   }
 
+  // ── Slide 4: 호기별 C/T 분석 — 금액환산 요약 ─────────────────────
+  const machines = machineData?.machines || []
+  if (machines.length > 0) {
+    const totals = machineData.totals || {}
+    const s4 = addContentSlide(pres, '호기별 생산실적 C/T 분석 — 금액환산', monthLabel)
+
+    addKpiCard(s4, 0.2,  1.0, 3.0, 1.0, '총 실적금액', fmtKRW(totals.actual_revenue), NAVY)
+    addKpiCard(s4, 3.45, 1.0, 3.0, 1.0, '이론최대금액', fmtKRW(totals.ideal_revenue), BLUE, '표준 C/T 100% 달성 시')
+    addKpiCard(s4, 6.7,  1.0, 3.0, 1.0, '기회손실금액', fmtKRW(totals.opportunity_loss), totals.opportunity_loss > 0 ? RED : GREEN, 'C/T 로스로 인한 미실현 매출')
+
+    s4.addText('호기별 요약 (실적 상위)', { x: 0.2, y: 2.2, w: 9.5, h: 0.28, fontSize: 11, bold: true, color: NAVY, fontFace: 'Arial', isTextBox: true })
+    const rows4 = [
+      [hdr('호기'), hdr('품번', 'left'), hdr('실적수량'), hdr('이론최대'), hdr('표준C/T'), hdr('실제C/T'), hdr('C/T효율'), hdr('실적금액'), hdr('기회손실')],
+      ...machines.slice(0, 10).map((m, i) => {
+        const ctColor = (m.ct_efficiency_pct != null && m.ct_efficiency_pct < 85) ? RED : G900
+        const f = altFill(i)
+        return [
+          cell(m.machine_no, { bold: true, fill: f }),
+          cell(m.part_no || '-', { fill: f }),
+          cell((m.actual_qty || 0).toLocaleString(), { align: 'right', fill: f }),
+          cell((m.ideal_qty || 0).toLocaleString(), { align: 'right', color: G400, fill: f }),
+          cell(m.std_ct_sec != null ? `${m.std_ct_sec}s` : '-', { align: 'center', fill: f }),
+          cell(m.avg_actual_ct_sec != null ? `${Math.round(m.avg_actual_ct_sec)}s` : '-', { align: 'center', color: ctColor, fill: f }),
+          cell(m.ct_efficiency_pct != null ? `${Math.round(m.ct_efficiency_pct)}%` : '-', { align: 'center', bold: true, color: ctColor, fill: f }),
+          cell(fmtKRW(m.actual_revenue), { align: 'right', fill: f }),
+          cell(fmtKRW(m.opportunity_loss), { align: 'right', bold: m.opportunity_loss > 0, color: m.opportunity_loss > 0 ? RED : G400, fill: f }),
+        ]
+      }),
+    ]
+    s4.addTable(rows4, { x: 0.2, y: 2.55, w: 9.6, colW: [0.95, 1.0, 1.0, 1.0, 0.85, 0.85, 0.85, 1.6, 1.5] })
+    s4.addText('이론최대수량 = 순가동시간(분) × 60 ÷ 표준C/T(초)  |  C/T효율 = 표준C/T ÷ 실제C/T × 100', {
+      x: 0.2, y: 5.2, w: 9.6, h: 0.22, fontSize: 7.5, color: G400, fontFace: 'Arial', isTextBox: true,
+    })
+  }
+
+  // ── Slide 5: 호기별 OEE + 달성률 상세 ───────────────────────────
+  if (machines.length > 0) {
+    const s5 = addContentSlide(pres, '호기별 생산달성률 및 OEE 상세', monthLabel)
+    const rows5 = [
+      [hdr('호기'), hdr('품번', 'left'), hdr('품명', 'left'), hdr('계획수량'), hdr('실적수량'), hdr('달성률'), hdr('불량수량'), hdr('가동률'), hdr('OEE')],
+      ...machines.slice(0, 14).map((m, i) => {
+        const achieveRate = m.achieve_rate_pct != null ? Math.round(m.achieve_rate_pct) : null
+        const achColor = achieveRate == null ? G400 : achieveRate >= 90 ? GREEN : achieveRate >= 70 ? AMBER : RED
+        const oeeVal = m.avg_oee_pct != null ? Math.round(m.avg_oee_pct) : null
+        const oeeColor = oeeVal == null ? G400 : oeeVal >= 85 ? GREEN : oeeVal >= 60 ? AMBER : RED
+        const f = altFill(i)
+        return [
+          cell(m.machine_no, { bold: true, fill: f }),
+          cell(m.part_no || '-', { fill: f }),
+          cell(m.part_name || '-', { fill: f }),
+          cell((m.plan_qty || 0).toLocaleString(), { align: 'right', fill: f }),
+          cell((m.actual_qty || 0).toLocaleString(), { align: 'right', fill: f }),
+          cell(achieveRate != null ? `${achieveRate}%` : '-', { align: 'center', bold: true, color: achColor, fill: f }),
+          cell((m.defect_qty || 0).toLocaleString(), { align: 'right', color: m.defect_qty > 0 ? RED : G400, fill: f }),
+          cell(m.avg_availability_pct != null ? `${Math.round(m.avg_availability_pct)}%` : '-', { align: 'center', fill: f }),
+          cell(oeeVal != null ? `${oeeVal}%` : '-', { align: 'center', bold: true, color: oeeColor, fill: f }),
+        ]
+      }),
+    ]
+    s5.addTable(rows5, { x: 0.2, y: 1.05, w: 9.6, colW: [0.95, 0.9, 1.5, 1.0, 1.0, 0.85, 0.9, 0.85, 0.85] })
+  }
+
+  // ── Slide 6: 비가동 원인별 집계 ─────────────────────────────────
+  const lossSummary = lossData?.summary || []
+  const lossTotal = lossData?.total_stop_min
+  if (lossSummary.length > 0 && lossSummary.some(s => s.total_min > 0)) {
+    const s6loss = addContentSlide(pres, '비가동 원인별 집계 (Loss Tree)', monthLabel)
+    addKpiCard(s6loss, 0.2, 1.0, 3.0, 1.0, '총 비가동시간', lossTotal != null ? `${lossTotal.toLocaleString()}분` : '-', NAVY)
+    s6loss.addText('원인별 비가동 현황', { x: 0.2, y: 2.25, w: 9.5, h: 0.28, fontSize: 11, bold: true, color: NAVY, fontFace: 'Arial', isTextBox: true })
+    const lossRows = [
+      [hdr('원인', 'left'), hdr('비가동(분)'), hdr('비중'), hdr('분류')],
+      ...lossSummary.filter(s => s.total_min > 0).map((s, i) => {
+        const isMajor = s.share_pct >= 30
+        const col = isMajor ? RED : s.share_pct >= 15 ? AMBER : G700
+        const f = altFill(i)
+        const category = ['breakdown', 'unplanned_change'].includes(s.loss_code) ? '가용성손실' :
+                         ['speed', 'minor_stop'].includes(s.loss_code) ? '성능손실' : '품질손실'
+        return [
+          cell(s.label, { bold: isMajor, fill: f }),
+          cell(s.total_min.toLocaleString(), { align: 'right', fill: f }),
+          cell(`${s.share_pct}%`, { align: 'right', bold: true, color: col, fill: f }),
+          cell(category, { align: 'center', color: G400, fill: f }),
+        ]
+      }),
+    ]
+    s6loss.addTable(lossRows, { x: 0.2, y: 2.58, w: 9.6, colW: [3.5, 2.0, 2.0, 2.1] })
+  }
+
+  // ── Slide 7+: 카이젠 과제 현황 ───────────────────────────────────
   if (kaizen?.total > 0) {
-    const s4 = addContentSlide(pres, '카이젠 과제 현황', monthLabel)
+    const s6 = addContentSlide(pres, '카이젠 과제 현황', monthLabel)
     const statuses = Object.entries(kaizen.by_status || {})
     if (statuses.length > 0) {
       const bW = Math.min(9.4 / statuses.length, 2.4) - 0.1
       const startX = 0.3 + (9.4 - statuses.length * (bW + 0.1)) / 2
       statuses.forEach(([st, cnt], i) => {
         const col = st === '완료' ? GREEN : st === '진행중' ? BLUE : st === '보류' ? AMBER : G400
-        addKpiCard(s4, startX + i * (bW + 0.1), 1.1, bW, 1.1, st, `${cnt}건`, col)
+        addKpiCard(s6, startX + i * (bW + 0.1), 1.1, bW, 1.1, st, `${cnt}건`, col)
       })
     }
     if (kaizen.overdue > 0) {
-      s4.addText(`⚠ 기한초과 과제: ${kaizen.overdue}건`, {
+      s6.addText(`기한초과 과제: ${kaizen.overdue}건`, {
         x: 0.3, y: 2.4, w: 9.5, h: 0.4, fontSize: 14, color: RED, fontFace: 'Arial', bold: true, isTextBox: true,
       })
     }
-    s4.addText(`전체 ${kaizen.total}건  /  완료율 ${kaizen.completion_rate ?? 0}%`, {
+    s6.addText(`전체 ${kaizen.total}건  /  완료율 ${kaizen.completion_rate ?? 0}%`, {
       x: 0.3, y: kaizen.overdue > 0 ? 2.9 : 2.4, w: 9.5, h: 0.3, fontSize: 11, color: G400, fontFace: 'Arial', isTextBox: true,
     })
-    addProgressBar(s4, 0.3, kaizen.overdue > 0 ? 3.3 : 2.85, 9.5, '카이젠 완료율', kaizen.completion_rate ?? 0, GREEN)
+    addProgressBar(s6, 0.3, kaizen.overdue > 0 ? 3.3 : 2.85, 9.5, '카이젠 완료율', kaizen.completion_rate ?? 0, GREEN)
   }
 
   pres.writeFile({ fileName: `생산_KPI_보고서_${monthLabel}.pptx` })
@@ -372,7 +463,44 @@ export function downloadQualityReport(vda, monthLabel) {
     s4.addText('이 기간 클레임 없음', { x: 0.2, y: 2.5, w: 9.5, h: 0.5, fontSize: 13, color: GREEN, fontFace: 'Arial', align: 'center', isTextBox: true })
   }
 
-  // ── Slide 5: ERP 자동진단 ────────────────────────────────────────
+  // ── Slide 5: PPM 지수 + 3개월 추이 ──────────────────────────────
+  const ppm = vda?.ppm_data
+  const trend = vda?.trend || []
+  if (ppm || trend.length > 0) {
+    const s5ppm = addContentSlide(pres, 'PPM 지수 / 월별 품질 추이', monthLabel)
+    if (ppm) {
+      addKpiCard(s5ppm, 0.2,  1.0, 2.9, 1.1, '총 출하수량', `${(ppm.total_ship_qty||0).toLocaleString()} EA`, NAVY)
+      addKpiCard(s5ppm, 3.35, 1.0, 2.9, 1.1, '출하불량 PPM',
+        ppm.outgoing_ppm != null ? ppm.outgoing_ppm.toLocaleString() : '-',
+        ppm.outgoing_ppm > 100 ? RED : ppm.outgoing_ppm > 0 ? AMBER : GREEN, '목표: 100 PPM 이하')
+      addKpiCard(s5ppm, 6.5,  1.0, 3.1, 1.1, '클레임 건수', `${ppm.claim_count || 0}건`,
+        ppm.claim_count > 0 ? RED : GREEN, '고객 실패비용')
+    }
+    if (trend.length > 0) {
+      s5ppm.addText('3개월 품질 추이', { x: 0.2, y: 2.3, w: 9.5, h: 0.28, fontSize: 11, bold: true, color: NAVY, fontFace: 'Arial', isTextBox: true })
+      const tRows = [
+        [hdr('월'), hdr('불량수량'), hdr('출하수량'), hdr('불량률'), hdr('PPM'), hdr('클레임'), hdr('불합격검사')],
+        ...trend.map((t, i) => {
+          const ppmVal = t.ppm || 0
+          const ppmColor = ppmVal > 100 ? RED : ppmVal > 0 ? AMBER : GREEN
+          const f = i === trend.length - 1 ? 'E8F4FD' : altFill(i)
+          const bold = i === trend.length - 1
+          return [
+            cell(t.label, { bold, fill: f }),
+            cell((t.defect_qty||0).toLocaleString(), { align: 'right', fill: f }),
+            cell((t.ship_qty||0).toLocaleString(), { align: 'right', fill: f }),
+            cell(`${t.defect_rate_pct}%`, { align: 'right', fill: f }),
+            cell(ppmVal.toLocaleString(), { align: 'right', bold: true, color: ppmColor, fill: f }),
+            cell(`${t.claim_count}건`, { align: 'right', color: t.claim_count > 0 ? RED : G400, fill: f }),
+            cell(`${t.fail_inspection}건`, { align: 'right', color: t.fail_inspection > 0 ? AMBER : G400, fill: f }),
+          ]
+        }),
+      ]
+      s5ppm.addTable(tRows, { x: 0.2, y: 2.62, w: 9.6, colW: [1.6, 1.4, 1.4, 1.1, 1.3, 1.1, 1.7] })
+    }
+  }
+
+  // ── Slide 7: ERP 자동진단 ────────────────────────────────────────
   if (insights.length > 0) {
     const s5 = addContentSlide(pres, 'ERP 자동진단 — 워스트/베스트 & 개선사항', monthLabel)
     insights.slice(0, 5).forEach((ins, i) => {
@@ -396,7 +524,7 @@ export function downloadQualityReport(vda, monthLabel) {
     })
   }
 
-  // ── Slide 6: 개선방향 (사용자 작성용 빈 양식) ───────────────────
+  // ── Slide 8: 개선방향 (사용자 작성용 빈 양식) ───────────────────
   const s6 = addContentSlide(pres, '차월 개선방향 (담당자 작성)', monthLabel)
   const sections = ['공정불량 개선방향', '입고검사 불합격 외주처 조치', '클레임 고객 실패비용 개선', '수입검사 강화 방안']
   sections.forEach((title, i) => {
@@ -412,10 +540,11 @@ export function downloadQualityReport(vda, monthLabel) {
 // ════════════════════════════════════════════════════════════════════
 // PURCHASE REPORT
 // ════════════════════════════════════════════════════════════════════
-export function downloadPurchaseReport(data, monthLabel) {
+export function downloadPurchaseReport(data, reportData, monthLabel) {
   const pres = newPres()
   addCoverSlide(pres, '자재구매 KPI 보고서', monthLabel)
 
+  // ── Slide 2: KPI 현황 ────────────────────────────────────────────
   const s2 = addContentSlide(pres, '월 자재구매 KPI 현황', monthLabel)
 
   if (data) {
@@ -436,12 +565,18 @@ export function downloadPurchaseReport(data, monthLabel) {
       }
     }
 
-    if (data.order_count != null || data.supplier_count != null) {
-      addKpiCard(s2, 0.2, 3.8, 4.5, 0.95, '발주 건수', `${data.order_count ?? '-'}건`, BLUE)
-      addKpiCard(s2, 5.0, 3.8, 4.5, 0.95, '거래 협력사', `${data.supplier_count ?? '-'}사`, BLUE)
+    if (reportData?.overdue_count != null) {
+      addKpiCard(s2, 0.2, 3.9, 2.9, 0.95, '발주 건수', `${data.order_count ?? '-'}건`, BLUE)
+      addKpiCard(s2, 3.35, 3.9, 2.9, 0.95, '거래 협력사', `${data.supplier_count ?? '-'}사`, BLUE)
+      addKpiCard(s2, 6.5, 3.9, 3.1, 0.95, '미납 발주', `${reportData.overdue_count}건`,
+        reportData.overdue_count > 0 ? RED : GREEN, '납기 초과 미입고')
+    } else if (data.order_count != null || data.supplier_count != null) {
+      addKpiCard(s2, 0.2, 3.9, 4.5, 0.95, '발주 건수', `${data.order_count ?? '-'}건`, BLUE)
+      addKpiCard(s2, 5.0, 3.9, 4.5, 0.95, '거래 협력사', `${data.supplier_count ?? '-'}사`, BLUE)
     }
   }
 
+  // ── Slide 3: 협력사별 구매 현황 ──────────────────────────────────
   if (data?.by_supplier?.length > 0) {
     const s3 = addContentSlide(pres, '협력사별 구매 현황 TOP 10', monthLabel)
     const rows = [
@@ -457,6 +592,88 @@ export function downloadPurchaseReport(data, monthLabel) {
       }),
     ]
     s3.addTable(rows, { x: 0.3, y: 1.05, w: 9.4, colW: [4.2, 2.5, 1.8, 0.9] })
+  }
+
+  // ── Slide 4: 미납/지연 발주 현황 ────────────────────────────────
+  if (reportData) {
+    const s4 = addContentSlide(pres, '미납/지연 발주 현황 — 납기 초과 오픈 PO', monthLabel)
+    addKpiCard(s4, 0.2, 1.0, 3.0, 1.0, '지연 발주 건수', `${reportData.overdue_count}건`,
+      reportData.overdue_count > 0 ? RED : GREEN, '납기일 초과 미완료')
+
+    const otd = reportData.otd_summary || {}
+    if (otd.overall_rate != null) {
+      addKpiCard(s4, 3.45, 1.0, 3.0, 1.0, '당월 납기준수율', `${otd.overall_rate}%`,
+        otd.overall_rate >= 90 ? GREEN : otd.overall_rate >= 70 ? AMBER : RED, '완료 발주 기준')
+      addKpiCard(s4, 6.7, 1.0, 3.0, 1.0, '완료 발주', `${otd.total_closed}건`,
+        NAVY, `납기준수 ${otd.total_on_time}건`)
+    }
+
+    const overdue = reportData.overdue_list || []
+    if (overdue.length > 0) {
+      s4.addText('지연 발주 목록', { x: 0.2, y: 2.25, w: 9.5, h: 0.28, fontSize: 11, bold: true, color: NAVY, fontFace: 'Arial', isTextBox: true })
+      const rows = [
+        [hdr('협력사', 'left'), hdr('품번', 'left'), hdr('품명', 'left'), hdr('납기일'), hdr('지연일수'), hdr('발주량'), hdr('미입고')],
+        ...overdue.slice(0, 10).map((po, i) => {
+          const dColor = po.days_late >= 14 ? RED : AMBER
+          const f = altFill(i)
+          return [
+            cell(po.partner_name, { bold: true, fill: f }),
+            cell(po.part_no, { fill: f }),
+            cell(po.part_name, { fill: f }),
+            cell(po.due_date, { align: 'center', color: RED, fill: f }),
+            cell(`${po.days_late}일`, { align: 'center', bold: true, color: dColor, fill: f }),
+            cell((po.order_qty || 0).toLocaleString(), { align: 'right', fill: f }),
+            cell((po.remain_qty || 0).toLocaleString(), { align: 'right', bold: true, color: RED, fill: f }),
+          ]
+        }),
+      ]
+      s4.addTable(rows, { x: 0.2, y: 2.58, w: 9.6, colW: [1.8, 1.0, 2.0, 1.1, 0.9, 1.0, 1.0] })
+    } else {
+      s4.addText('미납 발주 없음 — 모든 발주 납기 준수', { x: 0.2, y: 2.5, w: 9.5, h: 0.5, fontSize: 13, color: GREEN, fontFace: 'Arial', align: 'center', isTextBox: true })
+    }
+  }
+
+  // ── Slide 5: 협력사 납기준수율 + 단가 변동 ───────────────────────
+  if (reportData?.delivery_rate?.length > 0 || reportData?.price_changes?.length > 0) {
+    const s5 = addContentSlide(pres, '협력사 납기준수율 / 단가 변동 분석', monthLabel)
+
+    if (reportData.delivery_rate?.length > 0) {
+      s5.addText('협력사 납기준수율 (당월)', { x: 0.2, y: 1.0, w: 4.5, h: 0.28, fontSize: 11, bold: true, color: NAVY, fontFace: 'Arial', isTextBox: true })
+      const rRows = [
+        [hdr('협력사', 'left'), hdr('완료건'), hdr('납기준수'), hdr('지연'), hdr('준수율')],
+        ...reportData.delivery_rate.slice(0, 8).map((d, i) => {
+          const oc = d.rate_pct >= 90 ? GREEN : d.rate_pct >= 70 ? AMBER : RED
+          const f = altFill(i)
+          return [
+            cell(d.partner_name, { bold: true, fill: f }),
+            cell(`${d.total}건`, { align: 'center', fill: f }),
+            cell(`${d.on_time}건`, { align: 'center', color: GREEN, fill: f }),
+            cell(`${d.late}건`, { align: 'center', color: d.late > 0 ? RED : G400, fill: f }),
+            cell(`${d.rate_pct}%`, { align: 'center', bold: true, color: oc, fill: f }),
+          ]
+        }),
+      ]
+      s5.addTable(rRows, { x: 0.2, y: 1.32, w: 4.6, colW: [1.5, 0.75, 0.75, 0.75, 0.85] })
+    }
+
+    if (reportData.price_changes?.length > 0) {
+      s5.addText('전월 대비 단가 변동 (1% 이상)', { x: 5.0, y: 1.0, w: 4.6, h: 0.28, fontSize: 11, bold: true, color: NAVY, fontFace: 'Arial', isTextBox: true })
+      const pRows = [
+        [hdr('품번', 'left'), hdr('품명', 'left'), hdr('전월'), hdr('당월'), hdr('변동률')],
+        ...reportData.price_changes.slice(0, 8).map((p, i) => {
+          const up = p.change_pct > 0
+          const f = altFill(i)
+          return [
+            cell(p.part_no, { fill: f }),
+            cell(p.part_name, { fill: f }),
+            cell(`${(p.prev_price||0).toLocaleString()}`, { align: 'right', fill: f }),
+            cell(`${(p.cur_price||0).toLocaleString()}`, { align: 'right', fill: f }),
+            cell(`${up ? '▲' : '▼'} ${Math.abs(p.change_pct)}%`, { align: 'right', bold: true, color: up ? RED : GREEN, fill: f }),
+          ]
+        }),
+      ]
+      s5.addTable(pRows, { x: 5.0, y: 1.32, w: 4.6, colW: [0.9, 1.3, 0.9, 0.9, 0.6] })
+    }
   }
 
   pres.writeFile({ fileName: `자재구매_KPI_보고서_${monthLabel}.pptx` })

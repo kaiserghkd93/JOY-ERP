@@ -254,6 +254,137 @@ def post_direct_receipt(body: dict, db: Session = Depends(get_db)):
     return receipt
 
 
+@router.get("/report-data")
+def purchase_report_data(
+    year: int = Query(...),
+    month: int = Query(...),
+    db: Session = Depends(get_db),
+):
+    """자재구매 보고서용 통합 데이터 — 미납/납기준수율/가격변동"""
+    from calendar import monthrange as mr
+    from datetime import timedelta
+
+    today = date.today()
+    first_day = date(year, month, 1)
+    last_day  = date(year, month, mr(year, month)[1])
+
+    # ── 1. 미납/지연 발주 목록 ─────────────────────────────────────
+    overdue_pos = db.query(PurchaseOrder).filter(
+        PurchaseOrder.status.in_([POStatus.open, POStatus.partial]),
+        PurchaseOrder.due_date < today,
+    ).order_by(PurchaseOrder.due_date).all()
+
+    overdue_list = []
+    for po in overdue_pos:
+        partner = db.get(Partner, po.partner_id)
+        item    = db.get(Item, po.part_no)
+        days_late = (today - po.due_date).days
+        received = sum(r.qty for r in po.receipts if r.status == ReceiptStatus.confirmed)
+        overdue_list.append({
+            "po_no":        po.po_no,
+            "partner_name": partner.name if partner else po.partner_id,
+            "part_no":      po.part_no,
+            "part_name":    item.name if item else po.part_no,
+            "due_date":     po.due_date.isoformat(),
+            "days_late":    days_late,
+            "order_qty":    po.qty,
+            "received_qty": received,
+            "remain_qty":   po.qty - received,
+        })
+
+    # ── 2. 당월 협력사별 납기준수율 ───────────────────────────────
+    closed_this_month = db.query(PurchaseOrder).filter(
+        PurchaseOrder.status == POStatus.closed,
+        PurchaseOrder.due_date >= first_day,
+        PurchaseOrder.due_date <= last_day,
+    ).all()
+
+    partner_otd: dict[str, dict] = {}
+    for po in closed_this_month:
+        pid = po.partner_id
+        if pid not in partner_otd:
+            p = db.get(Partner, pid)
+            partner_otd[pid] = {"name": p.name if p else pid, "total": 0, "on_time": 0}
+        partner_otd[pid]["total"] += 1
+        receipts = [r for r in po.receipts if r.status == ReceiptStatus.confirmed]
+        if receipts:
+            last_date = max(r.receipt_date for r in receipts)
+            if last_date <= po.due_date:
+                partner_otd[pid]["on_time"] += 1
+
+    delivery_rate = []
+    for pid, d in partner_otd.items():
+        rate = round(d["on_time"] / d["total"] * 100, 1) if d["total"] else 0
+        delivery_rate.append({
+            "partner_id": pid,
+            "partner_name": d["name"],
+            "total": d["total"],
+            "on_time": d["on_time"],
+            "late": d["total"] - d["on_time"],
+            "rate_pct": rate,
+        })
+    delivery_rate.sort(key=lambda x: x["rate_pct"])
+
+    # ── 3. 단가 변동 — 이번달 vs 전달 평균단가 ───────────────────
+    if month == 1:
+        prev_first = date(year - 1, 12, 1)
+        prev_last  = date(year - 1, 12, 31)
+    else:
+        prev_m = month - 1
+        prev_first = date(year, prev_m, 1)
+        prev_last  = date(year, prev_m, mr(year, prev_m)[1])
+
+    def avg_prices(start, end):
+        receipts = db.query(Receipt).filter(
+            Receipt.receipt_date >= start,
+            Receipt.receipt_date <= end,
+            Receipt.status == ReceiptStatus.confirmed,
+        ).all()
+        price_map: dict[str, list] = {}
+        for r in receipts:
+            price_map.setdefault(r.part_no, []).append(float(r.unit_price))
+        return {k: sum(v) / len(v) for k, v in price_map.items()}
+
+    this_prices = avg_prices(first_day, last_day)
+    prev_prices = avg_prices(prev_first, prev_last)
+
+    price_changes = []
+    all_parts = set(this_prices) | set(prev_prices)
+    for pn in all_parts:
+        cur = this_prices.get(pn)
+        prv = prev_prices.get(pn)
+        if cur is None or prv is None or prv == 0:
+            continue
+        change_pct = round((cur - prv) / prv * 100, 1)
+        if abs(change_pct) < 1:
+            continue
+        item = db.get(Item, pn)
+        price_changes.append({
+            "part_no":      pn,
+            "part_name":    item.name if item else pn,
+            "prev_price":   round(prv, 2),
+            "cur_price":    round(cur, 2),
+            "change_pct":   change_pct,
+        })
+    price_changes.sort(key=lambda x: -abs(x["change_pct"]))
+
+    return {
+        "year": year, "month": month,
+        "overdue_count": len(overdue_list),
+        "overdue_list":  overdue_list[:20],
+        "delivery_rate": delivery_rate,
+        "price_changes": price_changes[:10],
+        "otd_summary": {
+            "total_closed": sum(d["total"] for d in partner_otd.values()),
+            "total_on_time": sum(d["on_time"] for d in partner_otd.values()),
+            "overall_rate": round(
+                sum(d["on_time"] for d in partner_otd.values()) /
+                sum(d["total"] for d in partner_otd.values()) * 100, 1
+            ) if partner_otd else None,
+        },
+    }
+
+
 @router.get("/closing/monthly")
 def monthly_closing(
     year: int = Query(...),

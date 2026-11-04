@@ -944,6 +944,7 @@ function MatReportPanel({ month }) {
   const defaultYm = month || `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`
   const [ym, setYm] = useState(defaultYm)
   const [data, setData] = useState(null)
+  const [reportData, setReportData] = useState(null)
   const [loading, setLoading] = useState(false)
   const [downloading, setDownloading] = useState(false)
 
@@ -951,7 +952,7 @@ function MatReportPanel({ month }) {
     if (!data) return
     setDownloading(true)
     const [y, m] = ym.split('-')
-    try { await downloadPurchaseReport(data, `${y}년 ${Number(m)}월`) } finally { setDownloading(false) }
+    try { await downloadPurchaseReport(data, reportData, `${y}년 ${Number(m)}월`) } finally { setDownloading(false) }
   }
 
   useEffect(() => {
@@ -961,10 +962,10 @@ function MatReportPanel({ month }) {
   useEffect(() => {
     const [y, m] = ym.split('-')
     setLoading(true)
-    api.get(`/material/summary?year=${y}&month=${m}`)
-      .then(r => setData(r.data))
-      .catch(() => setData(null))
-      .finally(() => setLoading(false))
+    Promise.all([
+      api.get(`/material/summary?year=${y}&month=${m}`).then(r => setData(r.data)).catch(() => setData(null)),
+      api.get(`/purchase/report-data?year=${y}&month=${m}`).then(r => setReportData(r.data)).catch(() => setReportData(null)),
+    ]).finally(() => setLoading(false))
   }, [ym])
 
   const fmt = (v) => v != null ? Math.round(v / 10000).toLocaleString() + '만원' : '-'
@@ -1068,7 +1069,7 @@ function MatReportPanel({ month }) {
 
       {/* 협력사별 구매 현황 */}
       {data.by_supplier && data.by_supplier.length > 0 && (
-        <div style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: 10, padding: 16 }}>
+        <div style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: 10, padding: 16, marginBottom: 20 }}>
           <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 12 }}>협력사별 구매 TOP 10</div>
           <div className="table-wrap">
             <table>
@@ -1087,6 +1088,126 @@ function MatReportPanel({ month }) {
                     <td style={{ textAlign: 'right' }}>{s.order_count ?? '-'}</td>
                   </tr>
                 ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* ── 미납/지연 발주 현황 ── */}
+      {reportData && (
+        <div style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: 10, padding: 16, marginBottom: 20 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+            <span style={{ fontWeight: 700, fontSize: 13, color: '#1e3a5f' }}>미납/지연 발주 현황</span>
+            {reportData.overdue_count > 0 && (
+              <span style={{ background: '#fef2f2', color: '#dc2626', fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 20, border: '1px solid #fca5a5' }}>
+                {reportData.overdue_count}건 지연
+              </span>
+            )}
+          </div>
+          {reportData.overdue_list?.length === 0 ? (
+            <div style={{ textAlign: 'center', color: '#059669', fontSize: 13, padding: 16 }}>미납 발주 없음 — 모든 발주 납기 준수</div>
+          ) : (
+            <div className="table-wrap">
+              <table>
+                <thead><tr>
+                  <th>협력사</th><th>품번</th><th>품명</th>
+                  <th style={{ textAlign: 'right' }}>납기일</th>
+                  <th style={{ textAlign: 'right' }}>지연일수</th>
+                  <th style={{ textAlign: 'right' }}>발주량</th>
+                  <th style={{ textAlign: 'right' }}>입고량</th>
+                  <th style={{ textAlign: 'right' }}>미입고</th>
+                </tr></thead>
+                <tbody>
+                  {(reportData.overdue_list || []).map((po, i) => (
+                    <tr key={i} style={{ background: i % 2 === 1 ? '#f8fafc' : '#fff' }}>
+                      <td style={{ fontWeight: 600 }}>{po.partner_name}</td>
+                      <td style={{ fontFamily: 'monospace', fontSize: 11 }}>{po.part_no}</td>
+                      <td>{po.part_name}</td>
+                      <td style={{ textAlign: 'right', color: '#dc2626' }}>{po.due_date}</td>
+                      <td style={{ textAlign: 'right', fontWeight: 700, color: po.days_late >= 14 ? '#dc2626' : '#d97706' }}>{po.days_late}일</td>
+                      <td style={{ textAlign: 'right', fontFamily: 'monospace' }}>{(po.order_qty||0).toLocaleString()}</td>
+                      <td style={{ textAlign: 'right', fontFamily: 'monospace' }}>{(po.received_qty||0).toLocaleString()}</td>
+                      <td style={{ textAlign: 'right', fontFamily: 'monospace', fontWeight: 700, color: '#dc2626' }}>{(po.remain_qty||0).toLocaleString()}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── 협력사 납기준수율 ── */}
+      {reportData?.delivery_rate?.length > 0 && (
+        <div style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: 10, padding: 16, marginBottom: 20 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+            <span style={{ fontWeight: 700, fontSize: 13, color: '#1e3a5f' }}>협력사 납기준수율 (당월 완료 발주)</span>
+            {reportData.otd_summary?.overall_rate != null && (
+              <span style={{ fontSize: 13, fontWeight: 700, color: reportData.otd_summary.overall_rate >= 90 ? '#059669' : reportData.otd_summary.overall_rate >= 70 ? '#d97706' : '#dc2626' }}>
+                종합 {reportData.otd_summary.overall_rate}%
+              </span>
+            )}
+          </div>
+          <div className="table-wrap">
+            <table>
+              <thead><tr>
+                <th>협력사</th>
+                <th style={{ textAlign: 'right' }}>완료건</th>
+                <th style={{ textAlign: 'right' }}>납기준수</th>
+                <th style={{ textAlign: 'right' }}>지연</th>
+                <th style={{ textAlign: 'right' }}>납기준수율</th>
+              </tr></thead>
+              <tbody>
+                {reportData.delivery_rate.map((d, i) => {
+                  const col = d.rate_pct >= 90 ? '#059669' : d.rate_pct >= 70 ? '#d97706' : '#dc2626'
+                  return (
+                    <tr key={i} style={{ background: i % 2 === 1 ? '#f8fafc' : '#fff' }}>
+                      <td style={{ fontWeight: 600 }}>{d.partner_name}</td>
+                      <td style={{ textAlign: 'right' }}>{d.total}건</td>
+                      <td style={{ textAlign: 'right', color: '#059669' }}>{d.on_time}건</td>
+                      <td style={{ textAlign: 'right', color: '#dc2626' }}>{d.late}건</td>
+                      <td style={{ textAlign: 'right' }}>
+                        <span style={{ fontWeight: 700, color: col }}>{d.rate_pct}%</span>
+                        <div style={{ marginTop: 2, background: '#e2e8f0', borderRadius: 3, height: 4, overflow: 'hidden' }}>
+                          <div style={{ width: `${d.rate_pct}%`, height: '100%', background: col }} />
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* ── 단가 변동 분석 ── */}
+      {reportData?.price_changes?.length > 0 && (
+        <div style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: 10, padding: 16 }}>
+          <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 12, color: '#1e3a5f' }}>전월 대비 단가 변동 (1% 이상)</div>
+          <div className="table-wrap">
+            <table>
+              <thead><tr>
+                <th>품번</th><th>품명</th>
+                <th style={{ textAlign: 'right' }}>전월 단가</th>
+                <th style={{ textAlign: 'right' }}>당월 단가</th>
+                <th style={{ textAlign: 'right' }}>변동률</th>
+              </tr></thead>
+              <tbody>
+                {reportData.price_changes.map((p, i) => {
+                  const up = p.change_pct > 0
+                  const col = up ? '#dc2626' : '#059669'
+                  return (
+                    <tr key={i} style={{ background: i % 2 === 1 ? '#f8fafc' : '#fff' }}>
+                      <td style={{ fontFamily: 'monospace', fontSize: 11 }}>{p.part_no}</td>
+                      <td>{p.part_name}</td>
+                      <td style={{ textAlign: 'right', fontFamily: 'monospace' }}>{p.prev_price?.toLocaleString()}원</td>
+                      <td style={{ textAlign: 'right', fontFamily: 'monospace' }}>{p.cur_price?.toLocaleString()}원</td>
+                      <td style={{ textAlign: 'right', fontWeight: 700, color: col }}>{up ? '▲' : '▼'} {Math.abs(p.change_pct)}%</td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           </div>

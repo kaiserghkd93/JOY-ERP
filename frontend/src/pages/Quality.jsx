@@ -1134,8 +1134,77 @@ function QualityReportPanel() {
           <div style={{ background: '#f8fafc', borderRadius: 8, padding: 16, marginBottom: 14, color: '#94a3b8', textAlign: 'center' }}>자동진단 항목 없음 (데이터 부족)</div>
         )}
 
-        {/* ── SECTION 5: 부서별 개선과제 등록 ────── */}
-        <SectionHeader num="5" title="부서별 개선과제 등록" sub="품질 담당자 직접 입력" />
+        {/* ── SECTION 5: PPM 지수 + 3개월 추이 ───── */}
+        <SectionHeader num="5" title="PPM 지수 / 월별 품질 추이" sub="출하불량 PPM · 3개월 추이" />
+        {vda?.ppm_data && (() => {
+          const ppm = vda.ppm_data
+          const trend = vda.trend || []
+          return (
+            <div style={{ marginBottom: 14 }}>
+              {/* PPM KPI 카드 */}
+              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 12 }}>
+                <div style={{ flex: 1, minWidth: 130, background: '#f8fafc', border: '1px solid var(--border)', borderRadius: 10, padding: '12px 14px' }}>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: '#64748b', marginBottom: 4 }}>총 출하수량</div>
+                  <div style={{ fontSize: 20, fontWeight: 800, color: '#1e3a5f' }}>{(ppm.total_ship_qty||0).toLocaleString()} EA</div>
+                </div>
+                <div style={{ flex: 1, minWidth: 130, background: '#f8fafc', border: '1px solid var(--border)', borderRadius: 10, padding: '12px 14px' }}>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: '#64748b', marginBottom: 4 }}>출하불량 PPM</div>
+                  <div style={{ fontSize: 20, fontWeight: 800, color: ppm.outgoing_ppm > 100 ? '#dc2626' : ppm.outgoing_ppm > 0 ? '#d97706' : '#059669' }}>
+                    {ppm.outgoing_ppm != null ? ppm.outgoing_ppm.toLocaleString() : '-'}
+                  </div>
+                  <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 2 }}>목표: 100 PPM 이하</div>
+                </div>
+                <div style={{ flex: 1, minWidth: 130, background: '#f8fafc', border: '1px solid var(--border)', borderRadius: 10, padding: '12px 14px' }}>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: '#64748b', marginBottom: 4 }}>공정불량 수량</div>
+                  <div style={{ fontSize: 20, fontWeight: 800, color: '#374151' }}>{(ppm.process_defect_qty||0).toLocaleString()} EA</div>
+                </div>
+                <div style={{ flex: 1, minWidth: 130, background: '#f8fafc', border: '1px solid var(--border)', borderRadius: 10, padding: '12px 14px' }}>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: '#64748b', marginBottom: 4 }}>클레임 건수</div>
+                  <div style={{ fontSize: 20, fontWeight: 800, color: ppm.claim_count > 0 ? '#dc2626' : '#059669' }}>{ppm.claim_count}건</div>
+                </div>
+              </div>
+              {/* 3개월 추이 테이블 */}
+              {trend.length > 0 && (
+                <div style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: 10, padding: 14 }}>
+                  <div style={{ fontWeight: 700, fontSize: 12, color: '#1e3a5f', marginBottom: 10 }}>3개월 품질 추이</div>
+                  <div className="table-wrap">
+                    <table>
+                      <thead><tr>
+                        <th>월</th>
+                        <th style={{ textAlign: 'right' }}>불량수량</th>
+                        <th style={{ textAlign: 'right' }}>출하수량</th>
+                        <th style={{ textAlign: 'right' }}>불량률</th>
+                        <th style={{ textAlign: 'right' }}>PPM</th>
+                        <th style={{ textAlign: 'right' }}>클레임</th>
+                        <th style={{ textAlign: 'right' }}>불합격검사</th>
+                      </tr></thead>
+                      <tbody>
+                        {trend.map((t, i) => {
+                          const isLast = i === trend.length - 1
+                          const ppmColor = t.ppm > 100 ? '#dc2626' : t.ppm > 0 ? '#d97706' : '#059669'
+                          return (
+                            <tr key={i} style={{ background: isLast ? '#eff6ff' : i % 2 === 1 ? '#f8fafc' : '#fff', fontWeight: isLast ? 700 : 400 }}>
+                              <td>{t.label}</td>
+                              <td style={{ textAlign: 'right', fontFamily: 'monospace' }}>{(t.defect_qty||0).toLocaleString()}</td>
+                              <td style={{ textAlign: 'right', fontFamily: 'monospace' }}>{(t.ship_qty||0).toLocaleString()}</td>
+                              <td style={{ textAlign: 'right' }}>{t.defect_rate_pct}%</td>
+                              <td style={{ textAlign: 'right', fontWeight: 700, color: ppmColor }}>{t.ppm?.toLocaleString() || '-'}</td>
+                              <td style={{ textAlign: 'right', color: t.claim_count > 0 ? '#dc2626' : '#374151' }}>{t.claim_count}건</td>
+                              <td style={{ textAlign: 'right', color: t.fail_inspection > 0 ? '#d97706' : '#374151' }}>{t.fail_inspection}건</td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+          )
+        })()}
+
+        {/* ── SECTION 6: 부서별 개선과제 등록 ────── */}
+        <SectionHeader num="6" title="부서별 개선과제 등록" sub="품질 담당자 직접 입력" />
 
         {improvements.length > 0 && (
           <div style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: 10, padding: 14, marginBottom: 14 }}>
