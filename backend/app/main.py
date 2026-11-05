@@ -17,6 +17,7 @@ from app.routers import supplier_score, audit as audit_router
 from app.routers import tps as tps_router, kaizen as kaizen_router
 from app.routers import improvement as improvement_router
 from app.routers import purchase_request as pr_router
+from app.routers import admin_maintenance
 from app.models import improvement as _improvement_models  # noqa: ensure table
 from app.models import quality_advanced as _qa_models  # noqa: ensure tables
 from app.models import inventory_adj as _inv_adj_models  # noqa: ensure tables registered
@@ -226,6 +227,7 @@ app.include_router(audit_router.router)
 app.include_router(tps_router.router)
 app.include_router(kaizen_router.router)
 app.include_router(improvement_router.router)
+app.include_router(admin_maintenance.router)
 
 
 @app.on_event("startup")
