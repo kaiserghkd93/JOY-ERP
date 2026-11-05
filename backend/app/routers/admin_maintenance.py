@@ -78,13 +78,13 @@ def cleanup_pre_nov2026(confirm: str, db: Session = Depends(get_db)):
     run("mes_production_cost",
         "DELETE FROM mes_production_cost WHERE id IN "
         "(SELECT c.id FROM mes_production_cost c "
-        " JOIN mes_production_log l ON c.log_id = l.id WHERE l.prod_date < :c)",
+        " JOIN mes_production_log l ON c.mes_log_id = l.id WHERE l.prod_date < :c)",
         {"c": CUTOFF})
 
     run("mes_defect_detail",
         "DELETE FROM mes_defect_detail WHERE id IN "
         "(SELECT d.id FROM mes_defect_detail d "
-        " JOIN mes_production_log l ON d.log_id = l.id WHERE l.prod_date < :c)",
+        " JOIN mes_production_log l ON d.mes_log_id = l.id WHERE l.prod_date < :c)",
         {"c": CUTOFF})
 
     run("mes_production_log",
@@ -157,9 +157,8 @@ def cleanup_pre_nov2026(confirm: str, db: Session = Depends(get_db)):
 
     # ── 8. 금형 수주 ──────────────────────────────────────────────
     run("mold_trial",
-        "DELETE FROM mold_trial WHERE id IN "
-        "(SELECT t.id FROM mold_trial t "
-        " JOIN mold_order o ON t.order_id = o.id WHERE o.order_date < :c)",
+        "DELETE FROM mold_trial WHERE mold_no IN "
+        "(SELECT mold_no FROM mold_order WHERE order_date < :c)",
         {"c": CUTOFF})
 
     run("mold_order",
@@ -239,10 +238,10 @@ def upload_bom_naraemtec(db: Session = Depends(get_db)):
         item = Item(
             part_no=part_no,
             name=name,
-            unit_price=unit_price,
+            std_buy_price=unit_price,
             item_type=TYPE_MAP[itype],
             supplier="나라엠텍",
-            item_unit="EA",
+            unit="EA",
         )
         db.add(item)
         created.append(part_no)
