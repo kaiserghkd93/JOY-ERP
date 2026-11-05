@@ -41,10 +41,15 @@ def cleanup_pre_nov2026(confirm: str, db: Session = Depends(get_db)):
         raise HTTPException(400, "confirm 파라미터에 'DELETE_TEST_DATA' 를 전달하세요")
 
     deleted = {}
+    errors = {}
 
     def run(label: str, sql: str, params: dict = {}):
-        r = db.execute(text(sql), params)
-        deleted[label] = r.rowcount
+        try:
+            r = db.execute(text(sql), params)
+            deleted[label] = r.rowcount
+        except Exception as e:
+            errors[label] = str(e)
+            db.rollback()
 
     # ── 1. 품질 하위 ──────────────────────────────────────────────
     # NCR 중 외주 입고와 무관한 것 삭제
@@ -98,10 +103,10 @@ def cleanup_pre_nov2026(confirm: str, db: Session = Depends(get_db)):
         "DELETE FROM oee_daily WHERE prod_date < :c", {"c": CUTOFF})
 
     run("production_loss",
-        "DELETE FROM production_loss WHERE created_at < :c", {"c": CUTOFF})
+        "DELETE FROM production_loss WHERE loss_date < :c", {"c": CUTOFF})
 
     run("andon_alert",
-        "DELETE FROM andon_alert WHERE created_at < :c", {"c": CUTOFF})
+        "DELETE FROM andon_alert WHERE alert_at < :c", {"c": CUTOFF})
 
     run("daily_actual",
         "DELETE FROM daily_actual WHERE prod_date < :c", {"c": CUTOFF})
@@ -153,7 +158,7 @@ def cleanup_pre_nov2026(confirm: str, db: Session = Depends(get_db)):
         "DELETE FROM stock_ledger WHERE txn_date < :c", {"c": CUTOFF})
 
     run("inventory_adjustment",
-        "DELETE FROM inventory_adjustment WHERE created_at < :c", {"c": CUTOFF})
+        "DELETE FROM inventory_adjustment WHERE adj_date < :c", {"c": CUTOFF})
 
     # ── 8. 금형 수주 ──────────────────────────────────────────────
     run("mold_trial",
@@ -174,14 +179,16 @@ def cleanup_pre_nov2026(confirm: str, db: Session = Depends(get_db)):
     run("overhead_entry",
         "DELETE FROM overhead_entry WHERE created_at < :c", {"c": CUTOFF})
 
-    db.commit()
+    if not errors:
+        db.commit()
     total = sum(deleted.values())
     return {
-        "ok": True,
+        "ok": len(errors) == 0,
         "cutoff": str(CUTOFF),
         "note": "외주처 입고·발주·검사는 유지됨",
         "total_deleted": total,
         "detail": deleted,
+        "errors": errors,
     }
 
 
