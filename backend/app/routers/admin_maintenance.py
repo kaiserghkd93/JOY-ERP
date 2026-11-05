@@ -287,26 +287,25 @@ def fix_naraemtec_item_types(db: Session = Depends(get_db)):
     spec='나라엠텍'인 품목 중 item_type='finished'(완제품)으로 잘못 분류된 것을
     'outsourced'(외주품)로 일괄 수정 + MPL02871AA 삭제
     """
-    # finished → outsourced 수정
-    updated_parts = []
-    to_fix = db.query(Item).filter(
-        Item.spec.contains("나라엠텍"),
-        Item.item_type == ItemType.finished
-    ).all()
-    for item in to_fix:
-        item.item_type = ItemType.outsourced
-        updated_parts.append(item.part_no)
+    conn = engine.connect()
+    try:
+        # finished → outsourced 수정
+        r = conn.execute(text(
+            "UPDATE item SET item_type='outsourced' "
+            "WHERE spec LIKE '%나라엠텍%' AND item_type='finished'"
+        ))
+        updated_count = r.rowcount
 
-    # MPL02871AA 삭제 (spec='나라엠택' 오기입)
-    deleted = []
-    target = db.get(Item, "MPL02871AA")
-    if target:
-        db.delete(target)
-        deleted.append("MPL02871AA")
+        # MPL02871AA 삭제 (spec='나라엠택' 오기입)
+        r2 = conn.execute(text("DELETE FROM item WHERE part_no='MPL02871AA'"))
+        deleted_count = r2.rowcount
 
-    db.commit()
+        conn.commit()
+    finally:
+        conn.close()
+
     return {
         "ok": True,
-        "updated_to_outsourced": updated_parts,
-        "deleted": deleted,
+        "updated_to_outsourced": updated_count,
+        "deleted_MPL02871AA": deleted_count,
     }
