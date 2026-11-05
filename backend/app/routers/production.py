@@ -108,6 +108,61 @@ def list_molds(db: Session = Depends(get_db)):
     return result
 
 
+@router.post("/molds/import-outsourced")
+def import_outsourced_molds(db: Session = Depends(get_db)):
+    """외주품 목록에서 금형 일괄 자동 등록"""
+    from app.models.master import ItemType
+    items = db.query(Item).filter(Item.item_type == ItemType.outsourced).all()
+    created = 0
+    skipped = 0
+    for item in items:
+        existing = db.get(Mold, item.part_no)
+        if existing:
+            skipped += 1
+            continue
+        mold = Mold(
+            mold_no=item.part_no,
+            owner=item.supplier or "미지정",
+            part_no=item.part_no,
+            location=item.supplier or "",
+        )
+        db.add(mold)
+        created += 1
+    db.commit()
+    return {"created": created, "skipped": skipped, "total": len(items)}
+
+
+@router.get("/molds/by-partner")
+def molds_by_partner(db: Session = Depends(get_db)):
+    """금형을 소유자(업체)별로 그룹화하여 반환"""
+    from collections import defaultdict
+    molds = db.query(Mold).order_by(Mold.owner, Mold.mold_no).all()
+    item_map = {i.part_no: i for i in db.query(Item).all()}
+    partner_map = {p.partner_id: p.name for p in db.query(Partner).all()}
+
+    groups: dict[str, list] = defaultdict(list)
+    for m in molds:
+        item = item_map.get(m.part_no) if m.part_no else None
+        item_name = item.name if item else ""
+        lent_partner_name = None
+        if m.lent_to_partner_id:
+            p = db.get(Partner, m.lent_to_partner_id)
+            lent_partner_name = p.name if p else m.lent_to_partner_id
+        groups[m.owner or "미지정"].append({
+            "mold_no": m.mold_no,
+            "owner": m.owner,
+            "part_no": m.part_no,
+            "part_name": item_name,
+            "location": lent_partner_name or m.location or "",
+            "lent_to_partner_id": m.lent_to_partner_id,
+            "lent_partner_name": lent_partner_name,
+            "total_shots": m.total_shots,
+            "status": m.status,
+        })
+
+    return [{"partner": k, "count": len(v), "molds": v} for k, v in sorted(groups.items())]
+
+
 @router.patch("/molds/{mold_no}")
 def patch_mold(mold_no: str, repair_note: str | None = None, status: MoldStatus | None = None, db: Session = Depends(get_db)):
     mold = db.get(Mold, mold_no)

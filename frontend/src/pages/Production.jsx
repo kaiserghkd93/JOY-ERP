@@ -971,9 +971,78 @@ function ProductionReportPanel() {
   )
 }
 
+function printMoldSheet(partnerName, moldList) {
+  const today = new Date().toLocaleDateString('ko-KR')
+  const rows = moldList.map((m, i) => `
+    <tr>
+      <td>${i + 1}</td>
+      <td>${m.mold_no}</td>
+      <td>${m.part_no || ''}</td>
+      <td>${m.part_name || ''}</td>
+      <td>${m.location || ''}</td>
+      <td style="text-align:right">${(m.total_shots || 0).toLocaleString()}</td>
+      <td>${m.status}</td>
+      <td style="text-align:center">□ 양호 □ 불량 □ 없음</td>
+      <td></td>
+    </tr>`).join('')
+
+  const html = `<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>금형 실사표 — ${partnerName}</title>
+<style>
+  @page { margin: 15mm; size: A4 landscape; }
+  body { font-family: 'Malgun Gothic', sans-serif; font-size: 11px; color: #111; }
+  h2 { text-align: center; font-size: 18px; margin-bottom: 4px; }
+  .meta { text-align: center; font-size: 12px; color: #555; margin-bottom: 16px; }
+  table { width: 100%; border-collapse: collapse; }
+  th { background: #1e3a5f; color: white; padding: 6px 8px; text-align: left; white-space: nowrap; }
+  td { border: 1px solid #ccc; padding: 5px 8px; vertical-align: middle; }
+  tr:nth-child(even) td { background: #f7f7f7; }
+  .sign { margin-top: 24px; display: flex; gap: 40px; justify-content: flex-end; }
+  .sign-box { border: 1px solid #999; padding: 12px 24px; min-width: 160px; text-align: center; font-size: 12px; }
+  .sign-box p { margin: 0 0 20px; color: #555; }
+</style>
+</head>
+<body>
+<h2>금형 실사표</h2>
+<div class="meta">업체명: <strong>${partnerName}</strong> &nbsp;|&nbsp; 실사일자: ${today} &nbsp;|&nbsp; 총 ${moldList.length}건</div>
+<table>
+  <thead>
+    <tr>
+      <th style="width:35px">No</th>
+      <th>금형번호</th>
+      <th>품번</th>
+      <th>품명</th>
+      <th>보관위치</th>
+      <th>누적샷수</th>
+      <th>현재상태</th>
+      <th style="width:140px">실사결과</th>
+      <th style="width:160px">비고</th>
+    </tr>
+  </thead>
+  <tbody>${rows}</tbody>
+</table>
+<div class="sign">
+  <div class="sign-box"><p>실사자</p>(인)</div>
+  <div class="sign-box"><p>담당자</p>(인)</div>
+  <div class="sign-box"><p>확인자</p>(인)</div>
+</div>
+</body>
+</html>`
+
+  const w = window.open('', '_blank', 'width=1100,height=750')
+  w.document.write(html)
+  w.document.close()
+  w.focus()
+  setTimeout(() => w.print(), 400)
+}
+
 export default function Production() {
   const [orders, setOrders] = useState([])
   const [molds, setMolds] = useState([])
+  const [moldGroups, setMoldGroups] = useState([])
   const [tab, setTab] = useState('orders')
   const [showPord, setShowPord] = useState(false)
   const [showMold, setShowMold] = useState(false)
@@ -983,7 +1052,17 @@ export default function Production() {
   const load = useCallback(() => {
     api.get('/production/orders').then(r => setOrders(r.data)).catch(() => {})
     api.get('/production/molds').then(r => setMolds(r.data)).catch(() => {})
+    api.get('/production/molds/by-partner').then(r => setMoldGroups(r.data)).catch(() => {})
   }, [])
+
+  const importOutsourced = async () => {
+    if (!window.confirm('외주품 목록의 품목을 금형으로 일괄 등록합니다.\n이미 등록된 항목은 건너뜁니다. 계속할까요?')) return
+    try {
+      const r = await api.post('/production/molds/import-outsourced')
+      alert(`완료: ${r.data.created}건 등록, ${r.data.skipped}건 중복 건너뜀 (전체 ${r.data.total}건)`)
+      load()
+    } catch { alert('일괄 등록 실패') }
+  }
 
   useEffect(() => { load() }, [load])
 
@@ -998,7 +1077,14 @@ export default function Production() {
           </div>
           <div className="spacer"/>
           {tab==='orders' && <button className="btn btn-sm btn-primary" onClick={()=>setShowPord(true)}>＋ 오더 등록</button>}
-          {tab==='molds' && <button className="btn btn-sm btn-primary" onClick={()=>setShowMold(true)}>＋ 금형 등록</button>}
+          {tab==='molds' && (
+            <div style={{ display:'flex', gap:6 }}>
+              <button className="btn btn-sm btn-outline" onClick={importOutsourced} style={{ color:'#059669', borderColor:'#059669' }}>
+                ⇩ 외주품 일괄 등록
+              </button>
+              <button className="btn btn-sm btn-primary" onClick={()=>setShowMold(true)}>＋ 금형 등록</button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -1037,31 +1123,66 @@ export default function Production() {
         <>
         <div className="result-bar">
           <span className="result-bar-title">금형 관리</span>
-          <span className="result-bar-count">{molds.length}건</span>
+          <span className="result-bar-count">{molds.length}건 / {moldGroups.length}개 업체</span>
         </div>
-        <div className="table-wrap">
-          <table>
-            <thead><tr><th>금형번호</th><th>소유자</th><th>해당품번</th><th>보관위치</th><th>누적샷수</th><th>상태</th><th></th></tr></thead>
-            <tbody>
-              {molds.length === 0 && <tr><td colSpan={7} className="empty">금형 없음</td></tr>}
-              {molds.map(m => (
-                <tr key={m.mold_no}>
-                  <td style={{ fontFamily: 'monospace' }}>{m.mold_no}</td>
-                  <td>{m.owner}</td>
-                  <td>{m.part_no}</td>
-                  <td>
-                    {m.lent_partner_name
-                      ? <span style={{color:'var(--primary)',fontWeight:600}}>{m.lent_partner_name} <span style={{fontWeight:400,fontSize:11,color:'var(--text-sm)'}}>(대여중)</span></span>
-                      : (m.location || '—')}
-                  </td>
-                  <td>{m.total_shots?.toLocaleString()}</td>
-                  <td><span className={`badge ${m.status === '정상' ? 'badge-green' : m.status === '수리중' ? 'badge-amber' : 'badge-gray'}`}>{m.status}</span></td>
-                  <td><button className="btn btn-sm btn-outline" onClick={() => setLendMold(m)}>대여 설정</button></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        {moldGroups.length === 0 && molds.length === 0 && (
+          <div style={{ textAlign:'center', color:'#94a3b8', padding:60, fontSize:14 }}>
+            금형 없음 — 외주품 일괄 등록 버튼으로 외주품 품목을 불러오세요
+          </div>
+        )}
+        {moldGroups.map(group => (
+          <div key={group.partner} style={{ marginBottom:16 }}>
+            <div style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 14px',
+              background:'#1e3a5f', borderRadius:'8px 8px 0 0', color:'white' }}>
+              <span style={{ fontWeight:700, fontSize:14 }}>{group.partner}</span>
+              <span style={{ fontSize:12, opacity:0.8 }}>{group.count}건</span>
+              <div style={{ flex:1 }} />
+              <button
+                onClick={() => printMoldSheet(group.partner, group.molds)}
+                style={{ fontSize:11, padding:'4px 12px', background:'white', color:'#1e3a5f',
+                  border:'none', borderRadius:6, cursor:'pointer', fontWeight:600 }}>
+                🖨 실사표 출력
+              </button>
+            </div>
+            <div className="table-wrap" style={{ margin:0, borderRadius:'0 0 8px 8px', border:'1px solid #e2e8f0', borderTop:'none' }}>
+              <table style={{ fontSize:12 }}>
+                <thead>
+                  <tr>
+                    <th>금형번호</th>
+                    <th>품번</th>
+                    <th>품명</th>
+                    <th>보관위치</th>
+                    <th>누적샷수</th>
+                    <th>상태</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {group.molds.map(m => (
+                    <tr key={m.mold_no}>
+                      <td style={{ fontFamily:'monospace', fontSize:11 }}>{m.mold_no}</td>
+                      <td style={{ fontSize:11, color:'#64748b' }}>{m.part_no}</td>
+                      <td>{m.part_name || '—'}</td>
+                      <td>
+                        {m.lent_partner_name
+                          ? <span style={{color:'var(--primary)',fontWeight:600}}>{m.lent_partner_name} <span style={{fontWeight:400,fontSize:10,color:'var(--text-sm)'}}>(대여중)</span></span>
+                          : (m.location || '—')}
+                      </td>
+                      <td style={{ textAlign:'right', fontVariantNumeric:'tabular-nums' }}>{(m.total_shots || 0).toLocaleString()}</td>
+                      <td><span className={`badge ${m.status === '정상' ? 'badge-green' : m.status === '수리중' ? 'badge-amber' : 'badge-gray'}`}>{m.status}</span></td>
+                      <td>
+                        <button className="btn btn-sm btn-outline" style={{ fontSize:11 }}
+                          onClick={() => setLendMold(molds.find(x => x.mold_no === m.mold_no) || m)}>
+                          대여 설정
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        ))}
         </>
       )}
 
