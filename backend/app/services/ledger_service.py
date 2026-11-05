@@ -133,6 +133,29 @@ def confirm_receipt(db: Session, gr_no: str) -> StockLedger:
         ref_type="GR", ref_no=gr_no, note="입고확정",
     )
     _update_avg_cost(db, receipt.part_no, receipt.qty, float(receipt.unit_price))
+
+    # PO 잔량 차감: po_no가 없는 직접입고는 같은 품번+거래처 open PO에 자동 매칭
+    from app.models.purchase import PurchaseOrder, POStatus
+    from app.services.purchase_service import _update_po_status
+    if receipt.po_no is None and receipt.partner_id:
+        matched_po = (
+            db.query(PurchaseOrder)
+            .filter(
+                PurchaseOrder.part_no == receipt.part_no,
+                PurchaseOrder.partner_id == receipt.partner_id,
+                PurchaseOrder.status.in_([POStatus.open, POStatus.partial]),
+            )
+            .order_by(PurchaseOrder.due_date)
+            .first()
+        )
+        if matched_po:
+            receipt.po_no = matched_po.po_no
+            _update_po_status(db, matched_po)
+    elif receipt.po_no and receipt.po_no != receipt.gr_no:
+        po = db.get(PurchaseOrder, receipt.po_no)
+        if po:
+            _update_po_status(db, po)
+
     db.flush()
     return entry
 

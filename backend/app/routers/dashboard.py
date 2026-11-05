@@ -93,7 +93,15 @@ def kpi(year: int | None = None, month: int | None = None, db: Session = Depends
     ).group_by(Shipment.part_no).all()
     ship_part_nos = [r.part_no for r in ship_parts]
     ship_avgs = get_avg_price_bulk(db, ship_part_nos)
-    total_cost = sum(int(r.total_qty) * ship_avgs.get(r.part_no, 0.0) for r in ship_parts)
+    # avg_cost=0이면 std_buy_price로 대체 (입고 전 출고 시 원가 추정)
+    std_prices = {
+        i.part_no: float(i.std_buy_price or 0)
+        for i in db.query(Item).filter(Item.part_no.in_(ship_part_nos)).all()
+    }
+    total_cost = sum(
+        int(r.total_qty) * (ship_avgs.get(r.part_no, 0.0) or std_prices.get(r.part_no, 0.0))
+        for r in ship_parts
+    )
 
     gross_profit = round(total_revenue - total_cost, 0)
     margin_rate = round((total_revenue - total_cost) / total_revenue * 100, 1) if total_revenue > 0 else 0.0
