@@ -287,22 +287,21 @@ def fix_naraemtec_item_types():
     spec='나라엠텍'인 품목 중 item_type='finished'(완제품)으로 잘못 분류된 것을
     'outsourced'(외주품)로 일괄 수정 + MPL02871AA 삭제
     """
-    conn = engine.connect()
     try:
-        # finished → outsourced 수정
-        r = conn.execute(text(
-            "UPDATE item SET item_type=CAST('outsourced' AS itemtype) "
-            "WHERE spec LIKE :spec_pat AND item_type=CAST('finished' AS itemtype)"
-        ), {"spec_pat": "%나라엠텍%"})
-        updated_count = r.rowcount
-
-        # MPL02871AA 삭제 (spec='나라엠택' 오기입)
-        r2 = conn.execute(text("DELETE FROM item WHERE part_no = :pno"), {"pno": "MPL02871AA"})
-        deleted_count = r2.rowcount
-
-        conn.commit()
-    finally:
-        conn.close()
+        conn = engine.connect()
+        try:
+            r = conn.execute(text(
+                "UPDATE item SET item_type='outsourced' "
+                "WHERE spec LIKE :spec_pat AND item_type='finished'"
+            ), {"spec_pat": "%나라엠텍%"})
+            updated_count = r.rowcount
+            r2 = conn.execute(text("DELETE FROM item WHERE part_no = :pno"), {"pno": "MPL02871AA"})
+            deleted_count = r2.rowcount
+            conn.commit()
+        finally:
+            conn.close()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
     return {
         "ok": True,
