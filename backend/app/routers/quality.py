@@ -266,6 +266,19 @@ def confirm_inspection(insp_id: int, db: Session = Depends(get_db), user: User =
     insp.approval_status = ApprovalStatus.confirmed
     insp.confirmer_id = user.username
     insp.confirmed_at = datetime.now()
+
+    # 합격(전량 또는 부분합격 중 처리방법이 반품/폐기가 아닌 경우) → 자동 입고 확정
+    from app.models.quality import InspectionResult, DisposalType
+    from app.models.purchase import Receipt, ReceiptStatus
+    from app.services.ledger_service import confirm_receipt as _confirm_receipt
+    if insp.result in (InspectionResult.pass_, InspectionResult.partial):
+        # 반품/폐기가 아닌 경우에만 재고 반영 (보류/특채는 입고)
+        skip_disposals = {DisposalType.return_, DisposalType.scrap}
+        if insp.disposal not in skip_disposals:
+            receipt = db.get(Receipt, insp.gr_no)
+            if receipt and receipt.status == ReceiptStatus.pending:
+                _confirm_receipt(db, insp.gr_no)
+
     db.commit()
     return {"ok": True, "status": insp.approval_status}
 

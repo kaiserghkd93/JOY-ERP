@@ -1487,7 +1487,7 @@ async function submitAndPrint() {
     document.getElementById('inv-sign-supplier').textContent = currentUser?.name || '';
     document.getElementById('inv-contact').textContent = currentUser?.name || '';
     document.getElementById('inv-date').textContent = date;
-    document.getElementById('inv-date2').textContent = date;
+    document.getElementById('inv-date2').value = date;
     document.getElementById('inv-grno').textContent = grNos;
 
     let total = 0;
