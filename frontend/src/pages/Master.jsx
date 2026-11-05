@@ -204,7 +204,7 @@ export default function Master() {
 
   const load = useCallback(() => {
     api.get('/master/items').then(r => setItems(r.data)).catch(() => {})
-    api.get('/master/partners').then(r => setPartners(r.data)).catch(() => {})
+    api.get('/master/partners?include_inactive=true').then(r => setPartners(r.data)).catch(() => {})
     api.get('/master/items/customer-parts').then(r => setCustomerParts(r.data)).catch(() => {})
   }, [])
 
@@ -510,9 +510,9 @@ export default function Master() {
             <tbody>
               {pagedPartners.length === 0 && <tr><td colSpan={8} className="empty">거래처 없음</td></tr>}
               {pagedPartners.map(p => (
-                <tr key={p.partner_id}>
+                <tr key={p.partner_id} style={!p.active ? {opacity:0.5, background:'#fafafa'} : {}}>
                   <td><code style={{ fontSize: 11 }}>{p.partner_id}</code></td>
-                  <td>{p.name}</td>
+                  <td>{p.name}{!p.active && <span className="badge badge-gray" style={{marginLeft:6,fontSize:9}}>비활성</span>}</td>
                   <td><span className={`badge ${p.partner_type === '고객' ? 'badge-green' : p.partner_type === '외주처' ? 'badge-blue' : 'badge-gray'}`}>
                     {p.partner_type === '고객' ? 'Customer' : p.partner_type === '외주처' ? 'Supplier' : p.partner_type === '공용' ? 'Common' : p.partner_type}
                   </span></td>

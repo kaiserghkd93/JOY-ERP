@@ -510,8 +510,11 @@ def create_partner(body: PartnerCreate, db: Session = Depends(get_db), current_u
 
 
 @router.get("/partners", response_model=list[PartnerOut])
-def list_partners(db: Session = Depends(get_db)):
-    return db.query(Partner).filter(Partner.active == True).all()
+def list_partners(include_inactive: bool = False, db: Session = Depends(get_db)):
+    q = db.query(Partner)
+    if not include_inactive:
+        q = q.filter(Partner.active == True)
+    return q.all()
 
 
 @router.get("/partners/{partner_id}", response_model=PartnerOut)
