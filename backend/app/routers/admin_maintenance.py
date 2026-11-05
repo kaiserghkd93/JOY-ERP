@@ -16,7 +16,7 @@ CUTOFF = date(2026, 11, 1)   # 2026-10-31 이전 모두 삭제 (= < 2026-11-01)
 
 # 외주처 파트너 서브쿼리 (receipt/inspection/PO 유지용)
 _OUTSOURCE_PARTNER_SQ = (
-    "SELECT partner_id FROM partner WHERE partner_type = '외주처'"
+    "SELECT partner_id FROM partner WHERE partner_type = 'supplier'"
 )
 # 외주 입고 gr_no 목록 (keep)
 _KEEP_GR_SQ = (
@@ -131,8 +131,8 @@ def cleanup_pre_nov2026(confirm: str):
 
     # ── 5. 영업 ───────────────────────────────────────────────────
     run("invoice_line",
-        "DELETE FROM invoice_line WHERE invoice_id IN "
-        "(SELECT id FROM invoice WHERE issue_date < :c)", {"c": CUTOFF})
+        "DELETE FROM invoice_line WHERE inv_no IN "
+        "(SELECT inv_no FROM invoice WHERE issue_date < :c)", {"c": CUTOFF})
 
     run("invoice",
         "DELETE FROM invoice WHERE issue_date < :c", {"c": CUTOFF})
@@ -157,7 +157,10 @@ def cleanup_pre_nov2026(confirm: str):
         {"c": CUTOFF})
 
     run("purchase_order_group",
-        "DELETE FROM purchase_order_group WHERE created_at < :c", {"c": CUTOFF})
+        "DELETE FROM purchase_order_group WHERE created_at < :c "
+        "AND (group_no IS NULL OR group_no NOT IN ("
+        "  SELECT DISTINCT group_no FROM purchase_order WHERE group_no IS NOT NULL"
+        "))", {"c": CUTOFF})
 
     run("purchase_request",
         "DELETE FROM purchase_request WHERE created_at < :c", {"c": CUTOFF})
@@ -192,10 +195,7 @@ def cleanup_pre_nov2026(confirm: str):
         "DELETE FROM overhead_entry WHERE created_at < :c", {"c": CUTOFF})
 
     try:
-        if not errors:
-            conn.commit()
-        else:
-            conn.rollback()
+        conn.commit()
     finally:
         conn.close()
 
