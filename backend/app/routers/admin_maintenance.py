@@ -7,7 +7,7 @@ from datetime import date
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import text
-from app.database import get_db
+from app.database import get_db, engine
 from app.models.master import Item, ItemType
 
 router = APIRouter(prefix="/admin", tags=["admin-maintenance"])
@@ -31,7 +31,7 @@ _KEEP_PO_SQ = (
 
 
 @router.post("/cleanup-pre-nov2026")
-def cleanup_pre_nov2026(confirm: str, db: Session = Depends(get_db)):
+def cleanup_pre_nov2026(confirm: str):
     """
     2026-11-01 이전 트랜잭션 데이터 삭제 (= 10월31일 기준).
     외주처(외주 매입) 입고·발주·검사 기록은 유지.
@@ -43,13 +43,25 @@ def cleanup_pre_nov2026(confirm: str, db: Session = Depends(get_db)):
     deleted = {}
     errors = {}
 
+    # engine.connect()를 직접 사용해 세션 상태 오염 방지
+    # 각 SQL마다 savepoint로 개별 에러 격리
+    conn = engine.connect()
+    sp_idx = [0]
+
     def run(label: str, sql: str, params: dict = {}):
+        sp = f"sp{sp_idx[0]}"
+        sp_idx[0] += 1
         try:
-            r = db.execute(text(sql), params)
+            conn.execute(text(f"SAVEPOINT {sp}"))
+            r = conn.execute(text(sql), params)
             deleted[label] = r.rowcount
+            conn.execute(text(f"RELEASE SAVEPOINT {sp}"))
         except Exception as e:
             errors[label] = str(e)
-            db.rollback()
+            try:
+                conn.execute(text(f"ROLLBACK TO SAVEPOINT {sp}"))
+            except Exception:
+                pass
 
     # ── 1. 품질 하위 ──────────────────────────────────────────────
     # NCR 중 외주 입고와 무관한 것 삭제
@@ -179,8 +191,14 @@ def cleanup_pre_nov2026(confirm: str, db: Session = Depends(get_db)):
     run("overhead_entry",
         "DELETE FROM overhead_entry WHERE created_at < :c", {"c": CUTOFF})
 
-    if not errors:
-        db.commit()
+    try:
+        if not errors:
+            conn.commit()
+        else:
+            conn.rollback()
+    finally:
+        conn.close()
+
     total = sum(deleted.values())
     return {
         "ok": len(errors) == 0,
