@@ -1146,3 +1146,163 @@ def quality_summary(year: int | None = None, month: int | None = None, db: Sessi
             "defect_rate": pod_defect_rate,
         },
     }
+
+
+@router.get("/production-shipment")
+def production_shipment(year: int | None = None, month: int | None = None, db: Session = Depends(get_db)):
+    """생산-출하 연동 지표 — 생산량 vs 출하량, 재고증감, 경보"""
+    y = year or date.today().year
+    m = month or date.today().month
+    first_day = date(y, m, 1)
+    last_day  = date(y + 1, 1, 1) if m == 12 else date(y, m + 1, 1)
+
+    # ── 이번달 자체생산량 (stock_ledger ref_type='MES') ──────────────
+    mes_rows = db.query(
+        StockLedger.part_no,
+        func.sum(StockLedger.qty).label("qty"),
+    ).filter(
+        StockLedger.ref_type == "MES",
+        StockLedger.txn_date >= first_day,
+        StockLedger.txn_date < last_day,
+        StockLedger.qty > 0,
+    ).group_by(StockLedger.part_no).all()
+    mes_map = {r.part_no: int(r.qty) for r in mes_rows}
+
+    # ── 이번달 외주 입고량 (stock_ledger ref_type='GR') ──────────────
+    # 외주처(supplier 타입) 파트너 목록
+    from app.models.master import Partner as _Partner
+    outsource_ids = {
+        p.partner_id for p in db.query(_Partner).filter(_Partner.partner_type == "supplier").all()
+    }
+    gr_rows = db.query(
+        StockLedger.part_no,
+        func.sum(StockLedger.qty).label("qty"),
+    ).filter(
+        StockLedger.ref_type == "GR",
+        StockLedger.txn_date >= first_day,
+        StockLedger.txn_date < last_day,
+        StockLedger.qty > 0,
+    ).group_by(StockLedger.part_no).all()
+
+    # 외주 입고 품번만 필터 (Receipt와 조인해서 partner 확인)
+    outsource_gr_parts = db.query(
+        Receipt.part_no,
+        func.sum(Receipt.qty).label("qty"),
+    ).filter(
+        Receipt.status == ReceiptStatus.confirmed,
+        Receipt.receipt_date >= first_day,
+        Receipt.receipt_date < last_day,
+        Receipt.partner_id.in_(outsource_ids),
+    ).group_by(Receipt.part_no).all()
+    outsource_map = {r.part_no: int(r.qty) for r in outsource_gr_parts}
+
+    # 공급량 = 자체생산 + 외주입고
+    all_supply_parts = set(mes_map) | set(outsource_map)
+    produced_map = {}
+    for pno in all_supply_parts:
+        produced_map[pno] = mes_map.get(pno, 0) + outsource_map.get(pno, 0)
+
+    total_produced = sum(produced_map.values())
+    total_mes = sum(mes_map.values())
+    total_outsource = sum(outsource_map.values())
+
+    # ── 이번달 출하량 ─────────────────────────────────────────────
+    ship_rows = db.query(
+        Shipment.part_no,
+        func.sum(Shipment.qty).label("shipped"),
+    ).filter(
+        Shipment.status == ShipmentStatus.confirmed,
+        Shipment.ship_date >= first_day,
+        Shipment.ship_date < last_day,
+    ).group_by(Shipment.part_no).all()
+
+    shipped_map = {r.part_no: int(r.shipped) for r in ship_rows}
+    total_shipped = sum(shipped_map.values())
+
+    # ── 생산-출하율 ───────────────────────────────────────────────
+    ship_rate = round(total_shipped / total_produced * 100, 1) if total_produced > 0 else 0.0
+    inventory_delta = total_produced - total_shipped  # 양수면 재고 증가
+
+    # ── 품목별 상세 ───────────────────────────────────────────────
+    item_map = {i.part_no: i.name for i in db.query(Item).all()}
+    all_parts = set(produced_map) | set(shipped_map)
+    detail = []
+    for pno in sorted(all_parts):
+        prod = produced_map.get(pno, 0)
+        ship = shipped_map.get(pno, 0)
+        rate = round(ship / prod * 100, 1) if prod > 0 else None
+        delta = prod - ship
+        detail.append({
+            "part_no": pno,
+            "part_name": item_map.get(pno, pno),
+            "produced": prod,
+            "shipped": ship,
+            "ship_rate": rate,
+            "inventory_delta": delta,
+            "alert": delta > 0 and (rate is None or rate < 70),  # 출하율 70% 미만이고 재고 증가
+        })
+    detail.sort(key=lambda x: x["inventory_delta"], reverse=True)
+
+    # ── 월별 트렌드 (최근 6개월) ─────────────────────────────────
+    trend = []
+    for i in range(5, -1, -1):
+        td = date.today().replace(day=1)
+        offset_m = td.month - i
+        offset_y = td.year
+        while offset_m <= 0:
+            offset_m += 12
+            offset_y -= 1
+        fd = date(offset_y, offset_m, 1)
+        ld = date(offset_y + 1, 1, 1) if offset_m == 12 else date(offset_y, offset_m + 1, 1)
+
+        p_mes = int(db.query(func.coalesce(func.sum(StockLedger.qty), 0)).filter(
+            StockLedger.ref_type == "MES",
+            StockLedger.txn_date >= fd,
+            StockLedger.txn_date < ld,
+            StockLedger.qty > 0,
+        ).scalar())
+        p_out = int(db.query(func.coalesce(func.sum(Receipt.qty), 0)).filter(
+            Receipt.status == ReceiptStatus.confirmed,
+            Receipt.receipt_date >= fd,
+            Receipt.receipt_date < ld,
+            Receipt.partner_id.in_(outsource_ids),
+        ).scalar())
+        p_total = p_mes + p_out
+        s = int(db.query(func.coalesce(func.sum(Shipment.qty), 0)).filter(
+            Shipment.status == ShipmentStatus.confirmed,
+            Shipment.ship_date >= fd,
+            Shipment.ship_date < ld,
+        ).scalar())
+        trend.append({
+            "ym": f"{offset_y}-{offset_m:02d}",
+            "produced": p_mes,
+            "outsourced": p_out,
+            "total_supply": p_total,
+            "shipped": s,
+            "ship_rate": round(s / p_total * 100, 1) if p_total > 0 else 0,
+        })
+
+    # ── 경보 ─────────────────────────────────────────────────────
+    alerts = []
+    if ship_rate < 70 and total_produced > 0:
+        alerts.append({"level": "warning", "msg": f"출하율 {ship_rate}% — 재고 과다 위험 (생산 {total_produced:,}개 중 {total_shipped:,}개만 출하)"})
+    if ship_rate < 50 and total_produced > 0:
+        alerts.append({"level": "danger", "msg": f"출하율 {ship_rate}% — 재고 심각! 생산과 출하 계획을 즉시 검토하세요"})
+    for d in detail:
+        if d["alert"]:
+            alerts.append({"level": "warning", "msg": f"{d['part_name']} — 생산 {d['produced']:,}개, 출하 {d['shipped']:,}개 ({d['ship_rate'] or 0}%)"})
+
+    return {
+        "year": y, "month": m,
+        "summary": {
+            "total_supply": total_produced,       # 자체생산 + 외주입고
+            "total_mes": total_mes,               # 자체생산만
+            "total_outsource": total_outsource,   # 외주입고만
+            "total_shipped": total_shipped,
+            "ship_rate": ship_rate,
+            "inventory_delta": inventory_delta,
+        },
+        "alerts": alerts,
+        "detail": detail,
+        "trend": trend,
+    }
