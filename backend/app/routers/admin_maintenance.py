@@ -279,3 +279,34 @@ def upload_bom_naraemtec(db: Session = Depends(get_db)):
         "created_list": created,
         "skipped_list": skipped,
     }
+
+
+@router.post("/fix-naraemtec-item-types")
+def fix_naraemtec_item_types(db: Session = Depends(get_db)):
+    """
+    spec='나라엠텍'인 품목 중 item_type='finished'(완제품)으로 잘못 분류된 것을
+    'outsourced'(외주품)로 일괄 수정 + MPL02871AA 삭제
+    """
+    # finished → outsourced 수정
+    updated_parts = []
+    to_fix = db.query(Item).filter(
+        Item.spec.contains("나라엠텍"),
+        Item.item_type == ItemType.finished
+    ).all()
+    for item in to_fix:
+        item.item_type = ItemType.outsourced
+        updated_parts.append(item.part_no)
+
+    # MPL02871AA 삭제 (spec='나라엠택' 오기입)
+    deleted = []
+    target = db.get(Item, "MPL02871AA")
+    if target:
+        db.delete(target)
+        deleted.append("MPL02871AA")
+
+    db.commit()
+    return {
+        "ok": True,
+        "updated_to_outsourced": updated_parts,
+        "deleted": deleted,
+    }
