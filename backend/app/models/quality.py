@@ -17,6 +17,7 @@ class DisposalType(str, enum.Enum):
     scrap = "폐기"
     concession = "특채"
     pending = "보류"
+    accepted = "합격"
 
 
 class ClaimStatus(str, enum.Enum):

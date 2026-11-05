@@ -275,6 +275,8 @@ def confirm_inspection(insp_id: int, db: Session = Depends(get_db), user: User =
         # 반품/폐기가 아닌 경우에만 재고 반영 (보류/특채는 입고)
         skip_disposals = {DisposalType.return_, DisposalType.scrap}
         if insp.disposal not in skip_disposals:
+            # 처리방법을 "합격"으로 자동 변경
+            insp.disposal = DisposalType.accepted
             receipt = db.get(Receipt, insp.gr_no)
             if receipt and receipt.status == ReceiptStatus.pending:
                 _confirm_receipt(db, insp.gr_no)

@@ -147,6 +147,11 @@ with engine.connect().execution_options(isolation_level="AUTOCOMMIT") as _ddl:
             _ddl.execute(_text(f"ALTER TYPE inspectionresult ADD VALUE IF NOT EXISTS '{_ir}'"))
         except Exception:
             pass
+    for _dt in ['반품','폐기','특채','보류','합격']:
+        try:
+            _ddl.execute(_text(f"ALTER TYPE disposaltype ADD VALUE IF NOT EXISTS '{_dt}'"))
+        except Exception:
+            pass
     for _lt in ['퍼지손실','시동로스','러너폐기','재분쇄재입고','재분쇄재소모','원재료폐기']:
         try:
             _ddl.execute(_text(f"ALTER TYPE ledgertype ADD VALUE IF NOT EXISTS '{_lt}'"))
