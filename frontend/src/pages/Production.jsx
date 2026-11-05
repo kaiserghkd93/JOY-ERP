@@ -111,6 +111,45 @@ function MoldModal({ onClose, onSaved }) {
   )
 }
 
+function EditMoldModal({ mold, onClose, onSaved }) {
+  const [form, setForm] = useState({ owner: mold.owner || '', location: mold.location || '' })
+
+  const submit = async () => {
+    await api.patch(`/production/molds/${mold.mold_no}`, { owner: form.owner, location: form.location })
+    onSaved()
+  }
+
+  return (
+    <div className="modal-overlay">
+      <div className="modal" style={{ maxWidth: 420 }}>
+        <div className="modal-header">
+          <h3>업체 변경 — {mold.mold_no}</h3>
+          <button onClick={onClose}>×</button>
+        </div>
+        <div className="modal-body">
+          <div style={{ fontSize: 12, color: '#64748b', marginBottom: 12 }}>
+            품번: {mold.part_no} · {mold.part_name}
+          </div>
+          <div className="form-group">
+            <label>소유자 (업체명)</label>
+            <input value={form.owner} onChange={e => setForm(f => ({ ...f, owner: e.target.value }))}
+              placeholder="예: 유한, HD현대일렉트릭" />
+          </div>
+          <div className="form-group">
+            <label>보관위치</label>
+            <input value={form.location} onChange={e => setForm(f => ({ ...f, location: e.target.value }))}
+              placeholder="예: 유한 금형창고 A-3" />
+          </div>
+        </div>
+        <div className="modal-footer">
+          <button className="btn btn-outline" onClick={onClose}>취소</button>
+          <button className="btn btn-primary" onClick={submit}>저장</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function LendMoldModal({ mold, onClose, onSaved }) {
   const [partners, setPartners] = useState([])
   const [form, setForm] = useState({
@@ -1047,6 +1086,7 @@ export default function Production() {
   const [showPord, setShowPord] = useState(false)
   const [showMold, setShowMold] = useState(false)
   const [lendMold, setLendMold] = useState(null)
+  const [editMold, setEditMold] = useState(null)
   const [resultPord, setResultPord] = useState(null)
 
   const load = useCallback(() => {
@@ -1171,10 +1211,24 @@ export default function Production() {
                       <td style={{ textAlign:'right', fontVariantNumeric:'tabular-nums' }}>{(m.total_shots || 0).toLocaleString()}</td>
                       <td><span className={`badge ${m.status === '정상' ? 'badge-green' : m.status === '수리중' ? 'badge-amber' : 'badge-gray'}`}>{m.status}</span></td>
                       <td>
-                        <button className="btn btn-sm btn-outline" style={{ fontSize:11 }}
-                          onClick={() => setLendMold(molds.find(x => x.mold_no === m.mold_no) || m)}>
-                          대여 설정
-                        </button>
+                        <div style={{ display:'flex', gap:4 }}>
+                          <button className="btn btn-sm btn-outline" style={{ fontSize:11 }}
+                            onClick={() => setEditMold(m)}>
+                            업체 변경
+                          </button>
+                          <button className="btn btn-sm btn-outline" style={{ fontSize:11 }}
+                            onClick={() => setLendMold(molds.find(x => x.mold_no === m.mold_no) || m)}>
+                            대여 설정
+                          </button>
+                          <button className="btn btn-sm btn-outline" style={{ fontSize:11, color:'#dc2626', borderColor:'#fca5a5' }}
+                            onClick={async () => {
+                              if (!window.confirm(`${m.mold_no} 금형을 삭제하시겠습니까?`)) return
+                              await api.delete(`/production/molds/${m.mold_no}`)
+                              load()
+                            }}>
+                            삭제
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -1193,6 +1247,7 @@ export default function Production() {
       {showPord && <PordModal onClose={() => setShowPord(false)} onSaved={() => { setShowPord(false); load() }} />}
       {showMold && <MoldModal onClose={() => setShowMold(false)} onSaved={() => { setShowMold(false); load() }} />}
       {lendMold && <LendMoldModal mold={lendMold} onClose={() => setLendMold(null)} onSaved={() => { setLendMold(null); load() }} />}
+      {editMold && <EditMoldModal mold={editMold} onClose={() => setEditMold(null)} onSaved={() => { setEditMold(null); load() }} />}
       {resultPord && <ResultModal pord={resultPord} onClose={() => setResultPord(null)} onSaved={() => { setResultPord(null); load() }} />}
     </div>
   )

@@ -164,17 +164,31 @@ def molds_by_partner(db: Session = Depends(get_db)):
 
 
 @router.patch("/molds/{mold_no}")
-def patch_mold(mold_no: str, repair_note: str | None = None, status: MoldStatus | None = None, db: Session = Depends(get_db)):
+def patch_mold(mold_no: str, body: dict, db: Session = Depends(get_db)):
     mold = db.get(Mold, mold_no)
     if not mold:
         raise HTTPException(404)
-    if status:
-        mold.status = status
-    if repair_note:
-        mold.repair_history = (mold.repair_history or "") + f"\n{repair_note}"
+    if "status" in body and body["status"]:
+        mold.status = body["status"]
+    if "repair_note" in body and body["repair_note"]:
+        mold.repair_history = (mold.repair_history or "") + f"\n{body['repair_note']}"
+    if "owner" in body:
+        mold.owner = body["owner"]
+    if "location" in body:
+        mold.location = body["location"]
     db.commit()
     db.refresh(mold)
-    return mold
+    return {"ok": True}
+
+
+@router.delete("/molds/{mold_no}")
+def delete_mold(mold_no: str, db: Session = Depends(get_db)):
+    mold = db.get(Mold, mold_no)
+    if not mold:
+        raise HTTPException(404)
+    db.delete(mold)
+    db.commit()
+    return {"ok": True}
 
 
 @router.patch("/molds/{mold_no}/lend")
