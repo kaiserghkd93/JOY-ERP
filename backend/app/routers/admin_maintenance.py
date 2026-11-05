@@ -281,6 +281,28 @@ def upload_bom_naraemtec(db: Session = Depends(get_db)):
     }
 
 
+@router.post("/init-machines")
+def init_machines():
+    """호기 20대 초기 등록"""
+    from app.models.mes_floor import Machine
+    conn = engine.connect()
+    try:
+        created = []
+        for i in range(1, 21):
+            mid = f"M{i:02d}"
+            exists = conn.execute(text("SELECT 1 FROM machine WHERE machine_id=:m"), {"m": mid}).first()
+            if not exists:
+                conn.execute(text(
+                    "INSERT INTO machine(machine_id,name,std_cycle_sec,cavity_count,is_active) "
+                    "VALUES(:mid,:name,30.0,1,true)"
+                ), {"mid": mid, "name": f"{i}호기"})
+                created.append(mid)
+        conn.commit()
+    finally:
+        conn.close()
+    return {"ok": True, "created": created}
+
+
 @router.post("/fix-naraemtec-item-types")
 def fix_naraemtec_item_types():
     """
