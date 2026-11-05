@@ -16,6 +16,7 @@ from app.services.ledger_service import confirm_receipt as _confirm, get_stock, 
 router = APIRouter(prefix="/material", tags=["자재구매"])
 
 MAT_ROLES = {"admin", "material", "manager", "executive", "manufacturing"}
+APPROVER_ROLES = {"admin", "executive", "owner"}  # 대표/전무/관리자만 승인 가능
 
 
 def _require_mat(user: User = Depends(get_current_user)) -> User:
@@ -76,6 +77,7 @@ def list_mat_orders(
             "order_date": str(po.order_date),
             "due_date": str(po.due_date),
             "status": po.status,
+            "approval_status": po.approval_status or "작성중",
             "note": po.note,
         })
     return result
@@ -234,6 +236,61 @@ def cancel_mat_order(
     return {"ok": True, "deleted": po_no}
 
 
+# ── 발주 승인 요청 ────────────────────────────────────────────────
+@router.post("/orders/{po_no}/request-approval")
+def request_mat_approval(
+    po_no: str,
+    db: Session = Depends(get_db),
+    user: User = Depends(_require_mat),
+):
+    po = db.get(PurchaseOrder, po_no)
+    if not po or po.po_type != "material":
+        raise HTTPException(404, f"자재 발주 없음: {po_no}")
+    if po.approval_status == "승인완료":
+        raise HTTPException(400, "이미 승인된 발주입니다")
+    po.approval_status = "승인요청"
+    db.commit()
+    return {"ok": True, "approval_status": po.approval_status}
+
+
+# ── 발주 승인 (대표/전무/관리자) ─────────────────────────────────
+@router.post("/orders/{po_no}/approve")
+def approve_mat_order(
+    po_no: str,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    if user.role not in APPROVER_ROLES:
+        raise HTTPException(403, "대표/전무/관리자만 승인할 수 있습니다")
+    po = db.get(PurchaseOrder, po_no)
+    if not po or po.po_type != "material":
+        raise HTTPException(404, f"자재 발주 없음: {po_no}")
+    if po.approval_status != "승인요청":
+        raise HTTPException(400, "승인 요청 상태가 아닙니다")
+    po.approval_status = "승인완료"
+    db.commit()
+    return {"ok": True, "approval_status": po.approval_status}
+
+
+# ── 발주 반려 (대표/전무/관리자) ─────────────────────────────────
+@router.post("/orders/{po_no}/reject")
+def reject_mat_order(
+    po_no: str,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    if user.role not in APPROVER_ROLES:
+        raise HTTPException(403, "대표/전무/관리자만 반려할 수 있습니다")
+    po = db.get(PurchaseOrder, po_no)
+    if not po or po.po_type != "material":
+        raise HTTPException(404, f"자재 발주 없음: {po_no}")
+    if po.approval_status not in ("승인요청", "승인완료"):
+        raise HTTPException(400, "승인 요청/완료 상태가 아닙니다")
+    po.approval_status = "반려"
+    db.commit()
+    return {"ok": True, "approval_status": po.approval_status}
+
+
 # ── 자재 발주서 출력 (HTML — 브라우저 인쇄/PDF) ──────────────────
 @router.get("/orders/{po_no}/print", response_class=HTMLResponse)
 def print_mat_order(po_no: str, db: Session = Depends(get_db)):
@@ -241,6 +298,9 @@ def print_mat_order(po_no: str, db: Session = Depends(get_db)):
     po = db.get(PurchaseOrder, po_no)
     if not po or po.po_type != "material":
         raise HTTPException(404, f"자재 발주 없음: {po_no}")
+
+    approval_status = po.approval_status or "작성중"
+    is_approved = approval_status == "승인완료"
 
     partner = db.get(Partner, po.partner_id)
     partner_name = partner.name if partner else po.partner_id
@@ -342,6 +402,7 @@ def print_mat_order(po_no: str, db: Session = Depends(get_db)):
 </head>
 <body>
 <button class="print-btn" onclick="window.print()">&#128424; PDF 저장 / 인쇄</button>
+{'<div style="position:fixed;top:0;left:0;right:0;background:#dc2626;color:#fff;text-align:center;padding:8px;font-size:13px;font-weight:700;z-index:998">⚠ 미승인 발주서 — 대표/전무 승인 후 발송하십시오</div>' if not is_approved else ''}
 <div class="po-page">
 
   <!-- 헤더 -->

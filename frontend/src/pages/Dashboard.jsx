@@ -15,6 +15,7 @@ const ROLE_SECTIONS = {
     target: true, closing: true, stock_chart: true, monthly_trend: true,
     sales_table: true, purchase_table: true, customer_scorecard: true,
     quality_dashboard: true, supplier_scorecard: true, material_scorecard: false,
+    production_shipment: true,
   },
   executive: {
     // 대표/전무: 매출·이익·품질 요약. 구매·재고 세부 제외
@@ -22,6 +23,7 @@ const ROLE_SECTIONS = {
     target: true, closing: true, stock_chart: false, monthly_trend: true,
     sales_table: false, purchase_table: false, customer_scorecard: false,
     quality_dashboard: true, supplier_scorecard: false, material_scorecard: false,
+    production_shipment: true,
   },
   manager: {
     // 상무: 전체에 준하되 외주처·자재 스코어카드 모두 포함
@@ -29,6 +31,7 @@ const ROLE_SECTIONS = {
     target: true, closing: true, stock_chart: false, monthly_trend: true,
     sales_table: false, purchase_table: false, customer_scorecard: true,
     quality_dashboard: true, supplier_scorecard: true, material_scorecard: true,
+    production_shipment: true,
   },
   owner: {
     // 오너: 목표달성률 + 품질 현황만
@@ -91,20 +94,20 @@ const ROLE_SECTIONS = {
   },
   // ── 생산 ───────────────────────────────────────────────────────
   production: {
-    // 생산관리: 불량률 + 품질 대시보드 + 생산현황. 구매·매출 제외
+    // 생산관리: 불량률 + 품질 대시보드 + 생산현황 + 생산-출하 KPI. 구매·매출 제외
     summary: false, kpi_delivery: false, kpi_quality: true, kpi_inventory: false, kpi_profit: false,
     target: false, closing: false, stock_chart: false, monthly_trend: false,
     sales_table: false, purchase_table: false, customer_scorecard: false,
     quality_dashboard: true, supplier_scorecard: false, material_scorecard: false,
-    production_status: true,
+    production_status: true, production_shipment: true,
   },
   manufacturing: {
-    // 제조관리 총괄: 불량률 + 재고 + 품질 대시보드 + 생산현황. 매출·구매금액 제외
+    // 제조관리 총괄: 불량률 + 재고 + 품질 대시보드 + 생산현황 + 생산-출하 KPI. 매출·구매금액 제외
     summary: false, kpi_delivery: false, kpi_quality: true, kpi_inventory: true, kpi_profit: false,
     target: false, closing: false, stock_chart: true, monthly_trend: false,
     sales_table: false, purchase_table: false, customer_scorecard: false,
     quality_dashboard: true, supplier_scorecard: false, material_scorecard: false,
-    production_status: true,
+    production_status: true, production_shipment: true,
   },
 }
 
@@ -180,6 +183,7 @@ export default function Dashboard() {
   const [vsTarget, setVsTarget] = useState(null)
   const [qualityKpi, setQualityKpi] = useState(null)
   const [productionStatus, setProductionStatus] = useState(null)
+  const [prodShipKpi, setProdShipKpi] = useState(null)
   const [loading, setLoading] = useState(false)
   const [kpiTargets, setKpiTargets] = useState([])
   const [kpiEditMode, setKpiEditMode] = useState(false)
@@ -214,6 +218,8 @@ export default function Dashboard() {
       calls.push(api.get(`/dashboard/monthly-trend?year=${year}`).then(r => setMonthlyTrend(r.data)).catch(() => {}))
     if (show.production_status)
       calls.push(api.get(`/dashboard/production-status?year=${year}&month=${month}`).then(r => setProductionStatus(r.data)).catch(() => {}))
+    if (show.production_shipment)
+      calls.push(api.get(`/dashboard/production-shipment?year=${year}&month=${month}`).then(r => setProdShipKpi(r.data)).catch(() => {}))
     Promise.all(calls).finally(() => setLoading(false))
   }
 
@@ -1003,6 +1009,88 @@ export default function Dashboard() {
           )}
         </div>
       )}
+
+      {/* ── 생산-출하 연동 KPI ── */}
+      {show.production_shipment && prodShipKpi && (() => {
+        const s = prodShipKpi.summary || {}
+        const alerts = prodShipKpi.alerts || []
+        const trend = prodShipKpi.trend || []
+        const shipRate = s.ship_rate ?? 0
+        const rateColor = shipRate >= 90 ? 'var(--success)' : shipRate >= 70 ? '#d97706' : 'var(--danger)'
+        return (
+          <div>
+            <div className="section-title mt-16">생산·출하 연동 KPI — {year}년 {month}월</div>
+            {/* 요약 카드 */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12, marginBottom: 14 }}>
+              {[
+                { label: '자체생산 (MES)', val: (s.total_mes ?? 0).toLocaleString(), unit: '개', color: '#1d4ed8', bg: '#eff6ff', border: '#bfdbfe' },
+                { label: '외주입고', val: (s.total_outsource ?? 0).toLocaleString(), unit: '개', color: '#92400e', bg: '#fefce8', border: '#fde68a' },
+                { label: '총 출하량', val: (s.total_shipped ?? 0).toLocaleString(), unit: '개', color: '#166534', bg: '#f0fdf4', border: '#bbf7d0' },
+                { label: '출하율', val: shipRate.toFixed(1), unit: '%', color: shipRate >= 90 ? '#166534' : shipRate >= 70 ? '#92400e' : '#991b1b', bg: shipRate >= 90 ? '#f0fdf4' : shipRate >= 70 ? '#fffbeb' : '#fef2f2', border: shipRate >= 90 ? '#bbf7d0' : shipRate >= 70 ? '#fde68a' : '#fecaca' },
+              ].map(c => (
+                <div key={c.label} style={{ background: c.bg, border: `1px solid ${c.border}`, borderRadius: 8, padding: '12px 16px', textAlign: 'center' }}>
+                  <div style={{ fontSize: 11, color: c.color, fontWeight: 700, marginBottom: 4 }}>{c.label}</div>
+                  <div style={{ fontSize: 24, fontWeight: 800, color: c.color }}>{c.val}<span style={{ fontSize: 12, fontWeight: 400, marginLeft: 2 }}>{c.unit}</span></div>
+                </div>
+              ))}
+            </div>
+            {/* 출하율 프로그레스 */}
+            <div style={{ marginBottom: 14 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--text-sm)', marginBottom: 4 }}>
+                <span>출하율 (출하량 / 총공급량)</span>
+                <span style={{ fontWeight: 700, color: rateColor }}>{shipRate.toFixed(1)}%</span>
+              </div>
+              <div style={{ background: 'var(--border)', borderRadius: 4, height: 10, overflow: 'hidden' }}>
+                <div style={{ width: `${Math.min(100, shipRate)}%`, height: '100%', background: rateColor, borderRadius: 4, transition: 'width .4s' }} />
+              </div>
+            </div>
+            {/* 경보 아이템 */}
+            {alerts.length > 0 && (
+              <>
+                <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--danger)', marginBottom: 6 }}>⚠ 출하율 미달 품목</div>
+                <div className="table-wrap" style={{ marginBottom: 14 }}>
+                  <table style={{ fontSize: 12 }}>
+                    <thead><tr><th>품번</th><th>품명</th><th className="text-right">공급</th><th className="text-right">출하</th><th className="text-right">출하율</th><th>상태</th></tr></thead>
+                    <tbody>
+                      {alerts.map(a => (
+                        <tr key={a.part_no}>
+                          <td style={{ fontFamily: 'monospace', fontSize: 11 }}>{a.part_no}</td>
+                          <td>{a.part_name}</td>
+                          <td className="text-right">{(a.produced ?? 0).toLocaleString()}</td>
+                          <td className="text-right">{(a.shipped ?? 0).toLocaleString()}</td>
+                          <td className="text-right" style={{ fontWeight: 700, color: (a.ship_rate ?? 0) < 50 ? 'var(--danger)' : '#d97706' }}>
+                            {(a.ship_rate ?? 0).toFixed(1)}%
+                          </td>
+                          <td><span className={`badge ${a.status === 'danger' ? 'badge-red' : 'badge-amber'}`}>{a.status === 'danger' ? '위험' : '주의'}</span></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
+            {/* 6개월 트렌드 */}
+            {trend.length > 0 && (
+              <>
+                <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text)', marginBottom: 6 }}>6개월 생산-출하 추이</div>
+                <div className="card" style={{ padding: '12px 8px', marginBottom: 16 }}>
+                  <ResponsiveContainer width="100%" height={160}>
+                    <LineChart data={trend} margin={{ top: 4, right: 16, left: 0, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+                      <XAxis dataKey="ym" tick={{ fontSize: 10 }} />
+                      <YAxis tick={{ fontSize: 10 }} tickFormatter={v => v >= 1000 ? `${(v/1000).toFixed(0)}K` : v} />
+                      <Tooltip contentStyle={customTooltipStyle} formatter={(v, n) => [v.toLocaleString() + '개', n]} />
+                      <Legend />
+                      <Line type="monotone" dataKey="produced" stroke="#2563eb" strokeWidth={2} name="공급" dot={{ r: 3, fill: '#2563eb' }} />
+                      <Line type="monotone" dataKey="shipped"  stroke="#059669" strokeWidth={2} name="출하" dot={{ r: 3, fill: '#059669' }} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              </>
+            )}
+          </div>
+        )
+      })()}
 
       {/* ── 외주처 스코어카드 ── */}
       {show.supplier_scorecard && (

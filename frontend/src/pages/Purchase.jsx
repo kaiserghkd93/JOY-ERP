@@ -747,7 +747,9 @@ function MaterialPurchase() {
           </div>
           <div className="spacer"/>
           {matTab === 'orders' && (
-            <button className="btn btn-sm btn-primary" onClick={()=>setShowOrderModal(true)}>＋ 자재 발주</button>
+            <>
+              <button className="btn btn-sm btn-primary" onClick={()=>setShowOrderModal(true)}>＋ 자재 발주</button>
+            </>
           )}
           {matTab === 'receipt' && (
             <button className="btn btn-sm btn-primary" onClick={()=>{loadOrders();setShowReceiveModal(true)}}>＋ 입고 등록</button>
@@ -789,11 +791,17 @@ function MaterialPurchase() {
                 <tr><th>발주번호</th><th>거래처</th><th>품번</th><th>품명</th>
                   <th style={{textAlign:'right'}}>발주수량</th><th style={{textAlign:'right'}}>입고</th>
                   <th style={{textAlign:'right'}}>단가</th><th style={{textAlign:'right'}}>금액</th>
-                  <th>발주일</th><th>납기</th><th>상태</th><th>발주서</th><th>취소</th></tr>
+                  <th>발주일</th><th>납기</th><th>상태</th><th>결재</th><th>발주서</th><th>취소</th></tr>
               </thead>
               <tbody>
-                {monthOrders.length === 0 && <tr><td colSpan={13} className="empty">{loading?'조회 중...':'자재 발주 없음'}</td></tr>}
-                {monthOrders.map(o=>(
+                {monthOrders.length === 0 && <tr><td colSpan={14} className="empty">{loading?'조회 중...':'자재 발주 없음'}</td></tr>}
+                {monthOrders.map(o=>{
+                  const apv = o.approval_status || '작성중'
+                  const role = getRole()
+                  const canRequest = ['material','manager','admin'].includes(role) && apv === '작성중'
+                  const canApprove = ['executive','owner','admin'].includes(role) && apv === '승인요청'
+                  const canReject  = ['executive','owner','admin'].includes(role) && ['승인요청','승인완료'].includes(apv)
+                  return (
                   <tr key={o.po_no}>
                     <td style={{fontFamily:'monospace',fontSize:11}}>{o.po_no}</td>
                     <td>{o.partner_name}</td>
@@ -808,9 +816,48 @@ function MaterialPurchase() {
                     <td><span className={`badge ${o.status==='open'?'badge-blue':o.status==='partial'?'badge-amber':o.status==='closed'?'badge-green':'badge-gray'}`}>
                       {o.status==='open'?'발주중':o.status==='partial'?'일부입고':o.status==='closed'?'완료':'취소'}
                     </span></td>
+                    <td style={{minWidth:90}}>
+                      <span className={`badge ${apv==='승인완료'?'badge-green':apv==='승인요청'?'badge-amber':apv==='반려'?'badge-red':'badge-gray'}`}
+                        style={{display:'block',marginBottom:3,textAlign:'center'}}>
+                        {apv}
+                      </span>
+                      {canRequest && (
+                        <button className="btn btn-sm" style={{fontSize:10,padding:'2px 6px',background:'#eff6ff',color:'#1d4ed8',border:'1px solid #bfdbfe',width:'100%'}}
+                          onClick={async()=>{
+                            try { await api.post(`/material/orders/${o.po_no}/request-approval`); loadOrders() }
+                            catch(e){ alert(e.response?.data?.detail||'요청 실패') }
+                          }}>승인요청</button>
+                      )}
+                      {canApprove && (
+                        <div style={{display:'flex',gap:3,marginTop:2}}>
+                          <button className="btn btn-sm" style={{fontSize:10,padding:'2px 5px',background:'#f0fdf4',color:'#166534',border:'1px solid #bbf7d0',flex:1}}
+                            onClick={async()=>{
+                              try { await api.post(`/material/orders/${o.po_no}/approve`); loadOrders() }
+                              catch(e){ alert(e.response?.data?.detail||'승인 실패') }
+                            }}>승인</button>
+                          <button className="btn btn-sm" style={{fontSize:10,padding:'2px 5px',background:'#fef2f2',color:'#b91c1c',border:'1px solid #fca5a5',flex:1}}
+                            onClick={async()=>{
+                              if(!window.confirm('반려하시겠습니까?')) return
+                              try { await api.post(`/material/orders/${o.po_no}/reject`); loadOrders() }
+                              catch(e){ alert(e.response?.data?.detail||'반려 실패') }
+                            }}>반려</button>
+                        </div>
+                      )}
+                      {!canApprove && canReject && apv === '승인완료' && (
+                        <button className="btn btn-sm" style={{fontSize:10,padding:'2px 5px',background:'#fef2f2',color:'#b91c1c',border:'1px solid #fca5a5',width:'100%',marginTop:2}}
+                          onClick={async()=>{
+                            if(!window.confirm('승인을 취소(반려)하시겠습니까?')) return
+                            try { await api.post(`/material/orders/${o.po_no}/reject`); loadOrders() }
+                            catch(e){ alert(e.response?.data?.detail||'반려 실패') }
+                          }}>승인취소</button>
+                      )}
+                    </td>
                     <td>
                       <button className="btn btn-sm btn-primary"
-                        onClick={()=>window.open(`${api.defaults.baseURL}/material/orders/${o.po_no}/print`,'_blank')}>
+                        disabled={apv !== '승인완료'}
+                        title={apv !== '승인완료' ? '대표/전무 승인 후 출력 가능' : ''}
+                        style={apv !== '승인완료' ? {opacity:0.4,cursor:'not-allowed'} : {}}
+                        onClick={()=>{ if(apv==='승인완료') window.open(`${api.defaults.baseURL}/material/orders/${o.po_no}/print`,'_blank') }}>
                         발주서 출력
                       </button>
                     </td>
@@ -829,7 +876,8 @@ function MaterialPurchase() {
                       )}
                     </td>
                   </tr>
-                ))}
+                  )
+                })}
               </tbody>
             </table>
           </div>

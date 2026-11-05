@@ -34,6 +34,7 @@ with engine.connect() as _conn:
     for _sql in [
         "ALTER TABLE invoice ADD COLUMN IF NOT EXISTS closing_type VARCHAR(10)",
         "ALTER TABLE purchase_order ADD COLUMN IF NOT EXISTS po_type VARCHAR(20) DEFAULT 'outsource'",
+        "ALTER TABLE purchase_order ADD COLUMN IF NOT EXISTS approval_status VARCHAR(20) DEFAULT '작성중'",
         "ALTER TABLE item ADD COLUMN IF NOT EXISTS avg_cost NUMERIC(15,4) DEFAULT 0",
         "ALTER TABLE inspection ADD COLUMN IF NOT EXISTS approval_status VARCHAR(20) DEFAULT '작성중'",
         "ALTER TABLE inspection ADD COLUMN IF NOT EXISTS inspector_id VARCHAR(50)",
