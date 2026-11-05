@@ -282,7 +282,7 @@ def upload_bom_naraemtec(db: Session = Depends(get_db)):
 
 
 @router.post("/fix-naraemtec-item-types")
-def fix_naraemtec_item_types(db: Session = Depends(get_db)):
+def fix_naraemtec_item_types():
     """
     spec='나라엠텍'인 품목 중 item_type='finished'(완제품)으로 잘못 분류된 것을
     'outsourced'(외주품)로 일괄 수정 + MPL02871AA 삭제
@@ -291,13 +291,13 @@ def fix_naraemtec_item_types(db: Session = Depends(get_db)):
     try:
         # finished → outsourced 수정
         r = conn.execute(text(
-            "UPDATE item SET item_type='outsourced' "
-            "WHERE spec LIKE '%나라엠텍%' AND item_type='finished'"
-        ))
+            "UPDATE item SET item_type=CAST('outsourced' AS itemtype) "
+            "WHERE spec LIKE :spec_pat AND item_type=CAST('finished' AS itemtype)"
+        ), {"spec_pat": "%나라엠텍%"})
         updated_count = r.rowcount
 
         # MPL02871AA 삭제 (spec='나라엠택' 오기입)
-        r2 = conn.execute(text("DELETE FROM item WHERE part_no='MPL02871AA'"))
+        r2 = conn.execute(text("DELETE FROM item WHERE part_no = :pno"), {"pno": "MPL02871AA"})
         deleted_count = r2.rowcount
 
         conn.commit()
