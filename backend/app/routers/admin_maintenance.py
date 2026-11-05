@@ -295,6 +295,7 @@ def fix_naraemtec_item_types():
                 "WHERE spec LIKE :spec_pat AND item_type='finished'"
             ), {"spec_pat": "%나라엠텍%"})
             updated_count = r.rowcount
+            conn.execute(text("UPDATE mold SET part_no = NULL WHERE part_no = :pno"), {"pno": "MPL02871AA"})
             r2 = conn.execute(text("DELETE FROM item WHERE part_no = :pno"), {"pno": "MPL02871AA"})
             deleted_count = r2.rowcount
             conn.commit()
