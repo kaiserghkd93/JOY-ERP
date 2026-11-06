@@ -1707,13 +1707,37 @@ export default function Quality() {
                       {[
                         { label: '합격수량', value: selectedInsp.result === '검사대기' ? '—' : (selectedInsp.pass_qty?.toLocaleString() || '0'), color: (selectedInsp.pass_qty || 0) > 0 ? 'var(--success)' : undefined },
                         { label: '불합격수량', value: selectedInsp.result === '검사대기' ? '—' : (selectedInsp.fail_qty?.toLocaleString() || '0'), color: (selectedInsp.fail_qty || 0) > 0 ? 'var(--danger)' : undefined },
-                        { label: '처리방법', value: selectedInsp.disposal || '—' },
                       ].map(f => (
                         <div key={f.label} style={{ display: 'flex', alignItems: 'center', borderBottom: '1px solid var(--border)', padding: '10px 0' }}>
                           <span style={{ fontSize: 11, color: 'var(--text-sm)', width: 110, flexShrink: 0 }}>{f.label}</span>
                           <span style={{ fontWeight: 600, fontSize: 13, color: f.color || 'var(--text)' }}>{f.value}</span>
                         </div>
                       ))}
+                      <div style={{ display: 'flex', alignItems: 'center', borderBottom: '1px solid var(--border)', padding: '10px 0' }}>
+                        <span style={{ fontSize: 11, color: 'var(--text-sm)', width: 110, flexShrink: 0 }}>처리방법</span>
+                        {isManager && selectedInsp.approval_status === '승인완료' ? (
+                          <select
+                            value={selectedInsp.disposal || '보류'}
+                            style={{ fontSize: 13, fontWeight: 600, border: '1px solid var(--border)', borderRadius: 4, padding: '2px 8px', background: 'var(--surface)', color: 'var(--text)', cursor: 'pointer' }}
+                            onChange={async (e) => {
+                              try {
+                                await api.patch(`/quality/inspections/${selectedInsp.id}/disposal`, { disposal: e.target.value })
+                                load()
+                              } catch(err) {
+                                alert(err.response?.data?.detail || '처리방법 변경 실패')
+                              }
+                            }}
+                          >
+                            <option value="보류">보류</option>
+                            <option value="합격">합격</option>
+                            <option value="특채">특채</option>
+                            <option value="반품">반품</option>
+                            <option value="폐기">폐기</option>
+                          </select>
+                        ) : (
+                          <span style={{ fontWeight: 600, fontSize: 13, color: 'var(--text)' }}>{selectedInsp.disposal || '—'}</span>
+                        )}
+                      </div>
                       <div style={{ display: 'flex', alignItems: 'center', borderBottom: '1px solid var(--border)', padding: '10px 0' }}>
                         <span style={{ fontSize: 11, color: 'var(--text-sm)', width: 110, flexShrink: 0 }}>판정</span>
                         {selectedInsp.result === '검사대기'

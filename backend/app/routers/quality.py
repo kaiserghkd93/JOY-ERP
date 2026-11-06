@@ -30,7 +30,7 @@ from app.routers.auth import get_current_user
 router = APIRouter(prefix="/quality", tags=["품질"])
 
 QUALITY_ROLES = {"admin", "quality", "quality_manager"}
-MANAGER_ROLES = {"admin", "quality_manager"}
+MANAGER_ROLES = {"admin", "quality_manager", "owner"}
 
 
 def _require_quality(user: User = Depends(get_current_user)) -> User:
@@ -260,8 +260,8 @@ def confirm_inspection(insp_id: int, db: Session = Depends(get_db), user: User =
     insp = _get_insp(insp_id, db)
     if insp.approval_status != ApprovalStatus.approved:
         raise HTTPException(400, "승인완료 상태에서만 최종 확정할 수 있습니다")
-    # admin/owner는 소규모 회사에서 겸직 허용
-    if insp.inspector_id == user.username and user.role not in ("admin", "owner"):
+    # admin/owner/quality_manager는 소규모 회사에서 겸직 허용
+    if insp.inspector_id == user.username and user.role not in ("admin", "owner", "quality_manager"):
         raise HTTPException(403, "본인이 등록한 검사결과는 직접 확정할 수 없습니다")
     insp.approval_status = ApprovalStatus.confirmed
     insp.confirmer_id = user.username
@@ -283,6 +283,24 @@ def confirm_inspection(insp_id: int, db: Session = Depends(get_db), user: User =
 
     db.commit()
     return {"ok": True, "status": insp.approval_status}
+
+
+class DisposalUpdate(BaseModel):
+    disposal: str
+
+@router.patch("/inspections/{insp_id}/disposal")
+def update_disposal(insp_id: int, body: DisposalUpdate, db: Session = Depends(get_db), user: User = Depends(_require_manager)):
+    """처리방법 수정 (승인완료 상태에서만 가능)"""
+    from app.models.quality import DisposalType
+    insp = _get_insp(insp_id, db)
+    if insp.approval_status != ApprovalStatus.approved:
+        raise HTTPException(400, "승인완료 상태에서만 처리방법을 변경할 수 있습니다")
+    try:
+        insp.disposal = DisposalType(body.disposal)
+    except ValueError:
+        raise HTTPException(400, f"유효하지 않은 처리방법: {body.disposal}")
+    db.commit()
+    return {"ok": True, "disposal": str(insp.disposal)}
 
 
 @router.get("/inspections/pending-approval")
