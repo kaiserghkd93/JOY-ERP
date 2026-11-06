@@ -1596,25 +1596,31 @@ function GeneralPurchase() {
                   <label style={{fontSize:12,color:'#64748b'}}>구매 품목</label>
                   <button className="btn btn-sm" style={{fontSize:11}} onClick={addItem}>+ 행 추가</button>
                 </div>
-                <table className="erp-table" style={{fontSize:12}}>
-                  <thead><tr><th>품목명</th><th>규격/모델</th><th>수량</th><th>단가</th><th>금액</th><th></th></tr></thead>
-                  <tbody>
-                    {form.items.map((it,i)=>(
-                      <tr key={i}>
-                        <td><input className="erp-input" value={it.name} onChange={e=>setItem(i,'name',e.target.value)} placeholder="품목명" style={{width:'100%',minWidth:80}}/></td>
-                        <td><input className="erp-input" value={it.spec} onChange={e=>setItem(i,'spec',e.target.value)} placeholder="규격" style={{width:'100%',minWidth:80}}/></td>
-                        <td><input type="number" className="erp-input" value={it.qty} min={1} onChange={e=>setItem(i,'qty',e.target.value)} style={{width:60,textAlign:'right'}}/></td>
-                        <td><input type="number" className="erp-input" value={it.unit_price} min={0} onChange={e=>setItem(i,'unit_price',e.target.value)} style={{width:90,textAlign:'right'}}/></td>
-                        <td style={{textAlign:'right'}}>₩{((Number(it.qty)||0)*(Number(it.unit_price)||0)).toLocaleString()}</td>
-                        <td><button onClick={()=>removeItem(i)} style={{background:'none',border:'none',color:'#dc2626',cursor:'pointer',fontSize:14}}>×</button></td>
-                      </tr>
+                <div style={{border:'1px solid #e2e8f0',borderRadius:6,overflow:'hidden'}}>
+                  {/* 헤더 */}
+                  <div style={{display:'grid',gridTemplateColumns:'2fr 1.5fr 70px 100px 90px 28px',background:'#f8fafc',borderBottom:'1px solid #e2e8f0',fontSize:11,fontWeight:600,color:'#64748b'}}>
+                    {['품목명','규격/모델','수량','단가(원)','금액',''].map((h,i)=>(
+                      <div key={i} style={{padding:'6px 8px',textAlign:i>=2?'right':'left'}}>{h}</div>
                     ))}
-                  </tbody>
-                  <tfoot>
-                    <tr><td colSpan={4} style={{textAlign:'right',fontWeight:700}}>합계</td>
-                    <td style={{textAlign:'right',fontWeight:700}}>₩{totalAmt.toLocaleString()}</td><td/></tr>
-                  </tfoot>
-                </table>
+                  </div>
+                  {/* 입력 행 */}
+                  {form.items.map((it,i)=>(
+                    <div key={i} style={{display:'grid',gridTemplateColumns:'2fr 1.5fr 70px 100px 90px 28px',borderBottom:i<form.items.length-1?'1px solid #f1f5f9':'none',alignItems:'center'}}>
+                      <div style={{padding:'4px 6px'}}><input value={it.name} onChange={e=>setItem(i,'name',e.target.value)} placeholder="품목명" style={{width:'100%',border:'1px solid #e2e8f0',borderRadius:4,padding:'4px 6px',fontSize:12,outline:'none',boxSizing:'border-box'}}/></div>
+                      <div style={{padding:'4px 6px'}}><input value={it.spec} onChange={e=>setItem(i,'spec',e.target.value)} placeholder="규격" style={{width:'100%',border:'1px solid #e2e8f0',borderRadius:4,padding:'4px 6px',fontSize:12,outline:'none',boxSizing:'border-box'}}/></div>
+                      <div style={{padding:'4px 4px'}}><input type="number" value={it.qty} min={1} onChange={e=>setItem(i,'qty',e.target.value)} style={{width:'100%',border:'1px solid #e2e8f0',borderRadius:4,padding:'4px 4px',fontSize:12,textAlign:'right',outline:'none',boxSizing:'border-box'}}/></div>
+                      <div style={{padding:'4px 4px'}}><input type="number" value={it.unit_price} min={0} onChange={e=>setItem(i,'unit_price',e.target.value)} style={{width:'100%',border:'1px solid #e2e8f0',borderRadius:4,padding:'4px 4px',fontSize:12,textAlign:'right',outline:'none',boxSizing:'border-box'}}/></div>
+                      <div style={{padding:'4px 6px',textAlign:'right',fontSize:12,fontWeight:600,color:'#1e3a5f'}}>₩{((Number(it.qty)||0)*(Number(it.unit_price)||0)).toLocaleString()}</div>
+                      <div style={{textAlign:'center'}}><button onClick={()=>removeItem(i)} style={{background:'none',border:'none',color:'#dc2626',cursor:'pointer',fontSize:16,lineHeight:1}}>×</button></div>
+                    </div>
+                  ))}
+                  {/* 합계 */}
+                  <div style={{display:'grid',gridTemplateColumns:'2fr 1.5fr 70px 100px 90px 28px',background:'#f8fafc',borderTop:'2px solid #e2e8f0'}}>
+                    <div style={{padding:'7px 8px',gridColumn:'1/5',textAlign:'right',fontSize:12,fontWeight:700,color:'#374151'}}>합 계</div>
+                    <div style={{padding:'7px 8px',textAlign:'right',fontSize:13,fontWeight:700,color:'#1e3a5f'}}>₩{totalAmt.toLocaleString()}</div>
+                    <div/>
+                  </div>
+                </div>
               </div>
             </div>
             <div className="modal-footer">
