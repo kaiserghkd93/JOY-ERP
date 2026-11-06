@@ -1715,7 +1715,7 @@ export default function Quality() {
                       ))}
                       <div style={{ display: 'flex', alignItems: 'center', borderBottom: '1px solid var(--border)', padding: '10px 0' }}>
                         <span style={{ fontSize: 11, color: 'var(--text-sm)', width: 110, flexShrink: 0 }}>처리방법</span>
-                        {isManager && selectedInsp.approval_status === '승인완료' ? (
+                        {selectedInsp.approval_status !== '최종확정' ? (
                           <select
                             value={selectedInsp.disposal || '보류'}
                             style={{ fontSize: 13, fontWeight: 600, border: '1px solid var(--border)', borderRadius: 4, padding: '2px 8px', background: 'var(--surface)', color: 'var(--text)', cursor: 'pointer' }}

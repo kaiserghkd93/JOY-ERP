@@ -298,8 +298,8 @@ def update_disposal(insp_id: int, body: DisposalUpdate, db: Session = Depends(ge
     insp = _get_insp(insp_id, db)
     # approval_status 비교는 문자열로
     status_val = str(insp.approval_status.value if hasattr(insp.approval_status, 'value') else insp.approval_status)
-    if status_val != "승인완료":
-        raise HTTPException(400, f"승인완료 상태에서만 처리방법을 변경할 수 있습니다 (현재: {status_val})")
+    if status_val == "최종확정":
+        raise HTTPException(400, "최종확정 이후에는 처리방법을 변경할 수 없습니다")
     db.execute(_text("UPDATE inspection SET disposal = :d WHERE id = :id"), {"d": body.disposal, "id": insp_id})
     db.commit()
     return {"ok": True, "disposal": body.disposal}
