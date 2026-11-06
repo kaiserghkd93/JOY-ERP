@@ -441,6 +441,210 @@ function PrTab() {
   )
 }
 
+// ── 주간 용량계획 탭 ──────────────────────────────────────────────
+function WeeklyTab() {
+  const now = new Date()
+  const [year, setYear] = useState(now.getFullYear())
+  const [month, setMonth] = useState(now.getMonth() + 1)
+  const [machines, setMachines] = useState(1)
+  const [workers, setWorkers] = useState(1)
+  const [dailyHours, setDailyHours] = useState(8)
+  const [workDays, setWorkDays] = useState(5)
+  const [data, setData] = useState(null)
+  const [loading, setLoading] = useState(false)
+  const [saving, setSaving] = useState(false)
+  // editQty: { [week_no_part_no]: string }
+  const [editQty, setEditQty] = useState({})
+
+  const load = async () => {
+    setLoading(true)
+    try {
+      const r = await api.get(`/mrp/weekly?year=${year}&month=${month}&machines=${machines}&workers=${workers}&daily_hours=${dailyHours}&work_days=${workDays}`)
+      setData(r.data)
+      setEditQty({})
+    } catch (e) {
+      alert(e.response?.data?.detail || '주간계획 조회 실패')
+    } finally { setLoading(false) }
+  }
+
+  const saveQty = async (week_no, part_no, qty) => {
+    setSaving(true)
+    try {
+      await api.post('/mrp/weekly-plan', { year, month, week_no, part_no, planned_qty: parseInt(qty) || 0 })
+      await load()
+    } catch (e) {
+      alert(e.response?.data?.detail || '저장 실패')
+    } finally { setSaving(false) }
+  }
+
+  const rateColor = (rate) => {
+    if (rate > 100) return '#dc2626'
+    if (rate > 85)  return '#d97706'
+    if (rate > 0)   return '#16a34a'
+    return '#94a3b8'
+  }
+
+  const RateBar = ({ rate }) => (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+      <div style={{ width: 60, height: 8, background: '#e2e8f0', borderRadius: 4, overflow: 'hidden' }}>
+        <div style={{ width: `${Math.min(rate, 100)}%`, height: '100%', background: rateColor(rate), borderRadius: 4 }} />
+      </div>
+      <span style={{ fontSize: 12, fontWeight: 700, color: rateColor(rate), minWidth: 42 }}>{rate}%</span>
+    </div>
+  )
+
+  return (
+    <div>
+      {/* 파라미터 패널 */}
+      <div className="erp-panel" style={{ marginBottom: 14 }}>
+        <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ fontSize: 13, color: '#64748b' }}>연도</span>
+            <input type="number" value={year} onChange={e => setYear(parseInt(e.target.value))}
+              style={{ width: 72, padding: '5px 8px', border: '1px solid var(--border)', borderRadius: 4, fontSize: 13 }} />
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ fontSize: 13, color: '#64748b' }}>월</span>
+            <select value={month} onChange={e => setMonth(parseInt(e.target.value))}
+              style={{ padding: '5px 8px', border: '1px solid var(--border)', borderRadius: 4, fontSize: 13 }}>
+              {Array.from({ length: 12 }, (_, i) => i + 1).map(m => <option key={m} value={m}>{m}월</option>)}
+            </select>
+          </div>
+          <div style={{ width: 1, height: 24, background: '#e2e8f0' }} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ fontSize: 13, color: '#64748b' }}>사출기</span>
+            <input type="number" min="0.1" step="0.5" value={machines} onChange={e => setMachines(parseFloat(e.target.value))}
+              style={{ width: 60, padding: '5px 8px', border: '1px solid var(--border)', borderRadius: 4, fontSize: 13 }} />
+            <span style={{ fontSize: 11, color: '#94a3b8' }}>대</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ fontSize: 13, color: '#64748b' }}>조립인원</span>
+            <input type="number" min="0.1" step="0.5" value={workers} onChange={e => setWorkers(parseFloat(e.target.value))}
+              style={{ width: 60, padding: '5px 8px', border: '1px solid var(--border)', borderRadius: 4, fontSize: 13 }} />
+            <span style={{ fontSize: 11, color: '#94a3b8' }}>명</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ fontSize: 13, color: '#64748b' }}>일가동</span>
+            <input type="number" min="1" max="24" step="0.5" value={dailyHours} onChange={e => setDailyHours(parseFloat(e.target.value))}
+              style={{ width: 60, padding: '5px 8px', border: '1px solid var(--border)', borderRadius: 4, fontSize: 13 }} />
+            <span style={{ fontSize: 11, color: '#94a3b8' }}>시간</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ fontSize: 13, color: '#64748b' }}>주근무</span>
+            <input type="number" min="1" max="7" value={workDays} onChange={e => setWorkDays(parseInt(e.target.value))}
+              style={{ width: 52, padding: '5px 8px', border: '1px solid var(--border)', borderRadius: 4, fontSize: 13 }} />
+            <span style={{ fontSize: 11, color: '#94a3b8' }}>일</span>
+          </div>
+          <button className="btn btn-primary" onClick={load} disabled={loading}>
+            {loading ? '조회 중...' : '조회'}
+          </button>
+        </div>
+        <div style={{ marginTop: 8, fontSize: 11, color: '#94a3b8' }}>
+          가용시간 = 일가동 {dailyHours}h × 주근무 {workDays}일 = <strong>{dailyHours * workDays}h/주</strong> &nbsp;|&nbsp;
+          사출부하 = Σ(C/T × 계획수량) ÷ 사출기대수 ÷ 3600 &nbsp;|&nbsp;
+          조립부하 = Σ(수작업C/T × 계획수량) ÷ 조립인원 ÷ 3600
+        </div>
+      </div>
+
+      {!data && !loading && (
+        <div style={{ textAlign: 'center', color: '#94a3b8', padding: '60px 0', fontSize: 14 }}>
+          파라미터 입력 후 조회를 클릭하세요
+        </div>
+      )}
+
+      {data && data.weeks.map(wk => (
+        <div key={wk.week_no} className="erp-panel" style={{ marginBottom: 14 }}>
+          {/* 주차 헤더 */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 10 }}>
+            <div style={{ fontWeight: 700, fontSize: 14, color: '#1e3a5f' }}>
+              {wk.week_no}주차
+              <span style={{ fontSize: 12, fontWeight: 400, color: '#64748b', marginLeft: 8 }}>{wk.date_range}</span>
+            </div>
+            <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap' }}>
+              <div>
+                <span style={{ fontSize: 11, color: '#64748b' }}>사출부하 </span>
+                <span style={{ fontSize: 12, fontWeight: 700, color: '#1d4ed8' }}>{wk.injection_load_h}h</span>
+                <span style={{ marginLeft: 8 }}><RateBar rate={wk.injection_rate} /></span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                <span style={{ fontSize: 11, color: '#64748b' }}>조립부하 </span>
+                <span style={{ fontSize: 12, fontWeight: 700, color: '#7c3aed' }}>{wk.assembly_load_h}h</span>
+                <span style={{ marginLeft: 8 }}><RateBar rate={wk.assembly_rate} /></span>
+              </div>
+            </div>
+          </div>
+
+          {/* 품목 테이블 */}
+          {wk.items.length > 0 ? (
+            <div className="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>품번</th><th>품명</th>
+                    <th style={{ textAlign: 'right' }}>계획수량</th>
+                    <th style={{ textAlign: 'right' }}>실적수량</th>
+                    <th style={{ textAlign: 'right' }}>달성률</th>
+                    <th style={{ textAlign: 'right' }}>사출C/T(s)</th>
+                    <th style={{ textAlign: 'right' }}>조립C/T(s)</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {wk.items.map(item => {
+                    const key = `${wk.week_no}_${item.part_no}`
+                    const isEdit = key in editQty
+                    const achieve = item.planned_qty > 0 ? Math.round(item.actual_qty / item.planned_qty * 100) : null
+                    return (
+                      <tr key={item.part_no}>
+                        <td style={{ fontFamily: 'monospace', fontSize: 11 }}>{item.part_no}</td>
+                        <td style={{ fontSize: 12 }}>{item.item_name}</td>
+                        <td style={{ textAlign: 'right' }}>
+                          {isEdit ? (
+                            <input type="number" value={editQty[key]} onChange={e => setEditQty(q => ({ ...q, [key]: e.target.value }))}
+                              style={{ width: 80, padding: '2px 6px', border: '1px solid #93c5fd', borderRadius: 4, fontSize: 12, textAlign: 'right' }}
+                              autoFocus
+                              onKeyDown={e => { if (e.key === 'Enter') { saveQty(wk.week_no, item.part_no, editQty[key]); setEditQty(q => { const n = {...q}; delete n[key]; return n }) } if (e.key === 'Escape') { setEditQty(q => { const n = {...q}; delete n[key]; return n }) } }}
+                            />
+                          ) : (
+                            <span style={{ cursor: 'pointer', color: item.planned_qty > 0 ? '#1e3a5f' : '#94a3b8' }}
+                              onClick={() => setEditQty(q => ({ ...q, [key]: String(item.planned_qty) }))}>
+                              {item.planned_qty > 0 ? fmt(item.planned_qty) : '—'}
+                            </span>
+                          )}
+                        </td>
+                        <td style={{ textAlign: 'right', fontWeight: item.actual_qty > 0 ? 600 : 400, color: item.actual_qty > 0 ? '#1e3a5f' : '#94a3b8' }}>
+                          {item.actual_qty > 0 ? fmt(item.actual_qty) : '—'}
+                        </td>
+                        <td style={{ textAlign: 'right', fontSize: 12, fontWeight: 700, color: achieve == null ? '#94a3b8' : achieve >= 100 ? '#16a34a' : achieve >= 80 ? '#d97706' : '#dc2626' }}>
+                          {achieve != null ? `${achieve}%` : '—'}
+                        </td>
+                        <td style={{ textAlign: 'right', fontSize: 11, color: '#64748b' }}>{item.machine_ct_sec > 0 ? item.machine_ct_sec : '—'}</td>
+                        <td style={{ textAlign: 'right', fontSize: 11, color: '#64748b' }}>{item.manual_ct_sec > 0 ? item.manual_ct_sec : '—'}</td>
+                        <td>
+                          {isEdit ? (
+                            <button className="btn btn-sm" style={{ background: '#eff6ff', color: '#1d4ed8', border: '1px solid #bfdbfe' }}
+                              onClick={() => { saveQty(wk.week_no, item.part_no, editQty[key]); setEditQty(q => { const n = {...q}; delete n[key]; return n }) }}
+                              disabled={saving}>저장</button>
+                          ) : (
+                            <button className="btn btn-sm" style={{ background: '#f8fafc', color: '#475569', border: '1px solid #e2e8f0' }}
+                              onClick={() => setEditQty(q => ({ ...q, [key]: String(item.planned_qty) }))}>수정</button>
+                          )}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div style={{ fontSize: 12, color: '#94a3b8', padding: '10px 0' }}>이 주차에 계획·실적 없음</div>
+          )}
+        </div>
+      ))}
+    </div>
+  )
+}
+
 // ── 메인 MRP 페이지 ───────────────────────────────────────────────
 export default function Mrp() {
   const now = new Date()
@@ -454,7 +658,7 @@ export default function Mrp() {
   const [generating, setGenerating] = useState(false)
   const [generatedPR, setGeneratedPR] = useState(null)
   const [generatedProd, setGeneratedProd] = useState(null)
-  const [tab, setTab] = useState('mrp')   // 'mrp' | 'exceptions' | 'pr'
+  const [tab, setTab] = useState('mrp')   // 'mrp' | 'exceptions' | 'pr' | 'weekly'
 
   const runMrp = async () => {
     setLoading(true); setResult(null); setBuySelected({}); setProdSelected({})
@@ -551,6 +755,7 @@ export default function Mrp() {
         <button style={TAB_STYLE(tab === 'mrp')} onClick={() => setTab('mrp')}>📊 MRP 계획</button>
         <button style={TAB_STYLE(tab === 'exceptions')} onClick={() => setTab('exceptions')}>🚨 예외사항</button>
         <button style={TAB_STYLE(tab === 'pr')} onClick={() => setTab('pr')}>📋 구매요청(PR)</button>
+        <button style={TAB_STYLE(tab === 'weekly')} onClick={() => setTab('weekly')}>📅 주간계획</button>
       </div>
 
       {/* ── MRP 계획 탭 ── */}
@@ -700,6 +905,9 @@ export default function Mrp() {
 
       {/* ── 구매요청(PR) 탭 ── */}
       {tab === 'pr' && <PrTab />}
+
+      {/* ── 주간계획 탭 ── */}
+      {tab === 'weekly' && <WeeklyTab />}
     </div>
   )
 }

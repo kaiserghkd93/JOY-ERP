@@ -5,6 +5,22 @@ from app.database import Base
 import enum
 
 
+class WeeklyPlan(Base):
+    """주차별 생산계획 — 사출/조립 용량계획용"""
+    __tablename__ = "weekly_plan"
+    __table_args__ = (UniqueConstraint("year", "month", "week_no", "part_no", name="uq_weekly_plan"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    year: Mapped[int] = mapped_column(Integer, nullable=False)
+    month: Mapped[int] = mapped_column(Integer, nullable=False)
+    week_no: Mapped[int] = mapped_column(Integer, nullable=False)   # 1~5
+    part_no: Mapped[str] = mapped_column(ForeignKey("item.part_no"), nullable=False)
+    planned_qty: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_at: Mapped[date] = mapped_column(Date, default=date.today)
+
+    item: Mapped["Item"] = relationship()
+
+
 class POrdStatus(str, enum.Enum):
     planned = "계획"
     in_progress = "진행중"

@@ -22,6 +22,7 @@ from app.routers import admin_maintenance
 from app.routers import mes_floor as mes_floor_router
 from app.routers import mes_monitor as mes_monitor_router
 from app.models import mes_floor as _mes_floor_models  # noqa: ensure MES tables
+from app.models.production import WeeklyPlan as _weekly_plan_model  # noqa: ensure weekly_plan table
 from app.models import improvement as _improvement_models  # noqa: ensure table
 from app.models import quality_advanced as _qa_models  # noqa: ensure tables
 from app.models import inventory_adj as _inv_adj_models  # noqa: ensure tables registered

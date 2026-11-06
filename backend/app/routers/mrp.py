@@ -549,3 +549,152 @@ def mrp_exceptions(db: Session = Depends(get_db), user: User = Depends(_require_
         "late_production_order": late_pord_list,
         "late_pord_count": len(late_pord_list),
     }
+
+
+# ── 주간 용량계획 ─────────────────────────────────────────────────────
+import calendar as _cal
+
+def _week_range(year: int, month: int, week_no: int):
+    """주차 → (시작일, 종료일) — Week5는 29일~말일"""
+    last_day = _cal.monthrange(year, month)[1]
+    starts = {1: 1, 2: 8, 3: 15, 4: 22, 5: 29}
+    ends   = {1: 7, 2: 14, 3: 21, 4: 28, 5: last_day}
+    s = starts.get(week_no, 1)
+    e = ends.get(week_no, last_day)
+    return date_type(year, month, s), date_type(year, month, min(e, last_day))
+
+
+def _week_no_of(d: date_type) -> int:
+    day = d.day
+    if day <= 7:  return 1
+    if day <= 14: return 2
+    if day <= 21: return 3
+    if day <= 28: return 4
+    return 5
+
+
+@router.get("/weekly")
+def get_weekly_capacity(
+    year: int,
+    month: int,
+    machines: float = 1.0,
+    workers: float = 1.0,
+    daily_hours: float = 8.0,
+    work_days: int = 5,
+    db: Session = Depends(get_db),
+    user: User = Depends(_require_mrp),
+):
+    """주차별 계획 + 실적 + 사출/조립 부하율 반환"""
+    from app.models.production import WeeklyPlan
+
+    # 주차별 WeeklyPlan 조회
+    plans = db.query(WeeklyPlan).filter(
+        WeeklyPlan.year == year, WeeklyPlan.month == month
+    ).all()
+    plan_map: dict[tuple, int] = {}  # (week_no, part_no) → qty
+    for p in plans:
+        plan_map[(p.week_no, p.part_no)] = p.planned_qty
+
+    # 이달 DailyActual 조회 (MonthlyPlan 조인)
+    actuals = (
+        db.query(DailyActual, MonthlyPlan)
+        .join(MonthlyPlan, DailyActual.plan_id == MonthlyPlan.id)
+        .filter(MonthlyPlan.year == year, MonthlyPlan.month == month)
+        .all()
+    )
+    actual_map: dict[tuple, int] = {}  # (week_no, part_no) → qty
+    for da, mp in actuals:
+        wk = _week_no_of(da.prod_date)
+        key = (wk, mp.part_no)
+        actual_map[key] = actual_map.get(key, 0) + da.actual_qty
+
+    # 품목 CT 조회
+    all_part_nos = list({k[1] for k in list(plan_map.keys()) + list(actual_map.keys())})
+    items_map: dict[str, Item] = {}
+    if all_part_nos:
+        rows = db.query(Item).filter(Item.part_no.in_(all_part_nos)).all()
+        items_map = {i.part_no: i for i in rows}
+
+    # 주차별 집계
+    weekly_data = []
+    last_day = _cal.monthrange(year, month)[1]
+    for wk in range(1, 6):
+        s_day, e_day = _week_range(year, month, wk)
+        if s_day.day > last_day:
+            continue
+
+        # 이 주에 계획·실적이 있는 품목 합산
+        part_nos_in_week = {pn for (w, pn) in list(plan_map.keys()) + list(actual_map.keys()) if w == wk}
+        rows_out = []
+        inj_load = 0.0   # 사출 부하시간(h)
+        asm_load = 0.0   # 조립 부하시간(h)
+        for pn in sorted(part_nos_in_week):
+            planned  = plan_map.get((wk, pn), 0)
+            achieved = actual_map.get((wk, pn), 0)
+            item = items_map.get(pn)
+            mct = float(item.machine_ct_sec or 0) if item else 0.0
+            act = float(item.manual_ct_sec  or 0) if item else 0.0
+            qty = planned if planned > 0 else achieved
+            inj_load += mct * qty / 3600.0
+            asm_load += act * qty / 3600.0
+            rows_out.append({
+                "part_no": pn,
+                "item_name": item.name if item else pn,
+                "planned_qty": planned,
+                "actual_qty": achieved,
+                "machine_ct_sec": mct,
+                "manual_ct_sec": act,
+            })
+
+        avail_h = daily_hours * work_days
+        inj_rate = round(inj_load / (avail_h * machines) * 100, 1) if avail_h * machines > 0 else 0
+        asm_rate = round(asm_load / (avail_h * workers)  * 100, 1) if avail_h * workers  > 0 else 0
+
+        weekly_data.append({
+            "week_no": wk,
+            "date_range": f"{s_day.strftime('%m/%d')}~{e_day.strftime('%m/%d')}",
+            "items": rows_out,
+            "injection_load_h": round(inj_load, 2),
+            "assembly_load_h":  round(asm_load, 2),
+            "injection_rate":   inj_rate,
+            "assembly_rate":    asm_rate,
+        })
+
+    return {
+        "year": year, "month": month,
+        "params": {"machines": machines, "workers": workers,
+                   "daily_hours": daily_hours, "work_days": work_days},
+        "weeks": weekly_data,
+    }
+
+
+class WeeklyPlanBody(BaseModel):
+    year: int
+    month: int
+    week_no: int
+    part_no: str
+    planned_qty: int
+
+
+@router.post("/weekly-plan")
+def upsert_weekly_plan(
+    body: WeeklyPlanBody,
+    db: Session = Depends(get_db),
+    user: User = Depends(_require_mrp),
+):
+    from app.models.production import WeeklyPlan
+    existing = db.query(WeeklyPlan).filter(
+        WeeklyPlan.year == body.year,
+        WeeklyPlan.month == body.month,
+        WeeklyPlan.week_no == body.week_no,
+        WeeklyPlan.part_no == body.part_no,
+    ).first()
+    if existing:
+        existing.planned_qty = body.planned_qty
+    else:
+        db.add(WeeklyPlan(
+            year=body.year, month=body.month, week_no=body.week_no,
+            part_no=body.part_no, planned_qty=body.planned_qty,
+        ))
+    db.commit()
+    return {"ok": True}
