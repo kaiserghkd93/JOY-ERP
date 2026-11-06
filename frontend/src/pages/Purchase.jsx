@@ -1569,58 +1569,93 @@ function GeneralPurchase() {
 
       {/* 품의 작성 모달 */}
       {showForm && (
-        <div className="modal-overlay" onClick={()=>setShowForm(false)}>
-          <div className="modal modal-lg" style={{width:680,maxWidth:'95vw',maxHeight:'90vh',overflowY:'auto'}} onClick={e=>e.stopPropagation()}>
-            <h3>일반구매 품의 작성</h3>
-            <div style={{display:'flex',flexDirection:'column',gap:12}}>
+        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.5)',zIndex:9999,display:'flex',alignItems:'center',justifyContent:'center'}}
+          onClick={()=>setShowForm(false)}>
+          <div style={{background:'#fff',borderRadius:8,padding:24,width:680,maxWidth:'95vw',maxHeight:'90vh',overflowY:'auto',boxShadow:'0 8px 32px rgba(0,0,0,.25)'}}
+            onClick={e=>e.stopPropagation()}>
+            {/* 헤더 */}
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16,paddingBottom:12,borderBottom:'2px solid #1e3a5f'}}>
+              <span style={{fontSize:15,fontWeight:800,color:'#1e3a5f'}}>일반구매 품의 작성</span>
+              <button onClick={()=>setShowForm(false)} style={{background:'none',border:'none',fontSize:20,cursor:'pointer',color:'#64748b',lineHeight:1}}>×</button>
+            </div>
+            {/* 기본 정보 */}
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:12}}>
               <div>
-                <label style={{fontSize:12,color:'#64748b',display:'block',marginBottom:4}}>품의 제목 *</label>
+                <label style={{display:'block',fontSize:11,fontWeight:700,color:'#64748b',marginBottom:4}}>품의 제목 *</label>
                 <input value={form.title} onChange={e=>setForm(f=>({...f,title:e.target.value}))} placeholder="예: 사무용 PC 구매의 건"
-                  style={{width:'100%',border:'1px solid #cbd5e1',borderRadius:4,padding:'6px 8px',fontSize:13,boxSizing:'border-box',outline:'none'}}/>
+                  style={{width:'100%',padding:'6px 8px',border:'1px solid #d1d5db',borderRadius:4,fontSize:13,boxSizing:'border-box'}}/>
               </div>
               <div>
-                <label style={{fontSize:12,color:'#64748b',display:'block',marginBottom:4}}>거래처</label>
+                <label style={{display:'block',fontSize:11,fontWeight:700,color:'#64748b',marginBottom:4}}>거래처</label>
                 <input value={form.vendor} onChange={e=>setForm(f=>({...f,vendor:e.target.value}))} placeholder="쿠팡, 인터넷 쇼핑 등"
-                  style={{width:'100%',border:'1px solid #cbd5e1',borderRadius:4,padding:'6px 8px',fontSize:13,boxSizing:'border-box',outline:'none'}}/>
-              </div>
-              <div>
-                <label style={{fontSize:12,color:'#64748b',display:'block',marginBottom:4}}>구매 사유</label>
-                <textarea value={form.purpose} onChange={e=>setForm(f=>({...f,purpose:e.target.value}))} rows={2} placeholder="구매 목적 및 용도"
-                  style={{width:'100%',border:'1px solid #cbd5e1',borderRadius:4,padding:'6px 8px',fontSize:13,boxSizing:'border-box',outline:'none',resize:'vertical'}}/>
-              </div>
-              {/* 품목 행 */}
-              <div>
-                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:6}}>
-                  <label style={{fontSize:12,color:'#64748b'}}>구매 품목</label>
-                  <button className="btn btn-sm" onClick={addItem}>+ 행 추가</button>
-                </div>
-                <div style={{border:'1px solid #cbd5e1',borderRadius:6,overflow:'hidden'}}>
-                  <div style={{display:'grid',gridTemplateColumns:'2fr 1.5fr 70px 110px 90px 28px',background:'#f1f5f9',borderBottom:'1px solid #cbd5e1',fontSize:11,fontWeight:700,color:'#475569'}}>
-                    {['품목명','규격/모델','수량','단가(원)','금액',''].map((h,i)=>(
-                      <div key={i} style={{padding:'7px 8px',textAlign:i>=2?'right':'left'}}>{h}</div>
-                    ))}
-                  </div>
-                  {form.items.map((it,i)=>(
-                    <div key={i} style={{display:'grid',gridTemplateColumns:'2fr 1.5fr 70px 110px 90px 28px',background:'#fff',borderBottom:i<form.items.length-1?'1px solid #f1f5f9':'none',alignItems:'center'}}>
-                      <div style={{padding:'4px 6px'}}><input value={it.name} onChange={e=>setItem(i,'name',e.target.value)} placeholder="품목명" style={{width:'100%',border:'1px solid #e2e8f0',borderRadius:4,padding:'4px 6px',fontSize:12,outline:'none',boxSizing:'border-box'}}/></div>
-                      <div style={{padding:'4px 6px'}}><input value={it.spec} onChange={e=>setItem(i,'spec',e.target.value)} placeholder="규격" style={{width:'100%',border:'1px solid #e2e8f0',borderRadius:4,padding:'4px 6px',fontSize:12,outline:'none',boxSizing:'border-box'}}/></div>
-                      <div style={{padding:'4px 4px'}}><input type="number" value={it.qty} min={1} onChange={e=>setItem(i,'qty',e.target.value)} style={{width:'100%',border:'1px solid #e2e8f0',borderRadius:4,padding:'4px 4px',fontSize:12,textAlign:'right',outline:'none',boxSizing:'border-box'}}/></div>
-                      <div style={{padding:'4px 4px'}}><input type="number" value={it.unit_price} min={0} onChange={e=>setItem(i,'unit_price',e.target.value)} style={{width:'100%',border:'1px solid #e2e8f0',borderRadius:4,padding:'4px 4px',fontSize:12,textAlign:'right',outline:'none',boxSizing:'border-box'}}/></div>
-                      <div style={{padding:'4px 6px',textAlign:'right',fontSize:12,fontWeight:600,color:'#1e3a5f'}}>₩{((Number(it.qty)||0)*(Number(it.unit_price)||0)).toLocaleString()}</div>
-                      <div style={{textAlign:'center'}}><button onClick={()=>removeItem(i)} style={{background:'none',border:'none',color:'#dc2626',cursor:'pointer',fontSize:16}}>×</button></div>
-                    </div>
-                  ))}
-                  <div style={{display:'grid',gridTemplateColumns:'2fr 1.5fr 70px 110px 90px 28px',background:'#f8fafc',borderTop:'2px solid #cbd5e1'}}>
-                    <div style={{padding:'7px 8px',gridColumn:'1/5',textAlign:'right',fontSize:12,fontWeight:700,color:'#374151'}}>합 계</div>
-                    <div style={{padding:'7px 8px',textAlign:'right',fontSize:13,fontWeight:700,color:'#1e3a5f'}}>₩{totalAmt.toLocaleString()}</div>
-                    <div/>
-                  </div>
-                </div>
+                  style={{width:'100%',padding:'6px 8px',border:'1px solid #d1d5db',borderRadius:4,fontSize:13,boxSizing:'border-box'}}/>
               </div>
             </div>
-            <div className="modal-footer">
-              <button className="btn" onClick={()=>setShowForm(false)}>취소</button>
-              <button className="btn btn-primary" onClick={handleSubmitForm}>저장</button>
+            <div style={{marginBottom:16}}>
+              <label style={{display:'block',fontSize:11,fontWeight:700,color:'#64748b',marginBottom:4}}>구매 사유</label>
+              <textarea value={form.purpose} onChange={e=>setForm(f=>({...f,purpose:e.target.value}))} rows={2} placeholder="구매 목적 및 용도"
+                style={{width:'100%',padding:'6px 8px',border:'1px solid #d1d5db',borderRadius:4,fontSize:13,boxSizing:'border-box',resize:'vertical'}}/>
+            </div>
+            {/* 품목 테이블 */}
+            <div style={{marginBottom:16}}>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
+                <span style={{fontSize:12,fontWeight:700,color:'#374151'}}>구매 품목</span>
+                <button onClick={addItem} style={{padding:'4px 10px',fontSize:12,border:'1px solid #d1d5db',borderRadius:4,background:'#f9fafb',cursor:'pointer'}}>+ 행 추가</button>
+              </div>
+              <table style={{width:'100%',borderCollapse:'collapse',fontSize:12,border:'1px solid #d1d5db',borderRadius:4}}>
+                <thead>
+                  <tr style={{background:'#f3f4f6'}}>
+                    <th style={{padding:'8px 10px',textAlign:'left',borderBottom:'1px solid #d1d5db',fontWeight:700,color:'#374151'}}>품목명</th>
+                    <th style={{padding:'8px 10px',textAlign:'left',borderBottom:'1px solid #d1d5db',fontWeight:700,color:'#374151',width:'22%'}}>규격/모델</th>
+                    <th style={{padding:'8px 10px',textAlign:'center',borderBottom:'1px solid #d1d5db',fontWeight:700,color:'#374151',width:'8%'}}>수량</th>
+                    <th style={{padding:'8px 10px',textAlign:'right',borderBottom:'1px solid #d1d5db',fontWeight:700,color:'#374151',width:'18%'}}>단가(원)</th>
+                    <th style={{padding:'8px 10px',textAlign:'right',borderBottom:'1px solid #d1d5db',fontWeight:700,color:'#374151',width:'16%'}}>금액</th>
+                    <th style={{width:28,borderBottom:'1px solid #d1d5db'}}/>
+                  </tr>
+                </thead>
+                <tbody>
+                  {form.items.map((it,i)=>(
+                    <tr key={i} style={{borderBottom:'1px solid #f1f5f9'}}>
+                      <td style={{padding:'4px 6px'}}>
+                        <input value={it.name} onChange={e=>setItem(i,'name',e.target.value)} placeholder="품목명"
+                          style={{width:'100%',padding:'4px 6px',border:'1px solid #e5e7eb',borderRadius:3,fontSize:12,boxSizing:'border-box'}}/>
+                      </td>
+                      <td style={{padding:'4px 6px'}}>
+                        <input value={it.spec} onChange={e=>setItem(i,'spec',e.target.value)} placeholder="규격"
+                          style={{width:'100%',padding:'4px 6px',border:'1px solid #e5e7eb',borderRadius:3,fontSize:12,boxSizing:'border-box'}}/>
+                      </td>
+                      <td style={{padding:'4px 6px'}}>
+                        <input type="number" value={it.qty} min={1} onChange={e=>setItem(i,'qty',e.target.value)}
+                          style={{width:'100%',padding:'4px 4px',border:'1px solid #e5e7eb',borderRadius:3,fontSize:12,textAlign:'center',boxSizing:'border-box'}}/>
+                      </td>
+                      <td style={{padding:'4px 6px'}}>
+                        <input type="number" value={it.unit_price} min={0} onChange={e=>setItem(i,'unit_price',e.target.value)}
+                          style={{width:'100%',padding:'4px 6px',border:'1px solid #e5e7eb',borderRadius:3,fontSize:12,textAlign:'right',boxSizing:'border-box'}}/>
+                      </td>
+                      <td style={{padding:'4px 10px',textAlign:'right',fontWeight:600,color:'#1e3a5f'}}>
+                        ₩{((Number(it.qty)||0)*(Number(it.unit_price)||0)).toLocaleString()}
+                      </td>
+                      <td style={{textAlign:'center'}}>
+                        <button onClick={()=>removeItem(i)} style={{background:'none',border:'none',color:'#dc2626',cursor:'pointer',fontSize:16,lineHeight:1,padding:'0 4px'}}>×</button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr style={{background:'#f9fafb',borderTop:'2px solid #d1d5db'}}>
+                    <td colSpan={4} style={{padding:'8px 10px',textAlign:'right',fontWeight:700,color:'#374151'}}>합 계</td>
+                    <td style={{padding:'8px 10px',textAlign:'right',fontWeight:700,fontSize:14,color:'#1e3a5f'}}>₩{totalAmt.toLocaleString()}</td>
+                    <td/>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+            {/* 버튼 */}
+            <div style={{display:'flex',justifyContent:'flex-end',gap:8,paddingTop:12,borderTop:'1px solid #e5e7eb'}}>
+              <button onClick={()=>setShowForm(false)}
+                style={{padding:'7px 20px',border:'1px solid #d1d5db',borderRadius:4,background:'#fff',fontSize:13,cursor:'pointer'}}>취소</button>
+              <button onClick={handleSubmitForm}
+                style={{padding:'7px 20px',border:'none',borderRadius:4,background:'#1e3a5f',color:'#fff',fontSize:13,fontWeight:600,cursor:'pointer'}}>저장</button>
             </div>
           </div>
         </div>
@@ -1628,16 +1663,19 @@ function GeneralPurchase() {
 
       {/* 반려 사유 모달 */}
       {rejectTarget && (
-        <div className="modal-overlay" onClick={()=>setRejectTarget(null)}>
-          <div className="modal" style={{width:400}} onClick={e=>e.stopPropagation()}>
-            <h3>반려 처리</h3>
-            <label style={{fontSize:12,color:'#64748b',display:'block',marginBottom:4}}>반려 사유 *</label>
-            <textarea value={rejectReason} onChange={e=>setRejectReason(e.target.value)}
-              rows={3} placeholder="반려 사유를 입력하세요"
-              style={{width:'100%',border:'1px solid #cbd5e1',borderRadius:4,padding:'6px 8px',fontSize:13,boxSizing:'border-box',outline:'none',resize:'vertical'}}/>
-            <div className="modal-footer">
-              <button className="btn" onClick={()=>setRejectTarget(null)}>취소</button>
-              <button className="btn btn-danger" onClick={handleReject}>반려 처리</button>
+        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.5)',zIndex:9999,display:'flex',alignItems:'center',justifyContent:'center'}}
+          onClick={()=>setRejectTarget(null)}>
+          <div style={{background:'#fff',borderRadius:8,padding:24,width:400,boxShadow:'0 8px 32px rgba(0,0,0,.25)'}}
+            onClick={e=>e.stopPropagation()}>
+            <div style={{fontSize:15,fontWeight:800,color:'#1e3a5f',marginBottom:12,paddingBottom:10,borderBottom:'2px solid #1e3a5f'}}>반려 처리</div>
+            <label style={{display:'block',fontSize:11,fontWeight:700,color:'#64748b',marginBottom:4}}>반려 사유 *</label>
+            <textarea value={rejectReason} onChange={e=>setRejectReason(e.target.value)} rows={3} placeholder="반려 사유를 입력하세요"
+              style={{width:'100%',padding:'6px 8px',border:'1px solid #d1d5db',borderRadius:4,fontSize:13,boxSizing:'border-box',resize:'vertical'}}/>
+            <div style={{display:'flex',justifyContent:'flex-end',gap:8,marginTop:16}}>
+              <button onClick={()=>setRejectTarget(null)}
+                style={{padding:'7px 20px',border:'1px solid #d1d5db',borderRadius:4,background:'#fff',fontSize:13,cursor:'pointer'}}>취소</button>
+              <button onClick={handleReject}
+                style={{padding:'7px 20px',border:'none',borderRadius:4,background:'#dc2626',color:'#fff',fontSize:13,fontWeight:600,cursor:'pointer'}}>반려 처리</button>
             </div>
           </div>
         </div>
