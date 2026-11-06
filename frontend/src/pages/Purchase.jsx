@@ -485,7 +485,190 @@ function ReturnModal({ gr_no, max_qty, part_name, onClose, onSaved }) {
   )
 }
 
+/* ── 사급 소요량 확인 모달 ── */
+function MaterialRequirementsModal({ group, onClose }) {
+  const [reqs, setReqs] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [creating, setCreating] = useState(false)
+
+  useEffect(() => {
+    setLoading(true)
+    api.get(`/purchase/groups/${group.group_no}/material-requirements`)
+      .then(r => setReqs(r.data))
+      .catch(() => setReqs([]))
+      .finally(() => setLoading(false))
+  }, [group.group_no])
+
+  const createPR = async () => {
+    const shortages = reqs.filter(r => r.shortage_qty > 0)
+    if (shortages.length === 0) { alert('부족한 원재료가 없습니다'); return }
+    if (!window.confirm(`부족분 ${shortages.length}개 품목을 자재구매 요청으로 생성하시겠습니까?`)) return
+    setCreating(true)
+    try {
+      const res = await api.post(`/purchase/groups/${group.group_no}/material-pr`)
+      alert(`구매요청 ${res.data.count}건 생성 완료: ${res.data.created.join(', ')}`)
+      onClose()
+    } catch (e) {
+      alert(e.response?.data?.detail || '생성 실패')
+    } finally {
+      setCreating(false)
+    }
+  }
+
+  const hasShortage = reqs.some(r => r.shortage_qty > 0)
+
+  return (
+    <div className="modal-overlay">
+      <div className="modal" style={{ width: 760, maxHeight: '88vh', display: 'flex', flexDirection: 'column' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 4 }}>
+          <h3 style={{ margin: 0 }}>사급 소요량 확인</h3>
+          <span style={{ fontSize: 11, color: '#64748b', background: '#f1f5f9', padding: '2px 8px', borderRadius: 10 }}>
+            {group.group_no} · {group.partner_name || group.partner_id}
+          </span>
+        </div>
+        <p style={{ fontSize: 11, color: '#64748b', marginBottom: 16 }}>
+          발주 품목 BOM 전개 → 사급 원재료 소요량 vs 현재고 비교
+        </p>
+
+        <div style={{ flex: 1, overflowY: 'auto' }}>
+          {loading && <div style={{ padding: 40, textAlign: 'center', color: '#94a3b8' }}>계산 중...</div>}
+          {!loading && reqs.length === 0 && (
+            <div style={{ padding: 40, textAlign: 'center', color: '#94a3b8' }}>
+              BOM 등록된 원재료가 없습니다. BOM 관리에서 먼저 등록해 주세요.
+            </div>
+          )}
+          {!loading && reqs.length > 0 && (
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+              <thead>
+                <tr style={{ background: '#f8fafc', borderBottom: '2px solid #e2e8f0' }}>
+                  <th style={{ padding: '8px 10px', textAlign: 'left' }}>품번</th>
+                  <th style={{ padding: '8px 10px', textAlign: 'left' }}>품명</th>
+                  <th style={{ padding: '8px 10px', textAlign: 'right' }}>소요량</th>
+                  <th style={{ padding: '8px 10px', textAlign: 'right' }}>현재고</th>
+                  <th style={{ padding: '8px 10px', textAlign: 'right' }}>부족량</th>
+                  <th style={{ padding: '8px 10px', textAlign: 'left' }}>대상 제품</th>
+                </tr>
+              </thead>
+              <tbody>
+                {reqs.map(r => (
+                  <tr key={r.component_part_no} style={{ borderBottom: '1px solid #f1f5f9', background: r.shortage_qty > 0 ? '#fff7f7' : '#fff' }}>
+                    <td style={{ padding: '8px 10px', fontFamily: 'monospace', color: '#1d4ed8' }}>{r.component_part_no}</td>
+                    <td style={{ padding: '8px 10px' }}>{r.component_name}</td>
+                    <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 600 }}>
+                      {r.required_qty.toLocaleString(undefined, {maximumFractionDigits: 2})} {r.unit}
+                    </td>
+                    <td style={{ padding: '8px 10px', textAlign: 'right', color: r.current_stock > 0 ? '#16a34a' : '#94a3b8' }}>
+                      {r.current_stock.toLocaleString(undefined, {maximumFractionDigits: 2})} {r.unit}
+                    </td>
+                    <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 700, color: r.shortage_qty > 0 ? '#dc2626' : '#16a34a' }}>
+                      {r.shortage_qty > 0 ? `▲ ${r.shortage_qty.toLocaleString(undefined, {maximumFractionDigits: 2})}` : '충분'}
+                    </td>
+                    <td style={{ padding: '8px 10px', fontSize: 11, color: '#64748b' }}>
+                      {r.products.map(p => `${p.part_name}(${p.order_qty.toLocaleString()}EA)`).join(', ')}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 16, paddingTop: 14, borderTop: '1px solid #e2e8f0' }}>
+          <div style={{ fontSize: 12, color: '#64748b' }}>
+            {hasShortage
+              ? <span style={{ color: '#dc2626', fontWeight: 600 }}>⚠ 부족 품목이 있습니다 → 자재구매 요청으로 전환하세요</span>
+              : reqs.length > 0 ? <span style={{ color: '#16a34a' }}>✓ 모든 원재료 재고 충분</span> : null}
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button className="btn btn-secondary" onClick={onClose}>닫기</button>
+            {hasShortage && (
+              <button className="btn btn-primary" onClick={createPR} disabled={creating}>
+                {creating ? '생성 중...' : `자재구매 요청 생성 (부족 ${reqs.filter(r=>r.shortage_qty>0).length}건)`}
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 /* ── 자재구매 탭 ─────────────────────────────────────────────── */
+/* ── 품의서 결재 상신 모달 ── */
+function ApprovalRequestModal({ order, onClose, onSaved }) {
+  const [comment, setComment] = useState('')
+  const [saving, setSaving] = useState(false)
+  const amount = (order.qty || 0) * (order.unit_price || 0)
+
+  const submit = async () => {
+    if (!comment.trim()) { alert('구매 사유를 입력하세요'); return }
+    setSaving(true)
+    try {
+      await api.post(`/material/orders/${order.po_no}/request-approval`, { comment: comment.trim() })
+      onSaved()
+    } catch (e) {
+      alert(e.response?.data?.detail || '결재 상신 실패')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="modal-overlay">
+      <div className="modal" style={{ width: 520 }}>
+        <h3 style={{ marginBottom: 4 }}>자재구매 결재 상신</h3>
+        <p style={{ fontSize: 11, color: '#64748b', marginBottom: 20 }}>대표/전무 결재 요청 — 승인 후 발주서 출력 가능</p>
+
+        {/* 발주 정보 요약 */}
+        <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 6, padding: '14px 16px', marginBottom: 16 }}>
+          <table style={{ width: '100%', fontSize: 12, borderCollapse: 'collapse' }}>
+            <tbody>
+              <tr>
+                <td style={{ color: '#64748b', paddingBottom: 6, width: 90 }}>발주번호</td>
+                <td style={{ fontFamily: 'monospace', fontWeight: 600 }}>{order.po_no}</td>
+                <td style={{ color: '#64748b', paddingBottom: 6, width: 70 }}>거래처</td>
+                <td style={{ fontWeight: 600 }}>{order.partner_name}</td>
+              </tr>
+              <tr>
+                <td style={{ color: '#64748b', paddingBottom: 6 }}>품목</td>
+                <td colSpan={3}><span style={{ fontFamily: 'monospace', color: '#1d4ed8', marginRight: 8 }}>{order.part_no}</span>{order.item_name}</td>
+              </tr>
+              <tr>
+                <td style={{ color: '#64748b', paddingBottom: 6 }}>수량</td>
+                <td>{(order.qty || 0).toLocaleString()} {order.item_unit}</td>
+                <td style={{ color: '#64748b' }}>단가</td>
+                <td>₩{(order.unit_price || 0).toLocaleString()}</td>
+              </tr>
+              <tr>
+                <td style={{ color: '#64748b' }}>발주금액</td>
+                <td colSpan={3} style={{ fontSize: 15, fontWeight: 700, color: '#0f172a' }}>₩{amount.toLocaleString()}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        {/* 품의서 사유 */}
+        <div className="form-group">
+          <label style={{ fontWeight: 600 }}>구매 사유 / 목적 <span style={{ color: '#ef4444' }}>*</span></label>
+          <textarea
+            value={comment} onChange={e => setComment(e.target.value)}
+            placeholder="구매가 필요한 이유, 용도, 긴급 여부 등을 입력하세요&#10;예) 나사산 불량 발생으로 긴급 원자재 추가 발주 필요. 생산 라인 중단 방지를 위해 즉시 조달 요청."
+            rows={5}
+            style={{ width: '100%', resize: 'vertical', fontSize: 13, padding: '8px 10px', border: '1px solid #e2e8f0', borderRadius: 4, lineHeight: 1.6 }}
+          />
+        </div>
+
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16 }}>
+          <button className="btn btn-secondary" onClick={onClose} disabled={saving}>취소</button>
+          <button className="btn btn-primary" onClick={submit} disabled={saving}>
+            {saving ? '상신 중...' : '결재 상신'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 /* ── 자재 발주 생성 모달 ── */
 function MatOrderModal({ partners, allItems, onClose, onSaved }) {
   const [header, setHeader] = useState({ partner_id: '', order_date: today(), note: '' })
@@ -681,6 +864,7 @@ function MaterialPurchase() {
   const [loading, setLoading] = useState(false)
   const [showOrderModal, setShowOrderModal] = useState(false)
   const [showReceiveModal, setShowReceiveModal] = useState(false)
+  const [approvalTarget, setApprovalTarget] = useState(null)   // 품의서 모달 대상 발주
 
   useEffect(() => {
     api.get('/master/partners').then(r => setMatPartners(r.data.filter(p => p.partner_type !== '고객'))).catch(()=>{})
@@ -735,6 +919,13 @@ function MaterialPurchase() {
       {showReceiveModal && (
         <MatReceiveModal orders={orders.filter(o=>o.remaining_qty>0)}
           onClose={()=>setShowReceiveModal(false)} onSaved={loadReceipts}/>
+      )}
+      {approvalTarget && (
+        <ApprovalRequestModal
+          order={approvalTarget}
+          onClose={()=>setApprovalTarget(null)}
+          onSaved={()=>{ setApprovalTarget(null); loadOrders() }}
+        />
       )}
 
       {/* 서브탭 + 액션 */}
@@ -799,8 +990,7 @@ function MaterialPurchase() {
                   const apv = o.approval_status || '작성중'
                   const role = getRole()
                   const canRequest = ['material','manager','admin'].includes(role) && apv === '작성중'
-                  const canApprove = ['executive','owner','admin'].includes(role) && apv === '승인요청'
-                  const canReject  = ['executive','owner','admin'].includes(role) && ['승인요청','승인완료'].includes(apv)
+                  const canReRequest = ['material','manager','admin'].includes(role) && apv === '반려'
                   return (
                   <tr key={o.po_no}>
                     <td style={{fontFamily:'monospace',fontSize:11}}>{o.po_no}</td>
@@ -816,40 +1006,17 @@ function MaterialPurchase() {
                     <td><span className={`badge ${o.status==='open'?'badge-blue':o.status==='partial'?'badge-amber':o.status==='closed'?'badge-green':'badge-gray'}`}>
                       {o.status==='open'?'발주중':o.status==='partial'?'일부입고':o.status==='closed'?'완료':'취소'}
                     </span></td>
-                    <td style={{minWidth:90}}>
+                    <td style={{minWidth:100}}>
                       <span className={`badge ${apv==='승인완료'?'badge-green':apv==='승인요청'?'badge-amber':apv==='반려'?'badge-red':'badge-gray'}`}
                         style={{display:'block',marginBottom:3,textAlign:'center'}}>
                         {apv}
                       </span>
-                      {canRequest && (
+                      {o.approval_comment && apv==='반려' && (
+                        <div style={{fontSize:10,color:'#b91c1c',marginBottom:3,wordBreak:'break-word'}}>{o.approval_comment.replace('[반려] ','')}</div>
+                      )}
+                      {(canRequest || canReRequest) && (
                         <button className="btn btn-sm" style={{fontSize:10,padding:'2px 6px',background:'#eff6ff',color:'#1d4ed8',border:'1px solid #bfdbfe',width:'100%'}}
-                          onClick={async()=>{
-                            try { await api.post(`/material/orders/${o.po_no}/request-approval`); loadOrders() }
-                            catch(e){ alert(e.response?.data?.detail||'요청 실패') }
-                          }}>승인요청</button>
-                      )}
-                      {canApprove && (
-                        <div style={{display:'flex',gap:3,marginTop:2}}>
-                          <button className="btn btn-sm" style={{fontSize:10,padding:'2px 5px',background:'#f0fdf4',color:'#166534',border:'1px solid #bbf7d0',flex:1}}
-                            onClick={async()=>{
-                              try { await api.post(`/material/orders/${o.po_no}/approve`); loadOrders() }
-                              catch(e){ alert(e.response?.data?.detail||'승인 실패') }
-                            }}>승인</button>
-                          <button className="btn btn-sm" style={{fontSize:10,padding:'2px 5px',background:'#fef2f2',color:'#b91c1c',border:'1px solid #fca5a5',flex:1}}
-                            onClick={async()=>{
-                              if(!window.confirm('반려하시겠습니까?')) return
-                              try { await api.post(`/material/orders/${o.po_no}/reject`); loadOrders() }
-                              catch(e){ alert(e.response?.data?.detail||'반려 실패') }
-                            }}>반려</button>
-                        </div>
-                      )}
-                      {!canApprove && canReject && apv === '승인완료' && (
-                        <button className="btn btn-sm" style={{fontSize:10,padding:'2px 5px',background:'#fef2f2',color:'#b91c1c',border:'1px solid #fca5a5',width:'100%',marginTop:2}}
-                          onClick={async()=>{
-                            if(!window.confirm('승인을 취소(반려)하시겠습니까?')) return
-                            try { await api.post(`/material/orders/${o.po_no}/reject`); loadOrders() }
-                            catch(e){ alert(e.response?.data?.detail||'반려 실패') }
-                          }}>승인취소</button>
+                          onClick={()=>setApprovalTarget(o)}>결재 상신</button>
                       )}
                     </td>
                     <td>
@@ -1286,6 +1453,7 @@ export default function Purchase() {
   const [showGroup, setShowGroup] = useState(false)
   const [showSingle, setShowSingle] = useState(false)
   const [expandedGroup, setExpandedGroup] = useState(null)
+  const [mrpTarget, setMrpTarget] = useState(null)   // 사급소요량 모달 대상 그룹
   const [returnModal, setReturnModal] = useState(null) // { gr_no, max_qty, part_name }
   const [carryoverModal, setCarryoverModal] = useState(null) // { mode:'receipt'|'over', gr_no?, ln?, partner_id?, max_qty, part_name }
   const xlsxRef = useRef()
@@ -1588,13 +1756,14 @@ export default function Purchase() {
                 <th>발주일</th>
                 <th>Due Date</th>
                 <th>상태</th>
+                <th>사급소요량</th>
                 <th>PDF/인쇄</th>
                 <th>상세</th>
                 <th>취소</th>
               </tr>
             </thead>
             <tbody>
-              {groups.length === 0 && <tr><td colSpan={9} className="empty">발주서 없음 — 발주서 작성 버튼으로 등록하세요</td></tr>}
+              {groups.length === 0 && <tr><td colSpan={10} className="empty">발주서 없음 — 발주서 작성 버튼으로 등록하세요</td></tr>}
               {groups.map(g => (
                 <>
                   <tr key={g.group_no}>
@@ -1604,6 +1773,13 @@ export default function Purchase() {
                     <td>{g.order_date}</td>
                     <td>{g.due_date}</td>
                     <td><span className={`badge ${STATUS_BADGE[g.status] || 'badge-gray'}`}>{g.status}</span></td>
+                    <td>
+                      <button className="btn btn-sm"
+                        style={{background:'#f0fdf4',color:'#166534',border:'1px solid #bbf7d0'}}
+                        onClick={() => setMrpTarget(g)}>
+                        소요량 확인
+                      </button>
+                    </td>
                     <td>
                       <button className="btn btn-sm btn-primary" onClick={() => openPrint(g.group_no)}>
                         발주서 출력
@@ -2142,6 +2318,7 @@ export default function Purchase() {
 
       {showGroup && <GroupModal onClose={() => setShowGroup(false)} onSaved={() => { setShowGroup(false); load() }} />}
       {showSingle && <SinglePOModal onClose={() => setShowSingle(false)} onSaved={() => { setShowSingle(false); load() }} />}
+      {mrpTarget && <MaterialRequirementsModal group={mrpTarget} onClose={() => setMrpTarget(null)} />}
       {returnModal && (
         <ReturnModal
           gr_no={returnModal.gr_no}

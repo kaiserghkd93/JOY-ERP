@@ -42,6 +42,14 @@ class MatReceiptReq(BaseModel):
     note: str | None = None
 
 
+class MatApprovalReq(BaseModel):
+    comment: str | None = None   # 품의서 사유
+
+
+class MatRejectReq(BaseModel):
+    comment: str | None = None   # 반려 사유
+
+
 # ── 발주 목록 ──────────────────────────────────────────────────────
 @router.get("/orders")
 def list_mat_orders(
@@ -78,6 +86,7 @@ def list_mat_orders(
             "due_date": str(po.due_date),
             "status": po.status,
             "approval_status": po.approval_status or "작성중",
+            "approval_comment": po.approval_comment,
             "note": po.note,
         })
     return result
@@ -240,6 +249,7 @@ def cancel_mat_order(
 @router.post("/orders/{po_no}/request-approval")
 def request_mat_approval(
     po_no: str,
+    body: MatApprovalReq = MatApprovalReq(),
     db: Session = Depends(get_db),
     user: User = Depends(_require_mat),
 ):
@@ -249,6 +259,8 @@ def request_mat_approval(
     if po.approval_status == "승인완료":
         raise HTTPException(400, "이미 승인된 발주입니다")
     po.approval_status = "승인요청"
+    if body.comment:
+        po.approval_comment = body.comment
     db.commit()
     return {"ok": True, "approval_status": po.approval_status}
 
@@ -276,6 +288,7 @@ def approve_mat_order(
 @router.post("/orders/{po_no}/reject")
 def reject_mat_order(
     po_no: str,
+    body: MatRejectReq = MatRejectReq(),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
@@ -287,8 +300,45 @@ def reject_mat_order(
     if po.approval_status not in ("승인요청", "승인완료"):
         raise HTTPException(400, "승인 요청/완료 상태가 아닙니다")
     po.approval_status = "반려"
+    if body.comment:
+        po.approval_comment = f"[반려] {body.comment}"
     db.commit()
     return {"ok": True, "approval_status": po.approval_status}
+
+
+# ── 결재 대기 목록 (대표/전무용) ──────────────────────────────────
+@router.get("/pending-approvals")
+def list_pending_approvals(
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    if user.role not in APPROVER_ROLES:
+        raise HTTPException(403, "대표/전무/관리자만 조회 가능합니다")
+    orders = (
+        db.query(PurchaseOrder)
+        .filter(PurchaseOrder.po_type == "material", PurchaseOrder.approval_status == "승인요청")
+        .order_by(PurchaseOrder.order_date.asc())
+        .all()
+    )
+    result = []
+    for po in orders:
+        item = db.get(Item, po.part_no)
+        partner = db.get(Partner, po.partner_id)
+        result.append({
+            "po_no": po.po_no,
+            "partner_id": po.partner_id,
+            "partner_name": partner.name if partner else po.partner_id,
+            "part_no": po.part_no,
+            "item_name": item.name if item else po.part_no,
+            "item_unit": item.unit if item else "EA",
+            "qty": po.qty,
+            "unit_price": float(po.unit_price or 0),
+            "amount": po.qty * float(po.unit_price or 0),
+            "order_date": str(po.order_date),
+            "due_date": str(po.due_date),
+            "approval_comment": po.approval_comment,
+        })
+    return result
 
 
 # ── 자재 발주서 출력 (HTML — 브라우저 인쇄/PDF) ──────────────────

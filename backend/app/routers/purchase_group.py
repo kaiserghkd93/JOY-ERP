@@ -5,11 +5,14 @@ import io
 from datetime import date as date_type
 
 from app.database import get_db
-from app.models.purchase import PurchaseOrderGroup, PurchaseOrder, POStatus, POGroupStatus
-from app.models.master import Partner, Item
+from app.models.purchase import PurchaseOrderGroup, PurchaseOrder, POStatus, POGroupStatus, PurchaseRequest, PRStatus
+from app.models.master import Partner, Item, BomLine
 from app.schemas.purchase_group import POGroupCreate, POGroupOut
 from app.services.doc_no import next_doc_no
 from app.services.purchase_service import create_po
+from app.services.ledger_service import get_stock
+from app.routers.auth import get_current_user
+from app.models.auth import User
 
 router = APIRouter(prefix="/purchase/groups", tags=["발주서"])
 
@@ -75,6 +78,91 @@ def get_group(group_no: str, db: Session = Depends(get_db)):
     if not g:
         raise HTTPException(404)
     return g
+
+
+@router.get("/{group_no}/material-requirements")
+def get_material_requirements(group_no: str, db: Session = Depends(get_db)):
+    """외주 발주서 BOM 전개 → 사급 소요 원재료 계산 + 현재고 비교"""
+    g = db.get(PurchaseOrderGroup, group_no)
+    if not g:
+        raise HTTPException(404, f"발주서 없음: {group_no}")
+
+    reqs: dict[str, dict] = {}
+    for po in g.lines:
+        if po.status == POStatus.cancelled:
+            continue
+        bom_lines = db.query(BomLine).filter(BomLine.product_part_no == po.part_no).all()
+        for bl in bom_lines:
+            cp = bl.component_part_no
+            needed = float(bl.qty_per) * po.qty
+            if cp not in reqs:
+                comp = db.get(Item, cp)
+                reqs[cp] = {
+                    "component_part_no": cp,
+                    "component_name": comp.name if comp else cp,
+                    "unit": bl.unit,
+                    "required_qty": 0.0,
+                    "current_stock": float(get_stock(db, cp)),
+                    "products": [],
+                }
+            reqs[cp]["required_qty"] += needed
+            prod = db.get(Item, po.part_no)
+            reqs[cp]["products"].append({
+                "part_no": po.part_no,
+                "part_name": prod.name if prod else po.part_no,
+                "order_qty": po.qty,
+                "qty_per": float(bl.qty_per),
+                "need": needed,
+            })
+
+    for r in reqs.values():
+        r["shortage_qty"] = max(0.0, r["required_qty"] - r["current_stock"])
+
+    return list(reqs.values())
+
+
+@router.post("/{group_no}/material-pr")
+def create_material_pr_from_group(
+    group_no: str,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """사급 소요 원재료 부족분 → 자재구매 요청(PR) 생성"""
+    g = db.get(PurchaseOrderGroup, group_no)
+    if not g:
+        raise HTTPException(404, f"발주서 없음: {group_no}")
+
+    reqs: dict[str, float] = {}
+    for po in g.lines:
+        if po.status == POStatus.cancelled:
+            continue
+        for bl in db.query(BomLine).filter(BomLine.product_part_no == po.part_no).all():
+            cp = bl.component_part_no
+            reqs[cp] = reqs.get(cp, 0.0) + float(bl.qty_per) * po.qty
+
+    created = []
+    for cp, required in reqs.items():
+        stock = float(get_stock(db, cp))
+        shortage = required - stock
+        if shortage <= 0:
+            continue
+        pr_no = next_doc_no(db, "PR", "purchase_request", "pr_no")
+        pr = PurchaseRequest(
+            pr_no=pr_no,
+            part_no=cp,
+            qty=int(shortage) + 1,  # 소수점 올림 처리
+            need_date=g.due_date,
+            status=PRStatus.pending,
+            source="외주사급",
+            source_ref=group_no,
+            note=f"외주발주 {group_no} 사급 소요",
+            requested_by=user.username,
+        )
+        db.add(pr)
+        created.append(pr_no)
+
+    db.commit()
+    return {"ok": True, "created": created, "count": len(created)}
 
 
 @router.patch("/{group_no}/cancel", response_model=POGroupOut)

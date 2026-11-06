@@ -170,9 +170,17 @@ export default function Management() {
   const [monthlyTrend, setMonthlyTrend] = useState([])
   const [stockSummary, setStockSummary] = useState([])
   const [alerts, setAlerts] = useState([])
+  const [pendingApprovals, setPendingApprovals] = useState([])
+  const [rejectTarget, setRejectTarget] = useState(null)   // 반려 사유 모달
+  const [rejectComment, setRejectComment] = useState('')
+
+  const loadPendingApprovals = () => {
+    api.get('/material/pending-approvals').then(r => setPendingApprovals(r.data)).catch(() => {})
+  }
 
   const load = () => {
     setLoading(true)
+    loadPendingApprovals()
     Promise.all([
       api.get(`/dashboard/kpi?year=${year}&month=${month}`).then(r => setKpi(r.data)).catch(() => {}),
       api.get(`/dashboard/sales-vs-target?year=${year}&month=${month}`).then(r => setVsTarget(r.data)).catch(() => {}),
@@ -186,7 +194,26 @@ export default function Management() {
     ]).finally(() => setLoading(false))
   }
 
+  const approveOrder = async (po_no) => {
+    try {
+      await api.post(`/material/orders/${po_no}/approve`)
+      loadPendingApprovals()
+    } catch (e) {
+      alert(e.response?.data?.detail || '승인 실패')
+    }
+  }
+
+  const rejectOrder = async () => {
+    try {
+      await api.post(`/material/orders/${rejectTarget}/reject`, { comment: rejectComment })
+      setRejectTarget(null); setRejectComment(''); loadPendingApprovals()
+    } catch (e) {
+      alert(e.response?.data?.detail || '반려 실패')
+    }
+  }
+
   useEffect(() => { load() }, [year, month])
+  useEffect(() => { loadPendingApprovals() }, [])
 
   const toggle = (key) => setExpanded(e => e === key ? null : key)
 
@@ -258,7 +285,89 @@ export default function Management() {
         </button>
       </div>
 
+      {/* ── 반려 사유 모달 ── */}
+      {rejectTarget && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.5)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ background: '#fff', borderRadius: 8, padding: 28, width: 420, boxShadow: '0 8px 32px rgba(0,0,0,.2)' }}>
+            <h3 style={{ marginBottom: 16, fontSize: 15 }}>반려 사유 입력</h3>
+            <textarea
+              value={rejectComment} onChange={e => setRejectComment(e.target.value)}
+              placeholder="반려 사유를 입력하세요 (예: 단가 재검토 필요, 거래처 변경 요망)"
+              rows={4}
+              style={{ width: '100%', padding: '8px 10px', border: '1px solid #e2e8f0', borderRadius: 4, fontSize: 13, resize: 'vertical', lineHeight: 1.5 }}
+            />
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 14 }}>
+              <button onClick={() => { setRejectTarget(null); setRejectComment('') }}
+                style={{ padding: '7px 16px', borderRadius: 4, border: '1px solid #e2e8f0', background: '#f8fafc', cursor: 'pointer', fontSize: 13 }}>취소</button>
+              <button onClick={rejectOrder}
+                style={{ padding: '7px 16px', borderRadius: 4, border: 'none', background: '#dc2626', color: '#fff', cursor: 'pointer', fontWeight: 600, fontSize: 13 }}>반려 처리</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div style={{ padding: '0 24px' }}>
+
+        {/* ══ 결재 대기함 ══ */}
+        {pendingApprovals.length > 0 && (
+          <div style={{ marginBottom: 28 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: SAP.textH }}>📋 결재 대기함</div>
+              <span style={{ background: '#dc2626', color: '#fff', fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 12 }}>
+                {pendingApprovals.length}건 대기
+              </span>
+            </div>
+            <div style={{ background: SAP.card, border: `1px solid #fca5a5`, borderRadius: 8, overflow: 'hidden', boxShadow: '0 2px 8px rgba(220,38,38,.08)' }}>
+              {pendingApprovals.map((po, idx) => (
+                <div key={po.po_no} style={{
+                  padding: '16px 20px',
+                  borderBottom: idx < pendingApprovals.length - 1 ? '1px solid #fee2e2' : 'none',
+                  display: 'grid', gridTemplateColumns: '1fr auto', gap: 16, alignItems: 'start',
+                }}>
+                  <div>
+                    {/* 발주 정보 한 줄 */}
+                    <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginBottom: 8, fontSize: 12 }}>
+                      <span style={{ fontFamily: 'monospace', color: '#1d4ed8', fontWeight: 600 }}>{po.po_no}</span>
+                      <span style={{ color: SAP.textM }}>{po.partner_name}</span>
+                      <span style={{ fontFamily: 'monospace', color: '#374151' }}>{po.part_no}</span>
+                      <span style={{ color: SAP.textH }}>{po.item_name}</span>
+                      <span style={{ color: SAP.textM }}>수량 {(po.qty || 0).toLocaleString()} {po.item_unit}</span>
+                      <span style={{ fontWeight: 700, color: '#0f172a' }}>₩{Math.round(po.amount).toLocaleString()}</span>
+                      <span style={{ color: SAP.textS }}>납기 {po.due_date}</span>
+                    </div>
+                    {/* 품의서 사유 */}
+                    {po.approval_comment && (
+                      <div style={{
+                        background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 4,
+                        padding: '8px 12px', fontSize: 12, color: '#78350f', lineHeight: 1.6,
+                      }}>
+                        <span style={{ fontWeight: 700, marginRight: 8 }}>구매 사유</span>{po.approval_comment}
+                      </div>
+                    )}
+                  </div>
+                  {/* 승인/반려 버튼 */}
+                  <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                    <button
+                      onClick={() => approveOrder(po.po_no)}
+                      style={{ padding: '8px 18px', borderRadius: 4, border: 'none', background: SAP.green, color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
+                      승인
+                    </button>
+                    <button
+                      onClick={() => { setRejectTarget(po.po_no); setRejectComment('') }}
+                      style={{ padding: '8px 18px', borderRadius: 4, border: 'none', background: '#dc2626', color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
+                      반려
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        {pendingApprovals.length === 0 && (
+          <div style={{ marginBottom: 24, padding: '12px 20px', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, fontSize: 12, color: '#166534', display: 'flex', alignItems: 'center', gap: 8 }}>
+            ✅ <span>결재 대기 중인 자재구매 발주가 없습니다</span>
+          </div>
+        )}
 
         {/* ══ Section 1: 전사 경영현황 (4 big KPI tiles) ══ */}
         <SecHeader title="전사 경영현황" />

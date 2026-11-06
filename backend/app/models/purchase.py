@@ -55,6 +55,7 @@ class PurchaseOrder(Base):
     status: Mapped[POStatus] = mapped_column(SAEnum(POStatus), default=POStatus.open)
     po_type: Mapped[str] = mapped_column(String(20), default="outsource", server_default="outsource")
     approval_status: Mapped[str | None] = mapped_column(String(20), nullable=True, server_default="작성중")
+    approval_comment: Mapped[str | None] = mapped_column(Text, nullable=True)
     note: Mapped[str | None] = mapped_column(String(500))
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
 
