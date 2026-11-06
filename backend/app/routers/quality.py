@@ -291,16 +291,18 @@ class DisposalUpdate(BaseModel):
 @router.patch("/inspections/{insp_id}/disposal")
 def update_disposal(insp_id: int, body: DisposalUpdate, db: Session = Depends(get_db), user: User = Depends(_require_manager)):
     """처리방법 수정 (승인완료 상태에서만 가능)"""
-    from app.models.quality import DisposalType
-    insp = _get_insp(insp_id, db)
-    if insp.approval_status != ApprovalStatus.approved:
-        raise HTTPException(400, "승인완료 상태에서만 처리방법을 변경할 수 있습니다")
-    try:
-        insp.disposal = DisposalType(body.disposal)
-    except ValueError:
+    from sqlalchemy import text as _text
+    VALID = {"반품", "폐기", "특채", "보류", "합격"}
+    if body.disposal not in VALID:
         raise HTTPException(400, f"유효하지 않은 처리방법: {body.disposal}")
+    insp = _get_insp(insp_id, db)
+    # approval_status 비교는 문자열로
+    status_val = str(insp.approval_status.value if hasattr(insp.approval_status, 'value') else insp.approval_status)
+    if status_val != "승인완료":
+        raise HTTPException(400, f"승인완료 상태에서만 처리방법을 변경할 수 있습니다 (현재: {status_val})")
+    db.execute(_text("UPDATE inspection SET disposal = :d WHERE id = :id"), {"d": body.disposal, "id": insp_id})
     db.commit()
-    return {"ok": True, "disposal": str(insp.disposal)}
+    return {"ok": True, "disposal": body.disposal}
 
 
 @router.get("/inspections/pending-approval")
