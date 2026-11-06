@@ -1433,6 +1433,222 @@ function MatReportPanel({ month }) {
   )
 }
 
+/* ──────────────────────────────────────────────
+   일반구매 품의 컴포넌트
+   상태: 작성중 → 팀장승인대기 → 임원승인대기 → 승인완료 / 반려
+────────────────────────────────────────────── */
+function GeneralPurchase() {
+  const role = getRole()
+  const [list, setList] = useState([])
+  const [showForm, setShowForm] = useState(false)
+  const [rejectTarget, setRejectTarget] = useState(null)
+  const [rejectReason, setRejectReason] = useState('')
+  const [form, setForm] = useState({ title:'', vendor:'', purpose:'', items:[{name:'',spec:'',qty:1,unit_price:0}] })
+
+  const GPR_BADGE = {
+    '작성중':'badge-amber', '팀장승인대기':'badge-blue', '임원승인대기':'badge-purple',
+    '승인완료':'badge-green', '반려':'badge-red',
+  }
+
+  const canApprove = (row) => {
+    if (row.status === '팀장승인대기' && ['admin','manager','owner'].includes(role)) return true
+    if (row.status === '임원승인대기' && ['admin','executive','owner'].includes(role)) return true
+    return false
+  }
+  const canSubmit = (row) => ['작성중','반려'].includes(row.status)
+  const isMyRow = (row) => {
+    // api에서 me.username을 직접 꺼내기 어려우므로 로컬스토리지 토큰 디코딩
+    try {
+      const payload = JSON.parse(atob(localStorage.getItem('token').split('.')[1]))
+      return row.requester_id === payload.sub
+    } catch { return false }
+  }
+
+  const load = () => api.get('/general-purchase/').then(r => setList(r.data)).catch(()=>{})
+
+  useEffect(() => { load() }, [])
+
+  const addItem = () => setForm(f=>({...f, items:[...f.items,{name:'',spec:'',qty:1,unit_price:0}]}))
+  const removeItem = (i) => setForm(f=>({...f, items:f.items.filter((_,idx)=>idx!==i)}))
+  const setItem = (i, k, v) => setForm(f=>({...f, items:f.items.map((it,idx)=>idx===i?{...it,[k]:v}:it)}))
+
+  const totalAmt = form.items.reduce((s,i)=>s+(Number(i.qty)||0)*(Number(i.unit_price)||0), 0)
+
+  const handleSubmitForm = async () => {
+    if (!form.title.trim()) return alert('제목을 입력하세요')
+    await api.post('/general-purchase/', {
+      title: form.title, vendor: form.vendor, purpose: form.purpose,
+      items: form.items.map(i=>({name:i.name,spec:i.spec,qty:Number(i.qty),unit_price:Number(i.unit_price)}))
+    })
+    setShowForm(false)
+    setForm({ title:'', vendor:'', purpose:'', items:[{name:'',spec:'',qty:1,unit_price:0}] })
+    load()
+  }
+
+  const handleSubmitApproval = async (gpr_no) => {
+    await api.patch(`/general-purchase/${gpr_no}/submit`)
+    load()
+  }
+
+  const handleApprove = async (gpr_no) => {
+    await api.patch(`/general-purchase/${gpr_no}/approve`)
+    load()
+  }
+
+  const handleReject = async () => {
+    if (!rejectReason.trim()) return alert('반려 사유를 입력하세요')
+    await api.patch(`/general-purchase/${rejectTarget}/reject`, { reason: rejectReason })
+    setRejectTarget(null); setRejectReason(''); load()
+  }
+
+  const handleDelete = async (gpr_no) => {
+    if (!window.confirm('삭제하시겠습니까?')) return
+    await api.delete(`/general-purchase/${gpr_no}`)
+    load()
+  }
+
+  return (
+    <div>
+      {/* 액션 바 */}
+      <div className="erp-panel" style={{marginBottom:8}}>
+        <div className="erp-actions">
+          <div className="spacer"/>
+          <button className="btn btn-sm btn-primary" onClick={()=>setShowForm(true)}>+ 품의 작성</button>
+        </div>
+      </div>
+
+      {/* 목록 테이블 */}
+      <div className="erp-panel">
+        <table className="erp-table">
+          <thead>
+            <tr>
+              <th>품의번호</th><th>제목</th><th>거래처</th>
+              <th>총금액</th><th>사유</th><th>상태</th>
+              <th>신청일</th><th>신청자</th><th>액션</th>
+            </tr>
+          </thead>
+          <tbody>
+            {list.length === 0 && (
+              <tr><td colSpan={9} style={{textAlign:'center',color:'#94a3b8',padding:24}}>품의 내역이 없습니다</td></tr>
+            )}
+            {list.map(row=>(
+              <tr key={row.gpr_no}>
+                <td style={{fontSize:12,color:'#64748b'}}>{row.gpr_no}</td>
+                <td style={{fontWeight:600}}>{row.title}</td>
+                <td>{row.vendor || '-'}</td>
+                <td style={{textAlign:'right'}}>{row.total_amount ? '₩'+row.total_amount.toLocaleString() : '-'}</td>
+                <td style={{maxWidth:160,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{row.purpose || '-'}</td>
+                <td><span className={`badge ${GPR_BADGE[row.status]||'badge-gray'}`}>{row.status}</span></td>
+                <td style={{fontSize:12}}>{row.created_at?.slice(0,10)}</td>
+                <td style={{fontSize:12}}>{row.requester_name||row.requester_id}</td>
+                <td>
+                  <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>
+                    {canSubmit(row) && isMyRow(row) && (
+                      <button className="btn btn-sm" style={{background:'#1e3a5f',color:'#fff',fontSize:11}}
+                        onClick={()=>handleSubmitApproval(row.gpr_no)}>결재상신</button>
+                    )}
+                    {canApprove(row) && (
+                      <button className="btn btn-sm" style={{background:'#15803d',color:'#fff',fontSize:11}}
+                        onClick={()=>handleApprove(row.gpr_no)}>승인</button>
+                    )}
+                    {canApprove(row) && (
+                      <button className="btn btn-sm" style={{background:'#dc2626',color:'#fff',fontSize:11}}
+                        onClick={()=>{setRejectTarget(row.gpr_no);setRejectReason('')}}>반려</button>
+                    )}
+                    {['작성중','반려'].includes(row.status) && isMyRow(row) && (
+                      <button className="btn btn-sm" style={{background:'#f1f5f9',color:'#64748b',fontSize:11}}
+                        onClick={()=>handleDelete(row.gpr_no)}>삭제</button>
+                    )}
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* 품의 작성 모달 */}
+      {showForm && (
+        <div className="modal-overlay" onClick={()=>setShowForm(false)}>
+          <div className="modal-box" style={{maxWidth:680,width:'95%'}} onClick={e=>e.stopPropagation()}>
+            <div className="modal-header">
+              <span className="modal-title">일반구매 품의 작성</span>
+              <button className="modal-close" onClick={()=>setShowForm(false)}>×</button>
+            </div>
+            <div className="modal-body" style={{display:'flex',flexDirection:'column',gap:12}}>
+              <div>
+                <label style={{fontSize:12,color:'#64748b'}}>품의 제목 *</label>
+                <input className="erp-input" value={form.title} onChange={e=>setForm(f=>({...f,title:e.target.value}))} placeholder="예: 사무용 PC 구매의 건" style={{width:'100%'}}/>
+              </div>
+              <div style={{display:'flex',gap:8}}>
+                <div style={{flex:1}}>
+                  <label style={{fontSize:12,color:'#64748b'}}>거래처</label>
+                  <input className="erp-input" value={form.vendor} onChange={e=>setForm(f=>({...f,vendor:e.target.value}))} placeholder="쿠팡, 인터넷 쇼핑 등" style={{width:'100%'}}/>
+                </div>
+              </div>
+              <div>
+                <label style={{fontSize:12,color:'#64748b'}}>구매 사유</label>
+                <textarea className="erp-input" value={form.purpose} onChange={e=>setForm(f=>({...f,purpose:e.target.value}))} rows={2} placeholder="구매 목적 및 용도" style={{width:'100%',resize:'vertical'}}/>
+              </div>
+              {/* 품목 행 */}
+              <div>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:4}}>
+                  <label style={{fontSize:12,color:'#64748b'}}>구매 품목</label>
+                  <button className="btn btn-sm" style={{fontSize:11}} onClick={addItem}>+ 행 추가</button>
+                </div>
+                <table className="erp-table" style={{fontSize:12}}>
+                  <thead><tr><th>품목명</th><th>규격/모델</th><th>수량</th><th>단가</th><th>금액</th><th></th></tr></thead>
+                  <tbody>
+                    {form.items.map((it,i)=>(
+                      <tr key={i}>
+                        <td><input className="erp-input" value={it.name} onChange={e=>setItem(i,'name',e.target.value)} placeholder="품목명" style={{width:'100%',minWidth:80}}/></td>
+                        <td><input className="erp-input" value={it.spec} onChange={e=>setItem(i,'spec',e.target.value)} placeholder="규격" style={{width:'100%',minWidth:80}}/></td>
+                        <td><input type="number" className="erp-input" value={it.qty} min={1} onChange={e=>setItem(i,'qty',e.target.value)} style={{width:60,textAlign:'right'}}/></td>
+                        <td><input type="number" className="erp-input" value={it.unit_price} min={0} onChange={e=>setItem(i,'unit_price',e.target.value)} style={{width:90,textAlign:'right'}}/></td>
+                        <td style={{textAlign:'right'}}>₩{((Number(it.qty)||0)*(Number(it.unit_price)||0)).toLocaleString()}</td>
+                        <td><button onClick={()=>removeItem(i)} style={{background:'none',border:'none',color:'#dc2626',cursor:'pointer',fontSize:14}}>×</button></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr><td colSpan={4} style={{textAlign:'right',fontWeight:700}}>합계</td>
+                    <td style={{textAlign:'right',fontWeight:700}}>₩{totalAmt.toLocaleString()}</td><td/></tr>
+                  </tfoot>
+                </table>
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button className="btn" onClick={()=>setShowForm(false)}>취소</button>
+              <button className="btn btn-primary" onClick={handleSubmitForm}>저장</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 반려 사유 모달 */}
+      {rejectTarget && (
+        <div className="modal-overlay" onClick={()=>setRejectTarget(null)}>
+          <div className="modal-box" style={{maxWidth:400}} onClick={e=>e.stopPropagation()}>
+            <div className="modal-header">
+              <span className="modal-title">반려 처리</span>
+              <button className="modal-close" onClick={()=>setRejectTarget(null)}>×</button>
+            </div>
+            <div className="modal-body">
+              <label style={{fontSize:12,color:'#64748b'}}>반려 사유 *</label>
+              <textarea className="erp-input" value={rejectReason} onChange={e=>setRejectReason(e.target.value)}
+                rows={3} style={{width:'100%',marginTop:4,resize:'vertical'}} placeholder="반려 사유를 입력하세요"/>
+            </div>
+            <div className="modal-footer">
+              <button className="btn" onClick={()=>setRejectTarget(null)}>취소</button>
+              <button className="btn btn-danger" onClick={handleReject}>반려 처리</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function Purchase() {
   const [mainTab, setMainTab] = useState('outsource')
   const [groups, setGroups] = useState([])
@@ -1693,10 +1909,12 @@ export default function Purchase() {
   const isAdmin = isMaster()
   const role = getRole()
 
-  // admin만 외주구매 탭 표시 (owner 포함 나머지는 자재구매만)
+  // admin만 외주구매 탭 표시, 일반구매품의는 supplier 제외 모두 표시
   const tabs = isAdmin
-    ? [['outsource','외주구매'],['material','자재구매']]
-    : [['material','자재구매']]
+    ? [['outsource','외주구매'],['material','자재구매'],['general','일반구매품의']]
+    : role === 'supplier'
+      ? [['material','자재구매']]
+      : [['material','자재구매'],['general','일반구매품의']]
 
   // 외주구매 탭 없는 역할로 접속하면 material 탭으로 고정
   const effectiveTab = (!isAdmin && mainTab === 'outsource') ? 'material' : mainTab
@@ -1715,7 +1933,8 @@ export default function Purchase() {
       </div>
 
       {effectiveTab === 'material' && <MaterialPurchase />}
-      {effectiveTab !== 'material' && <>
+      {effectiveTab === 'general' && <GeneralPurchase />}
+      {effectiveTab !== 'material' && effectiveTab !== 'general' && <>
 
       {/* 탭 + 액션 바 */}
       <div className="erp-panel" style={{marginBottom:8}}>

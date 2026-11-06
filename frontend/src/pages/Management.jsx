@@ -173,9 +173,13 @@ export default function Management() {
   const [pendingApprovals, setPendingApprovals] = useState([])
   const [rejectTarget, setRejectTarget] = useState(null)   // 반려 사유 모달
   const [rejectComment, setRejectComment] = useState('')
+  const [pendingGPR, setPendingGPR] = useState([])
+  const [gprRejectTarget, setGprRejectTarget] = useState(null)
+  const [gprRejectReason, setGprRejectReason] = useState('')
 
   const loadPendingApprovals = () => {
     api.get('/material/pending-approvals').then(r => setPendingApprovals(r.data)).catch(() => {})
+    api.get('/general-purchase/pending').then(r => setPendingGPR(r.data)).catch(() => {})
   }
 
   const load = () => {
@@ -207,6 +211,25 @@ export default function Management() {
     try {
       await api.post(`/material/orders/${rejectTarget}/reject`, { comment: rejectComment })
       setRejectTarget(null); setRejectComment(''); loadPendingApprovals()
+    } catch (e) {
+      alert(e.response?.data?.detail || '반려 실패')
+    }
+  }
+
+  const approveGPR = async (gpr_no) => {
+    try {
+      await api.patch(`/general-purchase/${gpr_no}/approve`)
+      loadPendingApprovals()
+    } catch (e) {
+      alert(e.response?.data?.detail || '승인 실패')
+    }
+  }
+
+  const rejectGPR = async () => {
+    if (!gprRejectReason.trim()) return alert('반려 사유를 입력하세요')
+    try {
+      await api.patch(`/general-purchase/${gprRejectTarget}/reject`, { reason: gprRejectReason })
+      setGprRejectTarget(null); setGprRejectReason(''); loadPendingApprovals()
     } catch (e) {
       alert(e.response?.data?.detail || '반려 실패')
     }
@@ -306,6 +329,27 @@ export default function Management() {
         </div>
       )}
 
+      {/* ── 일반구매 품의 반려 사유 모달 ── */}
+      {gprRejectTarget && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.5)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ background: '#fff', borderRadius: 8, padding: 28, width: 420, boxShadow: '0 8px 32px rgba(0,0,0,.2)' }}>
+            <h3 style={{ marginBottom: 16, fontSize: 15 }}>일반구매 품의 반려</h3>
+            <textarea
+              value={gprRejectReason} onChange={e => setGprRejectReason(e.target.value)}
+              placeholder="반려 사유를 입력하세요"
+              rows={4}
+              style={{ width: '100%', padding: '8px 10px', border: '1px solid #e2e8f0', borderRadius: 4, fontSize: 13, resize: 'vertical', lineHeight: 1.5 }}
+            />
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 14 }}>
+              <button onClick={() => { setGprRejectTarget(null); setGprRejectReason('') }}
+                style={{ padding: '7px 16px', borderRadius: 4, border: '1px solid #e2e8f0', background: '#f8fafc', cursor: 'pointer', fontSize: 13 }}>취소</button>
+              <button onClick={rejectGPR}
+                style={{ padding: '7px 16px', borderRadius: 4, border: 'none', background: '#dc2626', color: '#fff', cursor: 'pointer', fontWeight: 600, fontSize: 13 }}>반려 처리</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div style={{ padding: '0 24px' }}>
 
         {/* ══ 결재 대기함 ══ */}
@@ -364,8 +408,57 @@ export default function Management() {
           </div>
         )}
         {pendingApprovals.length === 0 && (
-          <div style={{ marginBottom: 24, padding: '12px 20px', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, fontSize: 12, color: '#166534', display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{ marginBottom: 12, padding: '12px 20px', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, fontSize: 12, color: '#166534', display: 'flex', alignItems: 'center', gap: 8 }}>
             ✅ <span>결재 대기 중인 자재구매 발주가 없습니다</span>
+          </div>
+        )}
+
+        {/* ══ 일반구매 품의 결재 대기함 ══ */}
+        {pendingGPR.length > 0 && (
+          <div style={{ marginBottom: 28 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: SAP.textH }}>🛒 일반구매 품의 결재</div>
+              <span style={{ background: '#7c3aed', color: '#fff', fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 12 }}>
+                {pendingGPR.length}건 대기
+              </span>
+            </div>
+            <div style={{ background: SAP.card, border: '1px solid #c4b5fd', borderRadius: 8, overflow: 'hidden', boxShadow: '0 2px 8px rgba(124,58,237,.08)' }}>
+              {pendingGPR.map((gpr, idx) => (
+                <div key={gpr.gpr_no} style={{
+                  padding: '16px 20px',
+                  borderBottom: idx < pendingGPR.length - 1 ? '1px solid #ede9fe' : 'none',
+                  display: 'grid', gridTemplateColumns: '1fr auto', gap: 16, alignItems: 'start',
+                }}>
+                  <div>
+                    <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 6, alignItems: 'center' }}>
+                      <span style={{ fontFamily: 'monospace', color: '#7c3aed', fontWeight: 600, fontSize: 12 }}>{gpr.gpr_no}</span>
+                      <span style={{ fontWeight: 700, fontSize: 13, color: SAP.textH }}>{gpr.title}</span>
+                      <span style={{ fontSize: 11, background: gpr.status === '팀장승인대기' ? '#dbeafe' : '#ede9fe', color: gpr.status === '팀장승인대기' ? '#1d4ed8' : '#7c3aed', padding: '1px 7px', borderRadius: 10, fontWeight: 600 }}>{gpr.status}</span>
+                    </div>
+                    <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', fontSize: 12, color: SAP.textM }}>
+                      {gpr.vendor && <span>거래처: {gpr.vendor}</span>}
+                      <span style={{ fontWeight: 700, color: '#0f172a' }}>₩{(gpr.total_amount||0).toLocaleString()}</span>
+                      <span>신청: {gpr.requester_name || gpr.requester_id}</span>
+                    </div>
+                    {gpr.purpose && (
+                      <div style={{ background: '#faf5ff', border: '1px solid #e9d5ff', borderRadius: 4, padding: '6px 10px', fontSize: 12, color: '#6b21a8', marginTop: 6 }}>
+                        {gpr.purpose}
+                      </div>
+                    )}
+                  </div>
+                  <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                    <button onClick={() => approveGPR(gpr.gpr_no)}
+                      style={{ padding: '8px 18px', borderRadius: 4, border: 'none', background: SAP.green, color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
+                      승인
+                    </button>
+                    <button onClick={() => { setGprRejectTarget(gpr.gpr_no); setGprRejectReason('') }}
+                      style={{ padding: '8px 18px', borderRadius: 4, border: 'none', background: '#dc2626', color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
+                      반려
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         )}
 

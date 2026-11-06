@@ -122,6 +122,30 @@ class PurchaseRequest(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
 
 
+class GeneralPurchaseRequest(Base):
+    """일반구매 품의서 — 소모품/비품/서비스 등 비생산 자재 구매 요청"""
+    __tablename__ = "general_purchase_request"
+
+    gpr_no: Mapped[str] = mapped_column(String(30), primary_key=True)
+    title: Mapped[str] = mapped_column(String(200), nullable=False)
+    vendor: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    purpose: Mapped[str | None] = mapped_column(Text, nullable=True)
+    total_amount: Mapped[int] = mapped_column(Integer, default=0)
+    items_json: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON array
+    status: Mapped[str] = mapped_column(String(20), default="작성중")
+    requester_id: Mapped[str] = mapped_column(String(50), nullable=False)
+    requester_name: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    manager_id: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    manager_name: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    manager_approved_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    executive_id: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    executive_name: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    executive_approved_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    rejection_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    rejection_step: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+
+
 class Carryover(Base):
     __tablename__ = "carryover"
 
