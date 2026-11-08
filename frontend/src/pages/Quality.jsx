@@ -1724,7 +1724,9 @@ export default function Quality() {
                                 await api.patch(`/quality/inspections/${selectedInsp.id}/disposal`, { disposal: e.target.value })
                                 load()
                               } catch(err) {
-                                alert(err.response?.data?.detail || '처리방법 변경 실패')
+                                const detail = err.response?.data?.detail
+                                const msg = Array.isArray(detail) ? JSON.stringify(detail) : (detail || err.message || `처리방법 변경 실패 (status: ${err.response?.status})`)
+                                alert(msg)
                               }
                             }}
                           >
