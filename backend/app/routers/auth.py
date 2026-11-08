@@ -15,10 +15,9 @@ security = HTTPBearer(auto_error=False)
 
 SECRET = os.environ.get("JWT_SECRET", "")
 if not SECRET:
-    import secrets as _sec
-    SECRET = _sec.token_hex(32)
-    import logging; logging.getLogger("uvicorn").warning(
-        "⚠️  JWT_SECRET 환경변수 미설정 — 재시작 시 모든 토큰 무효화됩니다. Railway 환경변수에 JWT_SECRET을 설정하세요.")
+    # JWT_SECRET 미설정 시 DATABASE_URL 해시로 재시작에도 안정적인 시크릿 유지
+    _db_url = os.environ.get("DATABASE_URL", "joy-erp-local-fallback")
+    SECRET = hashlib.sha256(f"joy-erp-jwt-{_db_url}".encode()).hexdigest()
 
 EXPIRE_HOURS = 72  # 72시간(3일)
 
