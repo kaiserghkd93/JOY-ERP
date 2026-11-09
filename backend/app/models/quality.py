@@ -83,8 +83,8 @@ class Inspection(Base):
     inspect_qty: Mapped[int] = mapped_column(Integer, nullable=False)
     pass_qty: Mapped[int] = mapped_column(Integer, nullable=False)
     fail_qty: Mapped[int] = mapped_column(Integer, nullable=False)
-    result: Mapped[InspectionResult] = mapped_column(SAEnum(InspectionResult, native_enum=False))
-    disposal: Mapped[DisposalType] = mapped_column(SAEnum(DisposalType, native_enum=False), default=DisposalType.pending)
+    result: Mapped[str] = mapped_column(String(50))
+    disposal: Mapped[str] = mapped_column(String(50), default="보류")
     defect_note: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
 
@@ -96,9 +96,7 @@ class Inspection(Base):
     re: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     # 승인 워크플로 필드
-    approval_status: Mapped[ApprovalStatus] = mapped_column(
-        SAEnum(ApprovalStatus, native_enum=False), default=ApprovalStatus.draft, nullable=False
-    )
+    approval_status: Mapped[str] = mapped_column(String(50), default="작성중", nullable=False)
     inspector_id: Mapped[str | None] = mapped_column(ForeignKey("user.username"), nullable=True)
     requested_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     approver_id: Mapped[str | None] = mapped_column(ForeignKey("user.username"), nullable=True)
@@ -129,7 +127,7 @@ class InspectionStandard(Base):
     drawing_rev: Mapped[str | None] = mapped_column(String(10))
     sampling_level: Mapped[str] = mapped_column(String(5), default="II")   # I / II / III
     aql: Mapped[float] = mapped_column(default=1.0)                         # 0.65 / 1.0 / 1.5 / 2.5 / 4.0
-    status: Mapped[StandardStatus] = mapped_column(SAEnum(StandardStatus, native_enum=False), default=StandardStatus.draft)
+    status: Mapped[str] = mapped_column(String(50), default="작성중")
     approver_id: Mapped[str | None] = mapped_column(ForeignKey("user.username"), nullable=True)
     approved_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     effective_date: Mapped[date | None] = mapped_column(Date, nullable=True)
