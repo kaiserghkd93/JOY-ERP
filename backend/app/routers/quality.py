@@ -144,11 +144,15 @@ def list_inspections(limit: int = 500, offset: int = 0, db: Session = Depends(ge
     """)
     rows = db.execute(sql, {"offset": offset, "limit": limit}).mappings().all()
     out = []
+    first_err = None
     for row in rows:
         try:
             out.append(InspectionOut(**dict(row)))
-        except Exception:
-            pass
+        except Exception as e:
+            if first_err is None:
+                first_err = f"{type(e).__name__}: {e} | row={dict(row)}"
+    if not out and first_err:
+        raise HTTPException(status_code=500, detail=f"직렬화오류: {first_err[:600]}")
     return out
 
 
