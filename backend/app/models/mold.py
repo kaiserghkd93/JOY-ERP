@@ -48,7 +48,7 @@ class MoldOrder(Base):
     order_date:   Mapped[date]          = mapped_column(Date, nullable=False)
     due_date:     Mapped[date]          = mapped_column(Date, nullable=False)
     mold_fee:     Mapped[float | None]  = mapped_column(Numeric(15, 2))            # 금형비
-    status:       Mapped[MoldOrderStatus] = mapped_column(SAEnum(MoldOrderStatus), default=MoldOrderStatus.in_progress)
+    status:       Mapped[MoldOrderStatus] = mapped_column(SAEnum(MoldOrderStatus, native_enum=False), default=MoldOrderStatus.in_progress)
     note:         Mapped[str | None]    = mapped_column(Text)
     created_at:   Mapped[datetime]      = mapped_column(DateTime, default=datetime.now)
 
@@ -65,7 +65,7 @@ class MoldPart(Base):
     mold_no:     Mapped[str]            = mapped_column(ForeignKey("mold_order.mold_no"), nullable=False)
     part_name:   Mapped[str]            = mapped_column(String(50), nullable=False)  # 상형/하형/슬라이드
     seq:         Mapped[int]            = mapped_column(Integer, default=1)           # 표시 순서
-    status:      Mapped[MoldPartStatus] = mapped_column(SAEnum(MoldPartStatus), default=MoldPartStatus.waiting)
+    status:      Mapped[MoldPartStatus] = mapped_column(SAEnum(MoldPartStatus, native_enum=False), default=MoldPartStatus.waiting)
     note:        Mapped[str | None]     = mapped_column(String(200))
 
     order:     Mapped["MoldOrder"]           = relationship(back_populates="parts")
@@ -80,7 +80,7 @@ class MoldProcess(Base):
     part_id:       Mapped[int]               = mapped_column(ForeignKey("mold_part.id"), nullable=False)
     seq:           Mapped[int]               = mapped_column(Integer, nullable=False)
     process_name:  Mapped[str]               = mapped_column(String(50), nullable=False)
-    process_type:  Mapped[MoldProcessType]   = mapped_column(SAEnum(MoldProcessType), default=MoldProcessType.internal)
+    process_type:  Mapped[MoldProcessType]   = mapped_column(SAEnum(MoldProcessType, native_enum=False), default=MoldProcessType.internal)
     assignee:      Mapped[str | None]        = mapped_column(String(50))             # 자체 담당자
     partner_id:    Mapped[str | None]        = mapped_column(String(30))             # 외주처
     po_no:         Mapped[str | None]        = mapped_column(String(30))             # 외주 발주번호 연결
@@ -90,7 +90,7 @@ class MoldProcess(Base):
     actual_end:    Mapped[date | None]       = mapped_column(Date)
     actual_start_time: Mapped[str | None]   = mapped_column(String(5))   # HH:MM
     actual_end_time:   Mapped[str | None]   = mapped_column(String(5))   # HH:MM
-    status:        Mapped[MoldProcessStatus] = mapped_column(SAEnum(MoldProcessStatus), default=MoldProcessStatus.waiting)
+    status:        Mapped[MoldProcessStatus] = mapped_column(SAEnum(MoldProcessStatus, native_enum=False), default=MoldProcessStatus.waiting)
     note:          Mapped[str | None]        = mapped_column(String(200))
 
     part: Mapped["MoldPart"] = relationship(back_populates="processes")
@@ -104,7 +104,7 @@ class MoldTrial(Base):
     mold_no:     Mapped[str]              = mapped_column(ForeignKey("mold_order.mold_no"), nullable=False)
     trial_no:    Mapped[str]              = mapped_column(String(10), nullable=False)  # T0/T1/T2
     trial_date:  Mapped[date]             = mapped_column(Date, nullable=False)
-    result:      Mapped[MoldTrialResult]  = mapped_column(SAEnum(MoldTrialResult))
+    result:      Mapped[MoldTrialResult]  = mapped_column(SAEnum(MoldTrialResult, native_enum=False))
     sample_qty:  Mapped[int]              = mapped_column(Integer, default=0)
     customer_attended: Mapped[bool]       = mapped_column(default=False)             # 고객 입회 여부
     issues:      Mapped[str | None]       = mapped_column(Text)                      # 지적사항

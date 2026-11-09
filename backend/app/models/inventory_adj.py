@@ -28,7 +28,7 @@ class InventoryAdjustment(Base):
     reason: Mapped[str] = mapped_column(String(200), nullable=False)
     note: Mapped[str | None] = mapped_column(Text)
     related_pord: Mapped[str | None] = mapped_column(String(30))
-    status: Mapped[AdjStatus] = mapped_column(SAEnum(AdjStatus), default=AdjStatus.draft)
+    status: Mapped[AdjStatus] = mapped_column(SAEnum(AdjStatus, native_enum=False), default=AdjStatus.draft)
     created_by: Mapped[str] = mapped_column(String(50), nullable=False)
     approved_by: Mapped[str | None] = mapped_column(String(50))
     approved_at: Mapped[datetime | None] = mapped_column(DateTime)
@@ -65,11 +65,11 @@ class ProductionLoss(Base):
     raw_part_no: Mapped[str] = mapped_column(ForeignKey("item.part_no"), nullable=False)  # 원재료
     machine_no: Mapped[str | None] = mapped_column(String(30))    # 사출기 번호
     pord_no: Mapped[str | None] = mapped_column(String(30))       # 작업지시 연결
-    loss_type: Mapped[LossType] = mapped_column(SAEnum(LossType), nullable=False)
+    loss_type: Mapped[LossType] = mapped_column(SAEnum(LossType, native_enum=False), nullable=False)
     qty_kg: Mapped[float] = mapped_column(Numeric(12, 4), nullable=False)  # kg 단위
     reason_code: Mapped[str | None] = mapped_column(String(50))
     note: Mapped[str | None] = mapped_column(String(500))
-    status: Mapped[LossStatus] = mapped_column(SAEnum(LossStatus), default=LossStatus.draft)
+    status: Mapped[LossStatus] = mapped_column(SAEnum(LossStatus, native_enum=False), default=LossStatus.draft)
     created_by: Mapped[str] = mapped_column(String(50), nullable=False)
     confirmed_by: Mapped[str | None] = mapped_column(String(50))
     confirmed_at: Mapped[datetime | None] = mapped_column(DateTime)

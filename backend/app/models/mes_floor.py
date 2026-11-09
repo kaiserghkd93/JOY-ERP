@@ -58,7 +58,7 @@ class MesWorkOrder(Base):
     mold_no: Mapped[str | None] = mapped_column(ForeignKey("mold.mold_no"), nullable=True)
     target_qty: Mapped[int] = mapped_column(Integer, nullable=False)
     plan_date: Mapped[date] = mapped_column(Date, nullable=False)
-    status: Mapped[WOStatus] = mapped_column(SAEnum(WOStatus), default=WOStatus.pending)
+    status: Mapped[WOStatus] = mapped_column(SAEnum(WOStatus, native_enum=False), default=WOStatus.pending)
     note: Mapped[str | None] = mapped_column(Text)
     created_by: Mapped[str | None] = mapped_column(ForeignKey("user.username"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
@@ -80,7 +80,7 @@ class WorkerSession(Base):
     end_time: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     good_qty: Mapped[int] = mapped_column(Integer, default=0)
     defect_qty: Mapped[int] = mapped_column(Integer, default=0)
-    status: Mapped[SessionStatus] = mapped_column(SAEnum(SessionStatus), default=SessionStatus.running)
+    status: Mapped[SessionStatus] = mapped_column(SAEnum(SessionStatus, native_enum=False), default=SessionStatus.running)
 
     work_order: Mapped["MesWorkOrder"] = relationship(back_populates="sessions")
     machine: Mapped["Machine"] = relationship(foreign_keys=[machine_id])
@@ -108,7 +108,7 @@ class DowntimeLog(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     session_id: Mapped[int] = mapped_column(ForeignKey("worker_session.id"), nullable=False)
-    reason: Mapped[DowntimeReason] = mapped_column(SAEnum(DowntimeReason), nullable=False)
+    reason: Mapped[DowntimeReason] = mapped_column(SAEnum(DowntimeReason, native_enum=False), nullable=False)
     note: Mapped[str | None] = mapped_column(Text)
     start_time: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
     end_time: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)

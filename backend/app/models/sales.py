@@ -32,7 +32,7 @@ class SalesOrder(Base):
     qty: Mapped[int] = mapped_column(Integer, nullable=False)
     due_date: Mapped[date] = mapped_column(Date, nullable=False)
     order_date: Mapped[date] = mapped_column(Date, nullable=False)
-    status: Mapped[SOStatus] = mapped_column(SAEnum(SOStatus), default=SOStatus.open)
+    status: Mapped[SOStatus] = mapped_column(SAEnum(SOStatus, native_enum=False), default=SOStatus.open)
     note: Mapped[str | None] = mapped_column(String(500))
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
 
@@ -50,7 +50,7 @@ class Shipment(Base):
     qty: Mapped[int] = mapped_column(Integer, nullable=False)
     ship_date: Mapped[date] = mapped_column(Date, nullable=False)
     unit_price: Mapped[float] = mapped_column(Numeric(15, 2), nullable=False)
-    status: Mapped[ShipmentStatus] = mapped_column(SAEnum(ShipmentStatus), default=ShipmentStatus.confirmed)
+    status: Mapped[ShipmentStatus] = mapped_column(SAEnum(ShipmentStatus, native_enum=False), default=ShipmentStatus.confirmed)
     lot_no: Mapped[str | None] = mapped_column(String(50), nullable=True)
     note: Mapped[str | None] = mapped_column(String(500))
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
@@ -65,7 +65,7 @@ class Invoice(Base):
     inv_no: Mapped[str] = mapped_column(String(30), primary_key=True)
     partner_id: Mapped[str] = mapped_column(ForeignKey("partner.partner_id"), nullable=False)
     issue_date: Mapped[date] = mapped_column(Date, nullable=False)
-    status: Mapped[InvoiceStatus] = mapped_column(SAEnum(InvoiceStatus), default=InvoiceStatus.draft)
+    status: Mapped[InvoiceStatus] = mapped_column(SAEnum(InvoiceStatus, native_enum=False), default=InvoiceStatus.draft)
     note: Mapped[str | None] = mapped_column(String(500))
     closing_type: Mapped[str | None] = mapped_column(String(10), nullable=True, default=None)  # null=미설정, "금월"=금월마감, "이월"=이월
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)

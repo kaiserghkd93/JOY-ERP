@@ -27,7 +27,7 @@ class StockLedger(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     txn_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
     part_no: Mapped[str] = mapped_column(ForeignKey("item.part_no"), nullable=False, index=True)
-    ledger_type: Mapped[LedgerType] = mapped_column(SAEnum(LedgerType), nullable=False, index=True)
+    ledger_type: Mapped[LedgerType] = mapped_column(SAEnum(LedgerType, native_enum=False), nullable=False, index=True)
     qty: Mapped[int] = mapped_column(Integer, nullable=False)          # 부호 포함 (+/-)
     unit_price: Mapped[float] = mapped_column(Numeric(15, 2), default=0)
     ref_type: Mapped[str | None] = mapped_column(String(20))           # GR / SH / ADJ / CANCEL

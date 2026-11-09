@@ -44,7 +44,7 @@ class ProductionOrder(Base):
     mold_no: Mapped[str | None] = mapped_column(ForeignKey("mold.mold_no"))
     plan_date: Mapped[date] = mapped_column(Date, nullable=False)
     complete_date: Mapped[date | None] = mapped_column(Date)
-    status: Mapped[POrdStatus] = mapped_column(SAEnum(POrdStatus), default=POrdStatus.planned)
+    status: Mapped[POrdStatus] = mapped_column(SAEnum(POrdStatus, native_enum=False), default=POrdStatus.planned)
     note: Mapped[str | None] = mapped_column(String(500))
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
 
@@ -62,7 +62,7 @@ class Mold(Base):
     lent_to_partner_id: Mapped[str | None] = mapped_column(ForeignKey("partner.partner_id"), nullable=True)
     lent_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     total_shots: Mapped[int] = mapped_column(Integer, default=0)
-    status: Mapped[MoldStatus] = mapped_column(SAEnum(MoldStatus), default=MoldStatus.active)
+    status: Mapped[MoldStatus] = mapped_column(SAEnum(MoldStatus, native_enum=False), default=MoldStatus.active)
     repair_history: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
 

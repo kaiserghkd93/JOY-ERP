@@ -83,8 +83,8 @@ class Inspection(Base):
     inspect_qty: Mapped[int] = mapped_column(Integer, nullable=False)
     pass_qty: Mapped[int] = mapped_column(Integer, nullable=False)
     fail_qty: Mapped[int] = mapped_column(Integer, nullable=False)
-    result: Mapped[InspectionResult] = mapped_column(SAEnum(InspectionResult))
-    disposal: Mapped[DisposalType] = mapped_column(SAEnum(DisposalType), default=DisposalType.pending)
+    result: Mapped[InspectionResult] = mapped_column(SAEnum(InspectionResult, native_enum=False))
+    disposal: Mapped[DisposalType] = mapped_column(SAEnum(DisposalType, native_enum=False), default=DisposalType.pending)
     defect_note: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
 
@@ -97,7 +97,7 @@ class Inspection(Base):
 
     # 승인 워크플로 필드
     approval_status: Mapped[ApprovalStatus] = mapped_column(
-        SAEnum(ApprovalStatus), default=ApprovalStatus.draft, nullable=False
+        SAEnum(ApprovalStatus, native_enum=False), default=ApprovalStatus.draft, nullable=False
     )
     inspector_id: Mapped[str | None] = mapped_column(ForeignKey("user.username"), nullable=True)
     requested_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
@@ -129,7 +129,7 @@ class InspectionStandard(Base):
     drawing_rev: Mapped[str | None] = mapped_column(String(10))
     sampling_level: Mapped[str] = mapped_column(String(5), default="II")   # I / II / III
     aql: Mapped[float] = mapped_column(default=1.0)                         # 0.65 / 1.0 / 1.5 / 2.5 / 4.0
-    status: Mapped[StandardStatus] = mapped_column(SAEnum(StandardStatus), default=StandardStatus.draft)
+    status: Mapped[StandardStatus] = mapped_column(SAEnum(StandardStatus, native_enum=False), default=StandardStatus.draft)
     approver_id: Mapped[str | None] = mapped_column(ForeignKey("user.username"), nullable=True)
     approved_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     effective_date: Mapped[date | None] = mapped_column(Date, nullable=True)
@@ -202,11 +202,11 @@ class NonConformance(Base):
     inspection_id: Mapped[int | None] = mapped_column(ForeignKey("inspection.id"), nullable=True)
     part_no: Mapped[str] = mapped_column(ForeignKey("item.part_no"), nullable=False)
     partner_id: Mapped[str | None] = mapped_column(ForeignKey("partner.partner_id"), nullable=True)
-    occur_type: Mapped[NcrOccurType] = mapped_column(SAEnum(NcrOccurType), default=NcrOccurType.receipt)
+    occur_type: Mapped[NcrOccurType] = mapped_column(SAEnum(NcrOccurType, native_enum=False), default=NcrOccurType.receipt)
     defect_type: Mapped[str] = mapped_column(String(200), nullable=False)
     defect_qty: Mapped[int] = mapped_column(Integer, default=0)
-    disposal: Mapped[NcrDisposal] = mapped_column(SAEnum(NcrDisposal), default=NcrDisposal.pending)
-    status: Mapped[NcrStatus] = mapped_column(SAEnum(NcrStatus), default=NcrStatus.open)
+    disposal: Mapped[NcrDisposal] = mapped_column(SAEnum(NcrDisposal, native_enum=False), default=NcrDisposal.pending)
+    status: Mapped[NcrStatus] = mapped_column(SAEnum(NcrStatus, native_enum=False), default=NcrStatus.open)
     # 8D 대응
     d1_team: Mapped[str | None] = mapped_column(Text)
     d2_desc: Mapped[str | None] = mapped_column(Text)        # 문제기술
@@ -235,7 +235,7 @@ class NcrAppeal(Base):
     partner_id: Mapped[str] = mapped_column(ForeignKey("partner.partner_id"), nullable=False)
     appeal_reason: Mapped[str] = mapped_column(Text, nullable=False)
     evidence_text: Mapped[str | None] = mapped_column(Text)
-    status: Mapped[AppealStatus] = mapped_column(SAEnum(AppealStatus), default=AppealStatus.submitted)
+    status: Mapped[AppealStatus] = mapped_column(SAEnum(AppealStatus, native_enum=False), default=AppealStatus.submitted)
     reviewer_id: Mapped[str | None] = mapped_column(ForeignKey("user.username"), nullable=True)
     review_note: Mapped[str | None] = mapped_column(Text)
     reviewed_at: Mapped[datetime | None] = mapped_column(DateTime)
@@ -254,7 +254,7 @@ class QualityClaim(Base):
     occur_date: Mapped[date] = mapped_column(Date, nullable=False)
     defect_type: Mapped[str] = mapped_column(String(100))
     defect_qty: Mapped[int] = mapped_column(Integer, default=0)
-    m4_category: Mapped[M4Category | None] = mapped_column(SAEnum(M4Category))
+    m4_category: Mapped[M4Category | None] = mapped_column(SAEnum(M4Category, native_enum=False))
     why1: Mapped[str | None] = mapped_column(Text)
     why2: Mapped[str | None] = mapped_column(Text)
     why3: Mapped[str | None] = mapped_column(Text)
@@ -279,7 +279,7 @@ class QualityClaim(Base):
     d6_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     d7_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     d8_date: Mapped[date | None] = mapped_column(Date, nullable=True)
-    status: Mapped[ClaimStatus] = mapped_column(SAEnum(ClaimStatus), default=ClaimStatus.received)
+    status: Mapped[ClaimStatus] = mapped_column(SAEnum(ClaimStatus, native_enum=False), default=ClaimStatus.received)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
 
     partner: Mapped["Partner"] = relationship()
@@ -302,9 +302,9 @@ class ProcessOutgoingDefect(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     defect_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
-    inspect_type: Mapped[InspectType] = mapped_column(SAEnum(InspectType), nullable=False)
+    inspect_type: Mapped[InspectType] = mapped_column(SAEnum(InspectType, native_enum=False), nullable=False)
     source_type: Mapped[DefectSourceType] = mapped_column(
-        SAEnum(DefectSourceType), nullable=False, default=DefectSourceType.inhouse
+        SAEnum(DefectSourceType, native_enum=False), nullable=False, default=DefectSourceType.inhouse
     )
     partner_id: Mapped[str | None] = mapped_column(ForeignKey("partner.partner_id"), nullable=True)
     part_no: Mapped[str] = mapped_column(String(50), nullable=False, index=True)

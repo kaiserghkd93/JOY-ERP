@@ -28,7 +28,7 @@ class Item(Base):
     supplier: Mapped[str | None] = mapped_column(String(200))  # 외주처 (spec과 분리)
     unit: Mapped[str] = mapped_column(String(20), default="EA")
     item_type: Mapped[ItemType] = mapped_column(
-        SAEnum(ItemType), default=ItemType.outsourced
+        SAEnum(ItemType, native_enum=False), default=ItemType.outsourced
     )
     std_buy_price: Mapped[float] = mapped_column(Numeric(15, 2), default=0)
     std_sell_price: Mapped[float] = mapped_column(Numeric(15, 2), default=0)
@@ -92,7 +92,7 @@ class Partner(Base):
     partner_id: Mapped[str] = mapped_column(String(50), primary_key=True)
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     partner_type: Mapped[PartnerType] = mapped_column(
-        SAEnum(PartnerType), default=PartnerType.supplier
+        SAEnum(PartnerType, native_enum=False), default=PartnerType.supplier
     )
     business_no: Mapped[str | None] = mapped_column(String(20))
     payment_terms: Mapped[str | None] = mapped_column(String(100))

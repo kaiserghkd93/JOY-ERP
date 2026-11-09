@@ -33,7 +33,7 @@ class PurchaseOrderGroup(Base):
     partner_id: Mapped[str] = mapped_column(ForeignKey("partner.partner_id"), nullable=False)
     order_date: Mapped[date] = mapped_column(Date, nullable=False)
     due_date: Mapped[date] = mapped_column(Date, nullable=False)
-    status: Mapped[POGroupStatus] = mapped_column(SAEnum(POGroupStatus), default=POGroupStatus.issued)
+    status: Mapped[POGroupStatus] = mapped_column(SAEnum(POGroupStatus, native_enum=False), default=POGroupStatus.issued)
     note: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
 
@@ -52,7 +52,7 @@ class PurchaseOrder(Base):
     unit_price: Mapped[float | None] = mapped_column(Numeric(15, 2), nullable=True)
     order_date: Mapped[date] = mapped_column(Date, nullable=False)
     due_date: Mapped[date] = mapped_column(Date, nullable=False)
-    status: Mapped[POStatus] = mapped_column(SAEnum(POStatus), default=POStatus.open)
+    status: Mapped[POStatus] = mapped_column(SAEnum(POStatus, native_enum=False), default=POStatus.open)
     po_type: Mapped[str] = mapped_column(String(20), default="outsource", server_default="outsource")
     approval_status: Mapped[str | None] = mapped_column(String(20), nullable=True, server_default="작성중")
     approval_comment: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -74,7 +74,7 @@ class Receipt(Base):
     qty: Mapped[int] = mapped_column(Integer, nullable=False)
     receipt_date: Mapped[date] = mapped_column(Date, nullable=False)
     unit_price: Mapped[float] = mapped_column(Numeric(15, 2), nullable=False)
-    status: Mapped[ReceiptStatus] = mapped_column(SAEnum(ReceiptStatus), default=ReceiptStatus.pending)
+    status: Mapped[ReceiptStatus] = mapped_column(SAEnum(ReceiptStatus, native_enum=False), default=ReceiptStatus.pending)
     lot_no: Mapped[str | None] = mapped_column(String(50), nullable=True)
     note: Mapped[str | None] = mapped_column(String(500))
     partner_id: Mapped[str | None] = mapped_column(String(30), nullable=True)
@@ -111,7 +111,7 @@ class PurchaseRequest(Base):
     unit_price: Mapped[float | None] = mapped_column(Numeric(15, 2), nullable=True)
     need_date: Mapped[date] = mapped_column(Date, nullable=False)
     order_by_date: Mapped[date | None] = mapped_column(Date, nullable=True)
-    status: Mapped[PRStatus] = mapped_column(SAEnum(PRStatus), default=PRStatus.pending)
+    status: Mapped[PRStatus] = mapped_column(SAEnum(PRStatus, native_enum=False), default=PRStatus.pending)
     source: Mapped[str] = mapped_column(String(20), default="수동")  # "MRP", "수동"
     source_ref: Mapped[str | None] = mapped_column(String(20), nullable=True)  # "2025-11"
     note: Mapped[str | None] = mapped_column(String(500), nullable=True)
