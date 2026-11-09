@@ -128,8 +128,16 @@ def post_inspection(body: InspectionCreate, db: Session = Depends(get_db), user:
 
 
 @router.get("/inspections", response_model=list[InspectionOut])
-def list_inspections(db: Session = Depends(get_db)):
-    return db.query(Inspection).order_by(Inspection.inspect_date.desc()).all()
+def list_inspections(limit: int = 500, offset: int = 0, db: Session = Depends(get_db)):
+    rows = db.query(Inspection).order_by(Inspection.inspect_date.desc()).offset(offset).limit(limit).all()
+    # 개별 직렬화 — 문제 행을 건너뛰어 나머지 데이터 보호
+    result = []
+    for row in rows:
+        try:
+            result.append(InspectionOut.model_validate(row))
+        except Exception:
+            pass
+    return result
 
 
 @router.get("/inspections/{gr_no}", response_model=InspectionOut)
