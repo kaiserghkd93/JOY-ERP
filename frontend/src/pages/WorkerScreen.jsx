@@ -1,0 +1,233 @@
+import { useState, useEffect, useCallback } from 'react'
+import api from '../api'
+import { getUser } from '../auth'
+
+const BIG = { fontSize: 28, fontWeight: 800 }
+const LABEL = { fontSize: 11, color: '#94a3b8', marginBottom: 2 }
+
+function fmt(n) { return Number(n || 0).toLocaleString() }
+
+export default function WorkerScreen() {
+  const me = getUser()
+  const workerId = me?.username || ''
+  const workerName = me?.name || workerId
+
+  const [machines, setMachines] = useState([])
+  const [machineId, setMachineId] = useState('')
+  const [myWos, setMyWos] = useState([])
+  const [session, setSession] = useState(null)
+  const [goodQty, setGoodQty] = useState('')
+  const [defectQty, setDefectQty] = useState('')
+  const [defectType, setDefectType] = useState('')
+  const [msg, setMsg] = useState('')
+  const [loading, setLoading] = useState(false)
+
+  const flash = (m) => { setMsg(m); setTimeout(() => setMsg(''), 3000) }
+
+  useEffect(() => {
+    api.get('/mes-floor/machines').then(r => setMachines(r.data)).catch(() => {})
+  }, [])
+
+  const loadMyWos = useCallback(() => {
+    if (!workerId) return
+    const today = new Date().toISOString().slice(0, 10)
+    api.get(`/mes-floor/work-orders?plan_date=${today}`).then(r => {
+      setMyWos(r.data.filter(w =>
+        w.assigned_worker_id === workerId && w.status !== '취소' && w.status !== '완료'
+      ))
+    }).catch(() => {})
+  }, [workerId])
+
+  const loadSession = useCallback(() => {
+    if (!workerId) return
+    api.get(`/mes-floor/my-session?worker_id=${workerId}`)
+      .then(r => setSession(r.data || null))
+      .catch(() => setSession(null))
+  }, [workerId])
+
+  useEffect(() => {
+    loadMyWos()
+    loadSession()
+    const t = setInterval(() => { loadSession() }, 30000)
+    return () => clearInterval(t)
+  }, [loadMyWos, loadSession])
+
+  const startSession = async (wo) => {
+    setLoading(true)
+    try {
+      await api.post('/mes-floor/sessions/start', { wo_no: wo.wo_no, worker_id: workerId })
+      flash('작업 시작!')
+      loadSession()
+    } catch (e) {
+      flash('시작 실패: ' + (e.response?.data?.detail || e.message))
+    } finally { setLoading(false) }
+  }
+
+  const submitProd = async () => {
+    if (!session) return
+    if (!goodQty && !defectQty) return flash('수량을 입력하세요')
+    setLoading(true)
+    try {
+      await api.post(`/mes-floor/sessions/${session.session_id}/log`, {
+        good_qty: +goodQty || 0,
+        defect_qty: +defectQty || 0,
+        defect_type: defectType || null,
+      })
+      setGoodQty(''); setDefectQty(''); setDefectType('')
+      flash('실적 입력 완료!')
+      loadSession()
+    } catch (e) {
+      flash('입력 실패: ' + (e.response?.data?.detail || e.message))
+    } finally { setLoading(false) }
+  }
+
+  const endSession = async () => {
+    if (!session || !window.confirm('작업을 완료 처리하시겠습니까?')) return
+    setLoading(true)
+    try {
+      await api.post(`/mes-floor/sessions/${session.session_id}/complete`)
+      flash('작업 완료!')
+      setSession(null)
+      loadMyWos()
+    } catch (e) {
+      flash('완료 실패: ' + (e.response?.data?.detail || e.message))
+    } finally { setLoading(false) }
+  }
+
+  const ach = session && session.target_qty > 0
+    ? Math.round((session.good_qty || 0) / session.target_qty * 100) : 0
+
+  return (
+    <div style={{ minHeight: '100vh', background: '#0f172a', color: '#f8fafc', fontFamily: 'sans-serif' }}>
+      {/* 헤더 */}
+      <div style={{ background: '#1e293b', padding: '12px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #334155' }}>
+        <div style={{ fontWeight: 800, fontSize: 18 }}>🏭 현장 작업자 화면</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+          <span style={{ fontSize: 13, color: '#94a3b8' }}>{workerName}</span>
+          <span style={{ fontSize: 11, color: '#475569' }}>
+            {new Date().toLocaleDateString('ko-KR', { month: 'long', day: 'numeric', weekday: 'short' })}
+          </span>
+        </div>
+      </div>
+
+      <div style={{ padding: '20px 24px', maxWidth: 640, margin: '0 auto' }}>
+
+        {/* 메시지 */}
+        {msg && (
+          <div style={{ background: '#065f46', borderRadius: 8, padding: '10px 16px', marginBottom: 16, fontSize: 13, fontWeight: 600 }}>
+            {msg}
+          </div>
+        )}
+
+        {/* 현재 작업 세션 */}
+        {session ? (
+          <div style={{ background: '#1e293b', borderRadius: 12, padding: 24, marginBottom: 20 }}>
+            <div style={{ fontSize: 13, color: '#22d3ee', fontWeight: 700, marginBottom: 12 }}>▶ 진행 중인 작업</div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 20 }}>
+              <div>
+                <div style={LABEL}>품번 / 품명</div>
+                <div style={{ fontWeight: 600 }}>{session.part_no}</div>
+                <div style={{ fontSize: 12, color: '#94a3b8' }}>{session.part_name}</div>
+              </div>
+              <div>
+                <div style={LABEL}>호기</div>
+                <div style={{ fontWeight: 600 }}>{session.machine_name}</div>
+              </div>
+              <div>
+                <div style={LABEL}>양품</div>
+                <div style={{ ...BIG, color: '#22d3ee' }}>{fmt(session.good_qty)}</div>
+              </div>
+              <div>
+                <div style={LABEL}>불량</div>
+                <div style={{ ...BIG, color: session.defect_qty > 0 ? '#f87171' : '#94a3b8' }}>{fmt(session.defect_qty)}</div>
+              </div>
+              <div>
+                <div style={LABEL}>목표</div>
+                <div style={{ ...BIG }}>{fmt(session.target_qty)}</div>
+              </div>
+              <div>
+                <div style={LABEL}>달성률</div>
+                <div style={{ ...BIG, color: ach >= 100 ? '#4ade80' : ach >= 70 ? '#fbbf24' : '#f87171' }}>{ach}%</div>
+              </div>
+              <div>
+                <div style={LABEL}>이론생산량</div>
+                <div style={{ fontSize: 20, fontWeight: 700, color: '#94a3b8' }}>{fmt(session.theory_qty)}</div>
+              </div>
+              <div>
+                <div style={LABEL}>OEE</div>
+                <div style={{ fontSize: 20, fontWeight: 700, color: '#a78bfa' }}>{session.oee}%</div>
+              </div>
+            </div>
+
+            {/* 실적 입력 */}
+            <div style={{ borderTop: '1px solid #334155', paddingTop: 16, marginBottom: 16 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 12 }}>실적 입력</div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
+                <div>
+                  <div style={LABEL}>양품 수량</div>
+                  <input type="number" min="0" value={goodQty} onChange={e => setGoodQty(e.target.value)}
+                    style={{ width: '100%', boxSizing: 'border-box', padding: '10px', borderRadius: 8, border: '1px solid #334155', background: '#0f172a', color: '#f8fafc', fontSize: 18, fontWeight: 700, textAlign: 'center' }} />
+                </div>
+                <div>
+                  <div style={LABEL}>불량 수량</div>
+                  <input type="number" min="0" value={defectQty} onChange={e => setDefectQty(e.target.value)}
+                    style={{ width: '100%', boxSizing: 'border-box', padding: '10px', borderRadius: 8, border: '1px solid #475569', background: '#0f172a', color: '#f87171', fontSize: 18, fontWeight: 700, textAlign: 'center' }} />
+                </div>
+              </div>
+              <input placeholder="불량 유형 (선택)" value={defectType} onChange={e => setDefectType(e.target.value)}
+                style={{ width: '100%', boxSizing: 'border-box', padding: '8px 12px', borderRadius: 8, border: '1px solid #334155', background: '#0f172a', color: '#f8fafc', fontSize: 13, marginBottom: 10 }} />
+              <button onClick={submitProd} disabled={loading}
+                style={{ width: '100%', padding: '14px', borderRadius: 10, border: 'none', background: '#1d4ed8', color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer' }}>
+                실적 입력
+              </button>
+            </div>
+
+            <button onClick={endSession} disabled={loading}
+              style={{ width: '100%', padding: '12px', borderRadius: 10, border: '2px solid #16a34a', background: 'transparent', color: '#4ade80', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
+              ✅ 작업 완료
+            </button>
+          </div>
+        ) : (
+          <>
+            {/* 나의 작업지시 목록 */}
+            <div style={{ background: '#1e293b', borderRadius: 12, padding: 20, marginBottom: 20 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 12, color: '#e2e8f0' }}>
+                📋 오늘의 작업지시 ({myWos.length}건)
+              </div>
+              {myWos.length === 0 ? (
+                <div style={{ color: '#475569', fontSize: 13, padding: '20px 0', textAlign: 'center' }}>
+                  오늘 지정된 작업지시가 없습니다
+                  <div style={{ fontSize: 11, color: '#334155', marginTop: 6 }}>관리자에게 문의하세요</div>
+                </div>
+              ) : myWos.map(w => (
+                <div key={w.wo_no} style={{ background: '#0f172a', borderRadius: 10, padding: 16, marginBottom: 10 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
+                    <div>
+                      <div style={{ fontWeight: 700, fontSize: 15 }}>{w.part_name}</div>
+                      <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>{w.part_no} · {w.machine_name}</div>
+                    </div>
+                    <span style={{ padding: '2px 10px', borderRadius: 20, fontSize: 11, fontWeight: 700, background: '#dbeafe', color: '#1d4ed8' }}>{w.status}</span>
+                  </div>
+                  <div style={{ display: 'flex', gap: 16, marginBottom: 12, fontSize: 13 }}>
+                    <span style={{ color: '#94a3b8' }}>목표: <strong style={{ color: '#f8fafc' }}>{fmt(w.target_qty)}</strong></span>
+                    <span style={{ color: '#22d3ee' }}>양품: <strong>{fmt(w.good_qty)}</strong></span>
+                  </div>
+                  <button onClick={() => startSession(w)} disabled={loading}
+                    style={{ width: '100%', padding: '11px', borderRadius: 8, border: 'none', background: '#1d4ed8', color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
+                    작업 시작
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            {/* 미지정 작업지시도 볼 수 있게 (호기 선택 후 직접 시작) */}
+            <div style={{ background: '#1e293b', borderRadius: 10, padding: 16 }}>
+              <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 4 }}>💡 작업지시가 보이지 않으면 관리자에게 담당 작업자 지정을 요청하세요.</div>
+              <div style={{ fontSize: 11, color: '#475569' }}>또는 작업지시 관리 메뉴에서 직접 세션을 시작할 수 있습니다.</div>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  )
+}

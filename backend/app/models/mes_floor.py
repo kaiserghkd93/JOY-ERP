@@ -68,6 +68,7 @@ class MesWorkOrder(Base):
     plan_date: Mapped[date] = mapped_column(Date, nullable=False)
     status: Mapped[WOStatus] = mapped_column(SAEnum(WOStatus, native_enum=False), default=WOStatus.pending)
     note: Mapped[str | None] = mapped_column(Text)
+    assigned_worker_id: Mapped[str | None] = mapped_column(ForeignKey("user.username"), nullable=True)
     created_by: Mapped[str | None] = mapped_column(ForeignKey("user.username"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
 

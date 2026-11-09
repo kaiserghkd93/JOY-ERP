@@ -130,6 +130,12 @@ with engine.connect() as _conn:
         "CREATE INDEX IF NOT EXISTS ix_purchase_request_part_no ON purchase_request(part_no)",
         "CREATE INDEX IF NOT EXISTS ix_purchase_request_status ON purchase_request(status)",
         "CREATE INDEX IF NOT EXISTS ix_purchase_request_need_date ON purchase_request(need_date)",
+        # HR — 소속 법인 컬럼
+        "ALTER TABLE hr_employee ADD COLUMN IF NOT EXISTS company VARCHAR(50) DEFAULT '조이산업'",
+        # 품목 — 캐비티 수 (BOM/MES 이론생산량 계산)
+        "ALTER TABLE item ADD COLUMN IF NOT EXISTS cavity_count INTEGER DEFAULT 1",
+        # 작업지시 — 담당 작업자 지정
+        "ALTER TABLE mes_work_order ADD COLUMN IF NOT EXISTS assigned_worker_id VARCHAR(50)",
     ]:
         try:
             _conn.execute(_text(_sql))

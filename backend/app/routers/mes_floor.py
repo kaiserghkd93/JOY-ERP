@@ -28,6 +28,14 @@ from app.services.doc_no import next_doc_no
 router = APIRouter(prefix="/mes-floor", tags=["MES현장"])
 
 
+# ── 작업자 목록 (인증된 사용자라면 누구나 조회 가능) ──────────────────
+@router.get("/worker-list")
+def get_worker_list(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+    from app.models.auth import User as AuthUser
+    users = db.query(AuthUser).filter(AuthUser.is_active == True).order_by(AuthUser.name).all()
+    return [{"username": u.username, "name": u.name, "role": u.role} for u in users]
+
+
 # ── 호기 마스터 ───────────────────────────────────────────────────────
 
 class MachineIn(BaseModel):
@@ -84,14 +92,18 @@ class WOCreate(BaseModel):
     target_qty: int
     plan_date: date
     note: Optional[str] = None
+    assigned_worker_id: Optional[str] = None
 
 
 @router.post("/work-orders")
 def create_wo(body: WOCreate, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    from app.models.auth import User as AuthUser
     if not db.get(Item, body.part_no):
         raise HTTPException(404, f"품목 없음: {body.part_no}")
     if not db.get(Machine, body.machine_id):
         raise HTTPException(404, f"호기 없음: {body.machine_id}")
+    if body.assigned_worker_id and not db.get(AuthUser, body.assigned_worker_id):
+        raise HTTPException(404, f"작업자 없음: {body.assigned_worker_id}")
 
     wo_no = next_doc_no(db, "WO", body.plan_date)
     wo = MesWorkOrder(
@@ -102,6 +114,7 @@ def create_wo(body: WOCreate, db: Session = Depends(get_db), user: User = Depend
         target_qty=body.target_qty,
         plan_date=body.plan_date,
         note=body.note,
+        assigned_worker_id=body.assigned_worker_id,
         created_by=user.username,
     )
     db.add(wo)
@@ -162,6 +175,7 @@ def _wo_with_qr(wo: MesWorkOrder) -> dict:
         "plan_date": str(wo.plan_date),
         "status": wo.status,
         "note": wo.note,
+        "assigned_worker_id": wo.assigned_worker_id,
         "qr_data": qr_data,
         "created_at": wo.created_at.isoformat() if wo.created_at else None,
     }
@@ -324,9 +338,10 @@ def _session_detail(db: Session, session: WorkerSession) -> dict:
     # 가동 시간
     working_min = max(elapsed_min - downtime_min, 0)
 
-    # 이론 생산량
-    std_ct = machine.std_cycle_sec if machine else 30
-    cavity = machine.cavity_count if machine else 1
+    # 이론 생산량 — 품목 기준 CT/캐비티 우선, 없으면 호기 기준 fallback
+    wo_item = wo.item if wo else None
+    std_ct = float(wo_item.machine_ct_sec) if wo_item and wo_item.machine_ct_sec else (machine.std_cycle_sec if machine else 30)
+    cavity = int(wo_item.cavity_count) if wo_item and wo_item.cavity_count else (machine.cavity_count if machine else 1)
     theory_qty = int(working_min * 60 / std_ct * cavity) if std_ct > 0 else 0
 
     # OEE 성능률
@@ -406,6 +421,20 @@ def _has_open_downtime(db: Session, session_id: int) -> bool:
         DowntimeLog.session_id == session_id,
         DowntimeLog.end_time == None,
     ).first() is not None
+
+
+# ── 작업자 본인 세션 조회 ─────────────────────────────────────────────
+
+@router.get("/my-session")
+def my_session(worker_id: str, db: Session = Depends(get_db)):
+    """작업자 ID로 현재 진행 중인 세션 조회 (작업자 화면용)"""
+    session = db.query(WorkerSession).filter(
+        WorkerSession.worker_id == worker_id,
+        WorkerSession.status == SessionStatus.running,
+    ).first()
+    if not session:
+        return None
+    return _session_detail(db, session)
 
 
 # ── 관리자 전체 대시보드 ──────────────────────────────────────────────

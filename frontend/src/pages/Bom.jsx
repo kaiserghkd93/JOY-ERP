@@ -115,6 +115,8 @@ export default function Bom() {
   const [selectedProd, setSelectedProd] = useState(null)
   const [bomLines, setBomLines] = useState([])
   const [prodSearch, setProdSearch] = useState('')
+  const [ctForm, setCtForm] = useState({ machine_ct_sec: '', manual_ct_sec: '', cavity_count: '' })
+  const [ctSaving, setCtSaving] = useState(false)
   const [form, setForm] = useState({
     component_part_no: '', qty_per: '', unit: 'kg', note: '',
     net_weight_g: '', runner_weight_g: '', std_defect_rate: '',
@@ -147,6 +149,28 @@ export default function Bom() {
     resetForm()
     setEditId(null)
     setDraftLines([])
+    setCtForm({
+      machine_ct_sec: item.machine_ct_sec ?? '',
+      manual_ct_sec: item.manual_ct_sec ?? '',
+      cavity_count: item.cavity_count ?? '',
+    })
+  }
+
+  const saveCtInfo = async () => {
+    if (!selectedProd) return
+    setCtSaving(true)
+    try {
+      const payload = {
+        machine_ct_sec: ctForm.machine_ct_sec !== '' ? +ctForm.machine_ct_sec : null,
+        manual_ct_sec: ctForm.manual_ct_sec !== '' ? +ctForm.manual_ct_sec : null,
+        cavity_count: ctForm.cavity_count !== '' ? +ctForm.cavity_count : null,
+      }
+      await api.patch(`/master/items/${selectedProd.part_no}`, payload)
+      setSelectedProd(p => ({ ...p, ...payload }))
+      setItems(list => list.map(it => it.part_no === selectedProd.part_no ? { ...it, ...payload } : it))
+    } catch (e) {
+      alert('저장 실패: ' + (e.response?.data?.detail || e.message))
+    } finally { setCtSaving(false) }
   }
 
   const resetForm = () => setForm({
@@ -305,9 +329,43 @@ export default function Bom() {
               </div>
             ) : (
               <>
-                <div style={{ marginBottom: 12 }}>
-                  <span style={{ fontWeight: 700, fontSize: 15 }}>{selectedProd.name}</span>
-                  <span style={{ marginLeft: 8, fontSize: 12, color: '#64748b', fontFamily: 'monospace' }}>{selectedProd.part_no}</span>
+                <div style={{ marginBottom: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <span style={{ fontWeight: 700, fontSize: 15 }}>{selectedProd.name}</span>
+                    <span style={{ marginLeft: 8, fontSize: 12, color: '#64748b', fontFamily: 'monospace' }}>{selectedProd.part_no}</span>
+                  </div>
+                </div>
+
+                {/* 사이클타임 / 캐비티 편집 패널 */}
+                <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 8, padding: '12px 16px', marginBottom: 16 }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: '#1d4ed8', marginBottom: 10 }}>⚙ 사이클타임 / 캐비티 (MES 이론생산량 계산 기준)</div>
+                  <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+                    <div>
+                      <div style={{ fontSize: 11, color: '#475569', marginBottom: 3 }}>설비 C/T (초)</div>
+                      <input type="number" min="0" step="0.1" value={ctForm.machine_ct_sec}
+                        onChange={e => setCtForm(f => ({ ...f, machine_ct_sec: e.target.value }))}
+                        style={{ width: 90, padding: '5px 8px', borderRadius: 5, border: '1px solid #93c5fd', fontSize: 13 }}
+                        placeholder="예: 25" />
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 11, color: '#475569', marginBottom: 3 }}>공수 C/T (초)</div>
+                      <input type="number" min="0" step="0.1" value={ctForm.manual_ct_sec}
+                        onChange={e => setCtForm(f => ({ ...f, manual_ct_sec: e.target.value }))}
+                        style={{ width: 90, padding: '5px 8px', borderRadius: 5, border: '1px solid #93c5fd', fontSize: 13 }}
+                        placeholder="예: 30" />
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 11, color: '#475569', marginBottom: 3 }}>캐비티 수</div>
+                      <input type="number" min="1" step="1" value={ctForm.cavity_count}
+                        onChange={e => setCtForm(f => ({ ...f, cavity_count: e.target.value }))}
+                        style={{ width: 70, padding: '5px 8px', borderRadius: 5, border: '1px solid #93c5fd', fontSize: 13 }}
+                        placeholder="예: 4" />
+                    </div>
+                    <button onClick={saveCtInfo} disabled={ctSaving}
+                      style={{ padding: '6px 14px', borderRadius: 6, border: 'none', background: '#1d4ed8', color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
+                      {ctSaving ? '저장 중...' : '저장'}
+                    </button>
+                  </div>
                 </div>
 
                 {/* BOM 라인 테이블 */}

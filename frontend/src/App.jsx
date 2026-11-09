@@ -17,6 +17,7 @@ const Bom            = lazy(() => import('./pages/Bom'))
 const ProductionPlan = lazy(() => import('./pages/ProductionPlanWeekly'))
 const MesDashboard   = lazy(() => import('./pages/MesDashboard'))
 const MesWorkOrders  = lazy(() => import('./pages/MesWorkOrders'))
+const WorkerScreen   = lazy(() => import('./pages/WorkerScreen'))
 const HrEmployee     = lazy(() => import('./pages/HrEmployee'))
 const HrAttendance   = lazy(() => import('./pages/HrAttendance'))
 const HrPayroll      = lazy(() => import('./pages/HrPayroll'))
@@ -69,6 +70,7 @@ const allMenus = [
   { id: 'mes', label: 'MES', items: [
     { to: '/mes-dashboard',   label: '안돈 보드' },
     { to: '/mes-work-orders', label: '작업지시' },
+    { to: '/worker',          label: '작업자 화면' },
   ]},
   { id: 'hr', label: '인사', items: [
     { to: '/hr-employee',   label: '사원 관리' },
@@ -326,6 +328,7 @@ export default function App() {
             <Route path="/hr-payroll" element={
               <ProtectedRoute path="/hr-payroll"><HrPayroll /></ProtectedRoute>
             } />
+            <Route path="/worker" element={<WorkerScreen />} />
           </Routes>
         </Suspense>
       </div>

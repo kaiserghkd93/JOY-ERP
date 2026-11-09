@@ -31,6 +31,9 @@ class ItemUpdate(BaseModel):
     moq: int | None = None
     location: str | None = None
     active: bool | None = None
+    machine_ct_sec: float | None = None
+    manual_ct_sec: float | None = None
+    cavity_count: int | None = None
 
 
 class ItemOut(BaseModel):
@@ -47,6 +50,9 @@ class ItemOut(BaseModel):
     moq: int
     location: str | None
     active: bool
+    machine_ct_sec: float | None = None
+    manual_ct_sec: float | None = None
+    cavity_count: int | None = None
 
 
 class PartnerCreate(BaseModel):

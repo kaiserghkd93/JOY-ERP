@@ -66,6 +66,7 @@ class EmployeeIn(BaseModel):
     hire_date: Optional[date] = None
     retire_date: Optional[date] = None
     emp_type: str = "annual"              # annual / hourly
+    company: str = "조이산업"             # 소속 법인
     base_salary: float = 0               # 연봉제: 월 기본급
     hourly_rate: float = 0               # 시급제: 시급
     weekly_hours: int = 40
@@ -507,6 +508,7 @@ def list_payroll(
         d["dept"] = emp.dept
         d["position"] = emp.position
         d["emp_type"] = emp.emp_type
+        d["company"] = emp.company or "조이산업"
         # Decimal → float 변환
         for k, v in d.items():
             if isinstance(v, Decimal):

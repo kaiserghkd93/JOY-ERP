@@ -17,9 +17,10 @@ export default function MesWorkOrders() {
   const [wos, setWos] = useState([])
   const [machines, setMachines] = useState([])
   const [items, setItems] = useState([])
+  const [workers, setWorkers] = useState([])
   const [filters, setFilters] = useState({ plan_date: today(), machine_id: '', status: '' })
   const [showForm, setShowForm] = useState(false)
-  const [form, setForm] = useState({ part_no: '', machine_id: '', target_qty: '', plan_date: today(), mold_no: '', note: '' })
+  const [form, setForm] = useState({ part_no: '', machine_id: '', target_qty: '', plan_date: today(), mold_no: '', note: '', assigned_worker_id: '' })
   const [partSearch, setPartSearch] = useState('')
   const [partOpen, setPartOpen] = useState(false)
 
@@ -35,6 +36,7 @@ export default function MesWorkOrders() {
     load()
     api.get('/mes-floor/machines').then(r => setMachines(r.data)).catch(() => {})
     api.get('/master/items?active_only=true').then(r => setItems(r.data)).catch(() => {})
+    api.get('/mes-floor/worker-list').then(r => setWorkers(r.data)).catch(() => {})
   }, [load])
 
   const submit = async () => {
@@ -49,9 +51,10 @@ export default function MesWorkOrders() {
         plan_date: form.plan_date,
         mold_no: form.mold_no || null,
         note: form.note || null,
+        assigned_worker_id: form.assigned_worker_id || null,
       })
       setShowForm(false)
-      setForm({ part_no: '', machine_id: '', target_qty: '', plan_date: today(), mold_no: '', note: '' })
+      setForm({ part_no: '', machine_id: '', target_qty: '', plan_date: today(), mold_no: '', note: '', assigned_worker_id: '' })
       setPartSearch('')
       load()
     } catch (e) {
@@ -133,6 +136,7 @@ export default function MesWorkOrders() {
               <th>품번</th>
               <th>품명</th>
               <th>호기</th>
+              <th>담당 작업자</th>
               <th style={{ textAlign: 'right' }}>목표</th>
               <th style={{ textAlign: 'right' }}>양품</th>
               <th style={{ textAlign: 'right' }}>불량</th>
@@ -143,16 +147,24 @@ export default function MesWorkOrders() {
           </thead>
           <tbody>
             {wos.length === 0 ? (
-              <tr><td colSpan={10} style={{ textAlign: 'center', color: '#94a3b8', padding: 24 }}>작업지시 없음</td></tr>
+              <tr><td colSpan={11} style={{ textAlign: 'center', color: '#94a3b8', padding: 24 }}>작업지시 없음</td></tr>
             ) : wos.map(w => {
               const ach = w.target_qty > 0 ? Math.round((w.good_qty || 0) / w.target_qty * 100) : 0
               const sc = STATUS_BADGE[w.status] || STATUS_BADGE['대기']
+              const workerName = workers.find(u => u.username === w.assigned_worker_id)?.name || w.assigned_worker_id || '—'
               return (
                 <tr key={w.wo_no}>
                   <td><code style={{ fontSize: 11 }}>{w.wo_no}</code></td>
                   <td><code style={{ fontSize: 11 }}>{w.part_no}</code></td>
                   <td>{w.part_name}</td>
                   <td>{w.machine_name}</td>
+                  <td style={{ fontSize: 12 }}>
+                    {w.assigned_worker_id ? (
+                      <span style={{ padding: '2px 8px', borderRadius: 20, fontSize: 11, fontWeight: 600, background: '#ede9fe', color: '#6d28d9' }}>
+                        {workerName}
+                      </span>
+                    ) : <span style={{ color: '#94a3b8' }}>미지정</span>}
+                  </td>
                   <td style={{ textAlign: 'right' }}>{(w.target_qty || 0).toLocaleString()}</td>
                   <td style={{ textAlign: 'right', color: '#1d4ed8', fontWeight: 600 }}>{(w.good_qty || 0).toLocaleString()}</td>
                   <td style={{ textAlign: 'right', color: w.defect_qty > 0 ? '#dc2626' : undefined }}>{(w.defect_qty || 0).toLocaleString()}</td>
@@ -226,6 +238,15 @@ export default function MesWorkOrders() {
                 <input className="form-control" value={form.mold_no}
                   onChange={e => setForm(f => ({ ...f, mold_no: e.target.value }))} placeholder="선택" />
               </div>
+            </div>
+
+            <div className="form-group">
+              <label>담당 작업자</label>
+              <select className="form-control" value={form.assigned_worker_id}
+                onChange={e => setForm(f => ({ ...f, assigned_worker_id: e.target.value }))}>
+                <option value="">미지정</option>
+                {workers.map(u => <option key={u.username} value={u.username}>{u.name} ({u.username})</option>)}
+              </select>
             </div>
 
             <div className="form-group">

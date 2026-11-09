@@ -1,9 +1,10 @@
 import { useEffect, useState, useCallback } from 'react'
 import api from '../api'
 
-const EMP_TYPE = { annual: '연봉제', hourly: '시급제' }
-const DEPT_LIST = ['생산', '품질', '영업', '구매', '관리', '경영']
-const POS_LIST  = ['사원', '주임', '대리', '과장', '차장', '부장', '이사', '대표']
+const EMP_TYPE    = { annual: '연봉제', hourly: '시급제' }
+const DEPT_LIST   = ['생산', '품질', '영업', '구매', '관리', '경영']
+const POS_LIST    = ['사원', '주임', '대리', '과장', '차장', '부장', '이사', '대표']
+const COMPANY_LIST = ['조이산업', '넥스젬']
 
 function fmt(n) {
   return n ? Number(n).toLocaleString() : '—'
@@ -62,6 +63,7 @@ export default function HrEmployee() {
             <tr>
               <th>사번</th>
               <th>이름</th>
+              <th>법인</th>
               <th>부서</th>
               <th>직급</th>
               <th>고용형태</th>
@@ -73,11 +75,18 @@ export default function HrEmployee() {
             </tr>
           </thead>
           <tbody>
-            {filtered.length === 0 && <tr><td colSpan={10} style={{ textAlign: 'center', color: '#94a3b8', padding: 24 }}>사원 없음</td></tr>}
+            {filtered.length === 0 && <tr><td colSpan={11} style={{ textAlign: 'center', color: '#94a3b8', padding: 24 }}>사원 없음</td></tr>}
             {filtered.map(e => (
               <tr key={e.emp_id} style={!e.is_active ? { opacity: 0.4 } : {}}>
                 <td><code style={{ fontSize: 11 }}>{e.emp_id}</code></td>
                 <td style={{ fontWeight: 600 }}>{e.name}</td>
+                <td style={{ fontSize: 12 }}>
+                  <span style={{
+                    padding: '2px 7px', borderRadius: 20, fontSize: 10, fontWeight: 600,
+                    background: e.company === '넥스젬' ? '#ede9fe' : '#dcfce7',
+                    color: e.company === '넥스젬' ? '#6d28d9' : '#15803d',
+                  }}>{e.company || '조이산업'}</span>
+                </td>
                 <td>{e.dept || '—'}</td>
                 <td>{e.position || '—'}</td>
                 <td>
@@ -127,7 +136,7 @@ function EmployeeModal({ employee, onClose, onSaved }) {
   const editing = !!employee
   const [form, setForm] = useState(employee || {
     emp_id: '', name: '', dept: '', position: '', hire_date: '', retire_date: '',
-    emp_type: 'annual', base_salary: '', hourly_rate: '', weekly_hours: 40, ot_rate: 1.5,
+    emp_type: 'annual', company: '조이산업', base_salary: '', hourly_rate: '', weekly_hours: 40, ot_rate: 1.5,
     resident_no: '', phone: '', bank: '', bank_account: '', email: '', note: '',
   })
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
@@ -198,6 +207,13 @@ function EmployeeModal({ employee, onClose, onSaved }) {
               <option value="hourly">시급제</option>
             </select>
           </div>
+        </div>
+
+        <div className="form-group">
+          <label>소속 법인</label>
+          <select className="form-control" value={form.company || '조이산업'} onChange={e => set('company', e.target.value)}>
+            {COMPANY_LIST.map(c => <option key={c}>{c}</option>)}
+          </select>
         </div>
 
         {form.emp_type === 'annual' ? (

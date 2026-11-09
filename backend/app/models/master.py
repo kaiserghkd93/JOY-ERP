@@ -41,6 +41,7 @@ class Item(Base):
     avg_cost: Mapped[float] = mapped_column(Numeric(15, 4), default=0, server_default="0")  # 이동평균단가
     machine_ct_sec: Mapped[float | None] = mapped_column(Float)   # 설비 C/T (초)
     manual_ct_sec: Mapped[float | None] = mapped_column(Float)    # 공수 C/T (초)
+    cavity_count: Mapped[int | None] = mapped_column(Integer)      # 캐비티 수
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
 

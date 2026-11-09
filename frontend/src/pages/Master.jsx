@@ -584,21 +584,17 @@ function MachineTab() {
             <tr>
               <th>호기 ID</th>
               <th>호기명</th>
-              <th style={{ textAlign: 'right' }}>표준 사이클(초)</th>
-              <th style={{ textAlign: 'right' }}>캐비티</th>
               <th>비고</th>
               <th>상태</th>
               <th></th>
             </tr>
           </thead>
           <tbody>
-            {machines.length === 0 && <tr><td colSpan={7} className="empty">등록된 호기 없음</td></tr>}
+            {machines.length === 0 && <tr><td colSpan={5} className="empty">등록된 호기 없음</td></tr>}
             {machines.map(m => (
               <tr key={m.machine_id} style={!m.is_active ? { opacity: 0.4 } : {}}>
                 <td><code style={{ fontSize: 11 }}>{m.machine_id}</code></td>
                 <td style={{ fontWeight: 600 }}>{m.name}</td>
-                <td style={{ textAlign: 'right' }}>{m.std_cycle_sec}초</td>
-                <td style={{ textAlign: 'right' }}>{m.cavity_count}개</td>
                 <td style={{ color: '#64748b', fontSize: 12 }}>{m.note || '—'}</td>
                 <td>
                   <span style={{
@@ -627,7 +623,7 @@ function MachineTab() {
 function MachineModal({ machine, onClose, onSaved }) {
   const editing = !!machine
   const [form, setForm] = useState(machine || {
-    machine_id: '', name: '', std_cycle_sec: 30, cavity_count: 1, note: '',
+    machine_id: '', name: '', note: '',
   })
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
 
@@ -658,16 +654,6 @@ function MachineModal({ machine, onClose, onSaved }) {
           <div className="form-group">
             <label>호기명</label>
             <input className="form-control" value={form.name} onChange={e => set('name', e.target.value)} placeholder="1호기" />
-          </div>
-        </div>
-        <div className="grid-2">
-          <div className="form-group">
-            <label>표준 사이클타임(초)</label>
-            <input className="form-control" type="number" min="1" value={form.std_cycle_sec} onChange={e => set('std_cycle_sec', +e.target.value)} />
-          </div>
-          <div className="form-group">
-            <label>캐비티 수</label>
-            <input className="form-control" type="number" min="1" value={form.cavity_count} onChange={e => set('cavity_count', +e.target.value)} />
           </div>
         </div>
         <div className="form-group">
