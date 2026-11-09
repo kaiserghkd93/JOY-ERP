@@ -313,16 +313,17 @@ class DisposalUpdate(BaseModel):
     disposal: str
 
 @router.patch("/inspections/{insp_id}/disposal")
-def update_disposal(insp_id: int, body: DisposalUpdate, db: Session = Depends(get_db), user: User = Depends(_require_manager)):
-    """처리방법 수정 (승인완료 상태에서만 가능)"""
+def update_disposal(insp_id: int, body: DisposalUpdate, db: Session = Depends(get_db), user: User = Depends(_require_quality)):
+    """처리방법 수정"""
     from sqlalchemy import text as _text
     VALID = {"반품", "폐기", "특채", "보류", "합격"}
     if body.disposal not in VALID:
         raise HTTPException(400, f"유효하지 않은 처리방법: {body.disposal}")
-    insp = _get_insp(insp_id, db)
-    # approval_status 비교는 문자열로
-    status_val = str(insp.approval_status.value if hasattr(insp.approval_status, 'value') else insp.approval_status)
-    if status_val == "최종확정":
+    # raw SQL로 조회 (ORM enum 변환 오류 방지)
+    row = db.execute(_text("SELECT approval_status::text FROM inspection WHERE id = :id"), {"id": insp_id}).first()
+    if not row:
+        raise HTTPException(404, "검사결과를 찾을 수 없습니다")
+    if row[0] == "최종확정":
         raise HTTPException(400, "최종확정 이후에는 처리방법을 변경할 수 없습니다")
     db.execute(_text("UPDATE inspection SET disposal = :d WHERE id = :id"), {"d": body.disposal, "id": insp_id})
     db.commit()

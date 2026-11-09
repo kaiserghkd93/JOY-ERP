@@ -2,6 +2,7 @@
 관리자 전용 유지보수 엔드포인트
 - 테스트 데이터 삭제 (2026-10 이전)
 - 나라엠텍 BOM 아이템 업로드
+- 임포트 오류 데이터 삭제
 """
 from datetime import date
 from fastapi import APIRouter, Depends, HTTPException
@@ -301,6 +302,68 @@ def init_machines():
     finally:
         conn.close()
     return {"ok": True, "created": created}
+
+
+@router.post("/delete-hyundai-nov-shipments")
+def delete_hyundai_nov_shipments(confirm: str):
+    """
+    HD현대일렉트릭 2026-11-09 임포트 출고 29건 완전 삭제.
+    confirm="DELETE_HYUNDAI_NOV" 를 전달해야 실행됨.
+    삭제 대상: SH-20261109-017 ~ SH-20261109-045 (shipment + stock_ledger + sales_order)
+    """
+    if confirm != "DELETE_HYUNDAI_NOV":
+        raise HTTPException(400, "confirm='DELETE_HYUNDAI_NOV' 를 전달하세요")
+
+    sh_nos = [f"SH-20261109-{i:03d}" for i in range(17, 46)]  # 17 ~ 45 = 29건
+    so_nos = [f"SO-20261109-{i:03d}" for i in range(17, 46)]
+
+    deleted: dict = {}
+    errors: dict = {}
+    sp_idx = [0]
+
+    conn = engine.connect()
+
+    def run(label: str, sql: str, params: dict = {}):
+        sp = f"sp{sp_idx[0]}"
+        sp_idx[0] += 1
+        try:
+            conn.execute(text(f"SAVEPOINT {sp}"))
+            r = conn.execute(text(sql), params)
+            deleted[label] = r.rowcount
+            conn.execute(text(f"RELEASE SAVEPOINT {sp}"))
+        except Exception as e:
+            errors[label] = str(e)
+            try:
+                conn.execute(text(f"ROLLBACK TO SAVEPOINT {sp}"))
+            except Exception:
+                pass
+
+    # 1. stock_ledger (출고 항목)
+    run("stock_ledger",
+        "DELETE FROM stock_ledger WHERE ref_type = 'SH' AND ref_no = ANY(:shnos)",
+        {"shnos": sh_nos})
+
+    # 2. shipment (FK → sales_order, 먼저 삭제)
+    run("shipment",
+        "DELETE FROM shipment WHERE sh_no = ANY(:shnos)",
+        {"shnos": sh_nos})
+
+    # 3. sales_order
+    run("sales_order",
+        "DELETE FROM sales_order WHERE so_no = ANY(:sonos)",
+        {"sonos": so_nos})
+
+    try:
+        conn.commit()
+    finally:
+        conn.close()
+
+    return {
+        "ok": len(errors) == 0,
+        "deleted": deleted,
+        "errors": errors,
+        "note": f"SH-20261109-017 ~ SH-20261109-045 ({len(sh_nos)}건)",
+    }
 
 
 @router.post("/fix-naraemtec-item-types")
