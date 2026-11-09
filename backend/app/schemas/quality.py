@@ -1,6 +1,11 @@
 from datetime import date, datetime
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, field_validator
 from app.models.quality import InspectionResult, DisposalType, ClaimStatus, M4Category, ApprovalStatus, StandardStatus
+
+# 구버전 DB에 영문 키 이름으로 저장된 값 → 현재 한글 값 enum으로 변환
+_RESULT_LEGACY = {"pending_insp": "검사대기", "pass_": "합격", "fail": "불합격", "partial": "부분합격"}
+_DISPOSAL_LEGACY = {"return_": "반품", "scrap": "폐기", "concession": "특채", "pending": "보류", "accepted": "합격"}
+_APPROVAL_LEGACY = {"draft": "작성중", "pending": "승인대기", "rejected": "반려", "approved": "승인완료", "confirmed": "최종확정"}
 
 
 class InspectionCreate(BaseModel):
@@ -26,6 +31,21 @@ class InspectionOut(BaseModel):
     disposal: DisposalType | None = None
     defect_note: str | None
     approval_status: ApprovalStatus | None = None
+
+    @field_validator("result", mode="before")
+    @classmethod
+    def _coerce_result(cls, v):
+        return _RESULT_LEGACY.get(str(v), v) if v is not None else v
+
+    @field_validator("disposal", mode="before")
+    @classmethod
+    def _coerce_disposal(cls, v):
+        return _DISPOSAL_LEGACY.get(str(v), v) if v is not None else v
+
+    @field_validator("approval_status", mode="before")
+    @classmethod
+    def _coerce_approval(cls, v):
+        return _APPROVAL_LEGACY.get(str(v), v) if v is not None else v
     inspector_id: str | None = None
     requested_at: datetime | None = None
     approver_id: str | None = None

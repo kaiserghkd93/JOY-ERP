@@ -62,6 +62,17 @@ class ApprovalStatus(str, enum.Enum):
     approved  = "승인완료"
     confirmed = "최종확정"
 
+    @classmethod
+    def _missing_(cls, value):
+        _legacy = {
+            "draft": cls.draft,
+            "pending": cls.pending,
+            "rejected": cls.rejected,
+            "approved": cls.approved,
+            "confirmed": cls.confirmed,
+        }
+        return _legacy.get(value)
+
 
 class Inspection(Base):
     __tablename__ = "inspection"
