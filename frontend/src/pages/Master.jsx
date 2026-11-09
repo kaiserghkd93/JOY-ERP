@@ -429,7 +429,7 @@ export default function Master() {
         )}
         <div className="erp-actions">
           <div className="qdate-bar">
-            {[['items','품목 마스터'],['partners','거래처 마스터'],['scores','협력사 평가'],['audit','변경 이력']].map(([v,l])=>(
+            {[['items','품목 마스터'],['partners','거래처 마스터'],['machines','호기 관리'],['scores','협력사 평가'],['audit','변경 이력']].map(([v,l])=>(
               <button key={v} className={`qdate-btn${tab===v?' active':''}`} onClick={()=>setTab(v)}>{l}</button>
             ))}
           </div>
@@ -533,6 +533,8 @@ export default function Master() {
 
       {tab === 'audit' && isMaster() && <AuditTab />}
 
+      {tab === 'machines' && <MachineTab />}
+
       {itemModal !== null && (
         <ItemModal
           item={itemModal.part_no ? itemModal : null}
@@ -547,6 +549,136 @@ export default function Master() {
           onSaved={() => { setPartnerModal(null); load() }}
         />
       )}
+    </div>
+  )
+}
+
+/* ── 호기 관리 탭 ───────────────────────────────────────────────────── */
+function MachineTab() {
+  const [machines, setMachines] = useState([])
+  const [modal, setModal] = useState(null)  // null | {} (new) | {machine_id,...} (edit)
+
+  const load = useCallback(() => {
+    api.get('/mes-floor/machines').then(r => setMachines(r.data)).catch(() => {})
+  }, [])
+
+  useEffect(() => { load() }, [load])
+
+  const del = async (id) => {
+    if (!window.confirm(`[${id}] 호기를 비활성화하시겠습니까?`)) return
+    await api.delete(`/mes-floor/machines/${id}`).catch(e => alert(e.response?.data?.detail || e.message))
+    load()
+  }
+
+  return (
+    <div>
+      <div className="result-bar">
+        <span className="result-bar-title">호기(설비) 마스터</span>
+        <span className="result-bar-count">{machines.length}건</span>
+        <div className="spacer" />
+        <button className="btn btn-sm btn-primary" onClick={() => setModal({})}>＋ 호기 등록</button>
+      </div>
+      <div className="table-wrap">
+        <table className="table">
+          <thead>
+            <tr>
+              <th>호기 ID</th>
+              <th>호기명</th>
+              <th style={{ textAlign: 'right' }}>표준 사이클(초)</th>
+              <th style={{ textAlign: 'right' }}>캐비티</th>
+              <th>비고</th>
+              <th>상태</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {machines.length === 0 && <tr><td colSpan={7} className="empty">등록된 호기 없음</td></tr>}
+            {machines.map(m => (
+              <tr key={m.machine_id} style={!m.is_active ? { opacity: 0.4 } : {}}>
+                <td><code style={{ fontSize: 11 }}>{m.machine_id}</code></td>
+                <td style={{ fontWeight: 600 }}>{m.name}</td>
+                <td style={{ textAlign: 'right' }}>{m.std_cycle_sec}초</td>
+                <td style={{ textAlign: 'right' }}>{m.cavity_count}개</td>
+                <td style={{ color: '#64748b', fontSize: 12 }}>{m.note || '—'}</td>
+                <td>
+                  <span style={{
+                    padding: '2px 8px', borderRadius: 20, fontSize: 11, fontWeight: 600,
+                    background: m.is_active ? '#dcfce7' : '#f1f5f9',
+                    color: m.is_active ? '#16a34a' : '#94a3b8',
+                  }}>{m.is_active ? '사용' : '비활성'}</span>
+                </td>
+                <td>
+                  <button className="btn btn-sm" style={{ marginRight: 4 }} onClick={() => setModal(m)}>수정</button>
+                  {m.is_active && (
+                    <button className="btn btn-sm" style={{ background: '#fee2e2', color: '#dc2626', border: 'none' }}
+                      onClick={() => del(m.machine_id)}>비활성화</button>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {modal !== null && <MachineModal machine={modal.machine_id ? modal : null} onClose={() => setModal(null)} onSaved={() => { setModal(null); load() }} />}
+    </div>
+  )
+}
+
+function MachineModal({ machine, onClose, onSaved }) {
+  const editing = !!machine
+  const [form, setForm] = useState(machine || {
+    machine_id: '', name: '', std_cycle_sec: 30, cavity_count: 1, note: '',
+  })
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
+
+  const submit = async () => {
+    if (!form.machine_id) return alert('호기 ID를 입력하세요')
+    if (!form.name) return alert('호기명을 입력하세요')
+    try {
+      if (editing) {
+        await api.patch(`/mes-floor/machines/${form.machine_id}`, form)
+      } else {
+        await api.post('/mes-floor/machines', form)
+      }
+      onSaved()
+    } catch (e) {
+      alert('저장 실패: ' + (e.response?.data?.detail || e.message))
+    }
+  }
+
+  return (
+    <div className="modal-overlay">
+      <div className="modal">
+        <h3>{editing ? '호기 수정' : '호기 등록'}</h3>
+        <div className="grid-2">
+          <div className="form-group">
+            <label>호기 ID <span style={{ color: '#94a3b8', fontSize: 11 }}>(예: M01)</span></label>
+            <input className="form-control" value={form.machine_id} onChange={e => set('machine_id', e.target.value)} disabled={editing} placeholder="M01" />
+          </div>
+          <div className="form-group">
+            <label>호기명</label>
+            <input className="form-control" value={form.name} onChange={e => set('name', e.target.value)} placeholder="1호기" />
+          </div>
+        </div>
+        <div className="grid-2">
+          <div className="form-group">
+            <label>표준 사이클타임(초)</label>
+            <input className="form-control" type="number" min="1" value={form.std_cycle_sec} onChange={e => set('std_cycle_sec', +e.target.value)} />
+          </div>
+          <div className="form-group">
+            <label>캐비티 수</label>
+            <input className="form-control" type="number" min="1" value={form.cavity_count} onChange={e => set('cavity_count', +e.target.value)} />
+          </div>
+        </div>
+        <div className="form-group">
+          <label>비고</label>
+          <input className="form-control" value={form.note || ''} onChange={e => set('note', e.target.value)} />
+        </div>
+        <div className="modal-footer">
+          <button className="btn btn-outline" onClick={onClose}>취소</button>
+          <button className="btn btn-primary" onClick={submit}>저장</button>
+        </div>
+      </div>
     </div>
   )
 }

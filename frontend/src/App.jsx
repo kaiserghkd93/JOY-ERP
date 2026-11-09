@@ -17,6 +17,9 @@ const Bom            = lazy(() => import('./pages/Bom'))
 const ProductionPlan = lazy(() => import('./pages/ProductionPlanWeekly'))
 const MesDashboard   = lazy(() => import('./pages/MesDashboard'))
 const MesWorkOrders  = lazy(() => import('./pages/MesWorkOrders'))
+const HrEmployee     = lazy(() => import('./pages/HrEmployee'))
+const HrAttendance   = lazy(() => import('./pages/HrAttendance'))
+const HrPayroll      = lazy(() => import('./pages/HrPayroll'))
 const Cost           = lazy(() => import('./pages/Cost'))
 const Mold           = lazy(() => import('./pages/Mold'))
 const DeliveryReport = lazy(() => import('./pages/DeliveryReport'))
@@ -66,6 +69,11 @@ const allMenus = [
   { id: 'mes', label: 'MES', items: [
     { to: '/mes-dashboard',   label: '안돈 보드' },
     { to: '/mes-work-orders', label: '작업지시' },
+  ]},
+  { id: 'hr', label: '인사', items: [
+    { to: '/hr-employee',   label: '사원 관리' },
+    { to: '/hr-attendance', label: '출퇴근' },
+    { to: '/hr-payroll',    label: '급여 명세서' },
   ]},
   { id: 'cost', label: '원가', items: [
     { to: '/cost',        label: '원가 관리' },
@@ -308,6 +316,15 @@ export default function App() {
             } />
             <Route path="/mes-work-orders" element={
               <ProtectedRoute path="/mes-work-orders"><MesWorkOrders /></ProtectedRoute>
+            } />
+            <Route path="/hr-employee" element={
+              <ProtectedRoute path="/hr-employee"><HrEmployee /></ProtectedRoute>
+            } />
+            <Route path="/hr-attendance" element={
+              <ProtectedRoute path="/hr-attendance"><HrAttendance /></ProtectedRoute>
+            } />
+            <Route path="/hr-payroll" element={
+              <ProtectedRoute path="/hr-payroll"><HrPayroll /></ProtectedRoute>
             } />
           </Routes>
         </Suspense>

@@ -22,6 +22,8 @@ from app.routers import admin_maintenance
 from app.routers import mes_floor as mes_floor_router
 from app.routers import mes_monitor as mes_monitor_router
 from app.models import mes_floor as _mes_floor_models  # noqa: ensure MES tables
+from app.routers import hr as hr_router
+from app.models import hr as _hr_models  # noqa: ensure HR tables
 from app.models.production import WeeklyPlan as _weekly_plan_model  # noqa: ensure weekly_plan table
 from app.models import improvement as _improvement_models  # noqa: ensure table
 from app.models import quality_advanced as _qa_models  # noqa: ensure tables
@@ -243,6 +245,7 @@ app.include_router(improvement_router.router)
 app.include_router(admin_maintenance.router)
 app.include_router(mes_floor_router.router)
 app.include_router(mes_monitor_router.router)
+app.include_router(hr_router.router)
 
 
 @app.on_event("startup")

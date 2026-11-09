@@ -65,6 +65,16 @@ def update_machine(machine_id: str, body: MachineIn, db: Session = Depends(get_d
     return m
 
 
+@router.delete("/machines/{machine_id}")
+def delete_machine(machine_id: str, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+    m = db.get(Machine, machine_id)
+    if not m:
+        raise HTTPException(404)
+    m.is_active = False
+    db.commit()
+    return {"ok": True}
+
+
 # ── 작업지시서 ────────────────────────────────────────────────────────
 
 class WOCreate(BaseModel):
