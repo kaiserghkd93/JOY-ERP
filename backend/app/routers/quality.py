@@ -129,17 +129,27 @@ def post_inspection(body: InspectionCreate, db: Session = Depends(get_db), user:
 
 @router.get("/inspections", response_model=list[InspectionOut])
 def list_inspections(limit: int = 500, offset: int = 0, db: Session = Depends(get_db)):
-    try:
-        rows = db.query(Inspection).order_by(Inspection.inspect_date.desc()).offset(offset).limit(limit).all()
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"DB조회오류: {type(e).__name__}: {e}")
-    result = []
+    from sqlalchemy import text as _sql
+    # raw SQL: enum 컬럼을 ::text로 캐스팅해 ORM enum 변환 오류 우회
+    sql = _sql("""
+        SELECT id, gr_no, inspect_date, inspect_qty, pass_qty, fail_qty,
+               result::text AS result, disposal::text AS disposal,
+               defect_note, approval_status::text AS approval_status,
+               inspector_id, requested_at, approver_id, approved_at,
+               rejection_reason, confirmer_id, confirmed_at,
+               standard_id, lot_size, sample_size, ac, re
+        FROM inspection
+        ORDER BY inspect_date DESC
+        OFFSET :offset LIMIT :limit
+    """)
+    rows = db.execute(sql, {"offset": offset, "limit": limit}).mappings().all()
+    out = []
     for row in rows:
         try:
-            result.append(InspectionOut.model_validate(row))
+            out.append(InspectionOut(**dict(row)))
         except Exception:
             pass
-    return result
+    return out
 
 
 @router.get("/inspections/{gr_no}", response_model=InspectionOut)
