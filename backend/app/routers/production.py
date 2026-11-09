@@ -5,7 +5,7 @@ from pydantic import BaseModel, ConfigDict
 from datetime import date, timedelta
 from calendar import monthrange
 from app.database import get_db
-from app.models.production import ProductionOrder, Mold, POrdStatus, MoldStatus, MonthlyPlan, DailyActual
+from app.models.production import ProductionOrder, Mold, POrdStatus, MoldStatus, MonthlyPlan, DailyActual, WeeklyPlan
 from app.models.master import Item, BomLine, Partner
 from app.services.production_service import create_pord, post_production_result, create_mold
 from app.services.ledger_service import get_stock_bulk
@@ -436,7 +436,7 @@ def upsert_daily_actual(plan_id: int, body: DailyActualIn, db: Session = Depends
 
 
 @router.delete("/monthly-plans/actual/{actual_id}")
-def delete_daily_actual(actual_id: int, db: Session = Depends(get_db)):
+def delete_daily_actual(actual_id: int, db: Session = Depends(get_db)):  # noqa: F811 (after weekly routes)
     from app.models.ledger import LedgerType
     from app.services.ledger_service import post_ledger, get_avg_price
 
@@ -455,6 +455,91 @@ def delete_daily_actual(actual_id: int, db: Session = Depends(get_db)):
     db.delete(act)
     db.commit()
     return {"ok": True}
+
+
+# ── 주단위 생산계획 ──────────────────────────────────────────────
+
+def _week_dates(year: int, month: int, week_no: int):
+    last_day = monthrange(year, month)[1]
+    day_start = (week_no - 1) * 7 + 1
+    day_end = min(week_no * 7, last_day)
+    return date(year, month, day_start), date(year, month, day_end)
+
+
+def _month_weeks(year: int, month: int) -> list[dict]:
+    last_day = monthrange(year, month)[1]
+    weeks = []
+    for w in range(1, 6):
+        s, e = _week_dates(year, month, w)
+        if s.day > last_day:
+            break
+        weeks.append({"week_no": w, "start": str(s), "end": str(e)})
+    return weeks
+
+
+class WeeklyPlanIn(BaseModel):
+    part_no: str
+    planned_qty: int
+
+
+@router.get("/weekly-plans")
+def list_weekly_plans(year: int, month: int, db: Session = Depends(get_db)):
+    plans = db.query(WeeklyPlan).filter(
+        WeeklyPlan.year == year, WeeklyPlan.month == month,
+    ).order_by(WeeklyPlan.week_no, WeeklyPlan.part_no).all()
+
+    result = []
+    for p in plans:
+        ws, we = _week_dates(year, month, p.week_no)
+        actual_qty = db.query(func.sum(DailyActual.actual_qty)).join(
+            MonthlyPlan, DailyActual.plan_id == MonthlyPlan.id
+        ).filter(
+            MonthlyPlan.year == year, MonthlyPlan.month == month,
+            MonthlyPlan.part_no == p.part_no,
+            DailyActual.prod_date >= ws,
+            DailyActual.prod_date <= we,
+        ).scalar() or 0
+
+        item = db.get(Item, p.part_no)
+        result.append({
+            "id": p.id, "year": p.year, "month": p.month, "week_no": p.week_no,
+            "part_no": p.part_no, "part_name": item.name if item else p.part_no,
+            "planned_qty": p.planned_qty, "actual_qty": int(actual_qty),
+            "achieve_rate": round(int(actual_qty) / p.planned_qty * 100, 1) if p.planned_qty > 0 else 0.0,
+            "week_start": str(ws), "week_end": str(we),
+        })
+    return result
+
+
+@router.post("/weekly-plans")
+def upsert_weekly_plan(year: int, month: int, week_no: int, body: WeeklyPlanIn, db: Session = Depends(get_db)):
+    plan = db.query(WeeklyPlan).filter(
+        WeeklyPlan.year == year, WeeklyPlan.month == month,
+        WeeklyPlan.week_no == week_no, WeeklyPlan.part_no == body.part_no,
+    ).first()
+    if plan:
+        plan.planned_qty = body.planned_qty
+    else:
+        plan = WeeklyPlan(year=year, month=month, week_no=week_no,
+                          part_no=body.part_no, planned_qty=body.planned_qty)
+        db.add(plan)
+    db.commit()
+    return {"id": plan.id, "week_no": week_no, "part_no": plan.part_no, "planned_qty": plan.planned_qty}
+
+
+@router.delete("/weekly-plans/{plan_id}")
+def delete_weekly_plan(plan_id: int, db: Session = Depends(get_db)):
+    plan = db.get(WeeklyPlan, plan_id)
+    if not plan:
+        raise HTTPException(404)
+    db.delete(plan)
+    db.commit()
+    return {"ok": True}
+
+
+@router.get("/weekly-plans/weeks")
+def get_weeks(year: int, month: int):
+    return _month_weeks(year, month)
 
 
 # ── 생산오더 가용성 검사 ──────────────────────────────────────────

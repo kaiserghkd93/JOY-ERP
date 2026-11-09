@@ -234,10 +234,16 @@ function SalesOrderModal({ onClose, onSaved }) {
   )
 }
 
+function autoLot(soNo) {
+  const parts = (soNo || '').split('-')
+  if (parts.length >= 3) return `LOT-${parts[1]}-${parts[2]}`
+  return `LOT-${today().replace(/-/g, '')}`
+}
+
 function ShipModal({ so, onClose, onSaved }) {
   const remainQty = so.remaining_qty ?? so.qty ?? ''
-  const [form, setForm] = useState({ qty: remainQty, ship_date: today(), unit_price: '', lot_no: '' })
-  useEffect(() => { setForm(f => ({ ...f, qty: so.remaining_qty ?? so.qty ?? '', ship_date: today() })) }, [so.so_no])
+  const [form, setForm] = useState({ qty: remainQty, ship_date: today(), unit_price: '', lot_no: autoLot(so.so_no) })
+  useEffect(() => { setForm(f => ({ ...f, qty: so.remaining_qty ?? so.qty ?? '', ship_date: today(), lot_no: autoLot(so.so_no) })) }, [so.so_no])
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
 
   useEffect(() => {

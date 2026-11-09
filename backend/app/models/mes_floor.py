@@ -5,6 +5,14 @@ from app.database import Base
 import enum
 
 
+class AndonType(str, enum.Enum):
+    quality  = "품질이상"
+    machine  = "설비고장"
+    material = "재료부족"
+    safety   = "안전"
+    help     = "도움요청"
+
+
 class MachineStatus(str, enum.Enum):
     idle    = "대기"
     running = "가동"
@@ -114,3 +122,20 @@ class DowntimeLog(Base):
     end_time: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     session: Mapped["WorkerSession"] = relationship(back_populates="downtime_logs")
+
+
+class AndonCall(Base):
+    """Toyota 안돈 호출 기록"""
+    __tablename__ = "mes_andon_call"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    machine_id: Mapped[str] = mapped_column(ForeignKey("machine.machine_id"), nullable=False)
+    caller_id: Mapped[str] = mapped_column(String(50), nullable=False)
+    andon_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    note: Mapped[str | None] = mapped_column(Text)
+    called_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    resolved_by: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    is_resolved: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    machine: Mapped["Machine"] = relationship(foreign_keys=[machine_id])

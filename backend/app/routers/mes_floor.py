@@ -20,7 +20,7 @@ from app.routers.auth import get_current_user
 from app.models.auth import User
 from app.models.mes_floor import (
     Machine, MesWorkOrder, WorkerSession, ProdLog, DowntimeLog,
-    WOStatus, SessionStatus, DowntimeReason, MachineStatus,
+    WOStatus, SessionStatus, DowntimeReason, MachineStatus, AndonCall,
 )
 from app.models.master import Item
 from app.services.doc_no import next_doc_no
@@ -486,12 +486,117 @@ def worker_kpi(
             "session_count": v["session_count"],
         })
 
-    # OEE 내림차순 정렬 (1위부터)
     result.sort(key=lambda x: x["avg_oee"], reverse=True)
     for i, r in enumerate(result):
         r["rank"] = i + 1
 
     return {"from_date": str(from_date), "to_date": str(to_date), "workers": result}
+
+
+# ── Toyota 안돈 (Andon) ───────────────────────────────────────────
+
+class AndonCallIn(BaseModel):
+    machine_id: str
+    caller_id: str
+    andon_type: str
+    note: Optional[str] = None
+
+
+@router.post("/andon/call")
+def andon_call(body: AndonCallIn, db: Session = Depends(get_db)):
+    """안돈 호출 — 이상 발생 시 즉시 등록"""
+    call = AndonCall(
+        machine_id=body.machine_id,
+        caller_id=body.caller_id,
+        andon_type=body.andon_type,
+        note=body.note,
+    )
+    db.add(call)
+    db.commit()
+    db.refresh(call)
+    return {
+        "id": call.id, "machine_id": call.machine_id,
+        "andon_type": call.andon_type, "called_at": call.called_at.isoformat(),
+        "is_resolved": call.is_resolved,
+    }
+
+
+@router.get("/andon/active")
+def active_andons(db: Session = Depends(get_db)):
+    """미해결 안돈 목록 (대시보드 경보용)"""
+    rows = db.query(AndonCall).filter(
+        AndonCall.is_resolved == False
+    ).order_by(AndonCall.called_at.desc()).all()
+    return [{
+        "id": r.id, "machine_id": r.machine_id,
+        "machine_name": r.machine.name if r.machine else r.machine_id,
+        "andon_type": r.andon_type, "caller_id": r.caller_id,
+        "note": r.note, "called_at": r.called_at.isoformat(),
+        "elapsed_min": round((datetime.now() - r.called_at).total_seconds() / 60, 1),
+    } for r in rows]
+
+
+@router.post("/andon/{andon_id}/resolve")
+def resolve_andon(andon_id: int, resolved_by: str, db: Session = Depends(get_db)):
+    """안돈 해제"""
+    call = db.get(AndonCall, andon_id)
+    if not call:
+        raise HTTPException(404, "안돈 없음")
+    call.is_resolved = True
+    call.resolved_at = datetime.now()
+    call.resolved_by = resolved_by
+    db.commit()
+    return {"ok": True, "andon_id": andon_id}
+
+
+@router.get("/andon/history")
+def andon_history(
+    machine_id: Optional[str] = None,
+    limit: int = 50,
+    db: Session = Depends(get_db),
+):
+    """안돈 이력"""
+    q = db.query(AndonCall).order_by(AndonCall.called_at.desc())
+    if machine_id:
+        q = q.filter(AndonCall.machine_id == machine_id)
+    rows = q.limit(limit).all()
+    return [{
+        "id": r.id, "machine_id": r.machine_id,
+        "machine_name": r.machine.name if r.machine else r.machine_id,
+        "andon_type": r.andon_type, "caller_id": r.caller_id,
+        "note": r.note, "called_at": r.called_at.isoformat(),
+        "is_resolved": r.is_resolved,
+        "resolved_at": r.resolved_at.isoformat() if r.resolved_at else None,
+        "resolved_by": r.resolved_by,
+        "response_min": round((r.resolved_at - r.called_at).total_seconds() / 60, 1) if r.resolved_at else None,
+    } for r in rows]
+
+
+# ── 택트 타임 (Takt Time) ─────────────────────────────────────────
+
+@router.get("/takt-time")
+def takt_time(
+    daily_demand: int,
+    available_hours: float = 8.0,
+    db: Session = Depends(get_db),
+):
+    """Toyota 택트 타임: 가용시간 ÷ 일일수요 → 각 호기 CT vs TT 비교"""
+    if daily_demand <= 0:
+        raise HTTPException(400, "daily_demand > 0 필요")
+    takt_sec = (available_hours * 3600) / daily_demand
+    machines = db.query(Machine).filter(Machine.is_active == True).order_by(Machine.machine_id).all()
+    result = []
+    for m in machines:
+        ratio = round(m.std_cycle_sec / takt_sec * 100, 1)
+        result.append({
+            "machine_id": m.machine_id,
+            "machine_name": m.name,
+            "std_cycle_sec": m.std_cycle_sec,
+            "takt_sec": round(takt_sec, 1),
+            "ct_tt_pct": ratio,
+            "status": "과부하" if ratio > 100 else ("주의" if ratio > 90 else "정상"),
+        })
+    return {"takt_sec": round(takt_sec, 1), "daily_demand": daily_demand, "machines": result}
 
 
 # ── 오늘 호기별 일보 ─────────────────────────────────────────────────

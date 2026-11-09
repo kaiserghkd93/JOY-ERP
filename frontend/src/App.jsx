@@ -14,7 +14,9 @@ const Master         = lazy(() => import('./pages/Master'))
 const Invoice        = lazy(() => import('./pages/Invoice'))
 const Report         = lazy(() => import('./pages/Report'))
 const Bom            = lazy(() => import('./pages/Bom'))
-const ProductionPlan = lazy(() => import('./pages/ProductionPlan'))
+const ProductionPlan = lazy(() => import('./pages/ProductionPlanWeekly'))
+const MesDashboard   = lazy(() => import('./pages/MesDashboard'))
+const MesWorkOrders  = lazy(() => import('./pages/MesWorkOrders'))
 const Cost           = lazy(() => import('./pages/Cost'))
 const Mold           = lazy(() => import('./pages/Mold'))
 const DeliveryReport = lazy(() => import('./pages/DeliveryReport'))
@@ -57,9 +59,13 @@ const allMenus = [
   ]},
   { id: 'production', label: '생산', items: [
     { to: '/production',       label: '생산 관리' },
-    { to: '/production-plan',  label: '월 생산계획' },
+    { to: '/production-plan',  label: '주단위 생산계획' },
     { to: '/production-gantt', label: '생산 스케줄러' },
     { to: '/production-mrp',   label: 'MRP 발주제안' },
+  ]},
+  { id: 'mes', label: 'MES', items: [
+    { to: '/mes-dashboard',   label: '안돈 보드' },
+    { to: '/mes-work-orders', label: '작업지시' },
   ]},
   { id: 'cost', label: '원가', items: [
     { to: '/cost',        label: '원가 관리' },
@@ -296,6 +302,12 @@ export default function App() {
             } />
             <Route path="/lot-trace" element={
               <ProtectedRoute path="/lot-trace"><LotTrace /></ProtectedRoute>
+            } />
+            <Route path="/mes-dashboard" element={
+              <ProtectedRoute path="/mes-dashboard"><MesDashboard /></ProtectedRoute>
+            } />
+            <Route path="/mes-work-orders" element={
+              <ProtectedRoute path="/mes-work-orders"><MesWorkOrders /></ProtectedRoute>
             } />
           </Routes>
         </Suspense>
