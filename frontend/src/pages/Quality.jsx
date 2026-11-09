@@ -410,7 +410,15 @@ function InspectionModal({ onClose, onSaved, prefill }) {
       } else {
         onSaved()
       }
-    } catch (e) { alert(e.response?.data?.detail || '저장 실패') }
+    } catch (e) {
+      const d = e.response?.data
+      const detail = d?.detail
+      const msg = Array.isArray(detail)
+        ? JSON.stringify(detail)
+        : (typeof detail === 'string' ? detail
+          : (d ? (typeof d === 'string' ? d : JSON.stringify(d)) : (e.message || '저장 실패')))
+      alert(`[${e.response?.status ?? 'NET'}] ${msg}`)
+    }
   }
 
   return (

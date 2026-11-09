@@ -122,7 +122,11 @@ def post_inspection(body: InspectionCreate, db: Session = Depends(get_db), user:
                 )
                 db.add(auto_ncr)
 
-    db.commit()
+    try:
+        db.commit()
+    except Exception as _dbe:
+        db.rollback()
+        raise HTTPException(500, f"DB저장오류: {type(_dbe).__name__}: {str(_dbe)[:300]}")
     db.refresh(insp)
     return insp
 
