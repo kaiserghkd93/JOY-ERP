@@ -73,7 +73,12 @@ def post_inspection(body: InspectionCreate, db: Session = Depends(get_db), user:
         # 자동판정: fail_qty 기준
         data["result"] = auto_judge(data["fail_qty"], ac, re)
 
-    insp = register_inspection(db, **data)
+    try:
+        insp = register_inspection(db, **data)
+    except HTTPException:
+        raise
+    except Exception as _re:
+        raise HTTPException(500, f"register오류: {type(_re).__name__}: {str(_re)[:400]}")
     insp.inspector_id = user.username
     insp.approval_status = ApprovalStatus.draft
     insp.standard_id = body.standard_id

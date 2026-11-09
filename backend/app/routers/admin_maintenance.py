@@ -349,6 +349,55 @@ def migrate_inspection_enums_to_varchar(confirm: str):
     return {"ok": True, "results": results}
 
 
+@router.post("/migrate-all-enums-to-varchar")
+def migrate_all_enums_to_varchar(confirm: str):
+    """
+    PG native enum 컬럼 → VARCHAR 전체 변환 (한글값 저장 오류 근본 해결).
+    confirm="MIGRATE_ALL_ENUMS" 를 전달해야 실행됨.
+    """
+    if confirm != "MIGRATE_ALL_ENUMS":
+        raise HTTPException(400, "confirm='MIGRATE_ALL_ENUMS' 를 전달하세요")
+
+    targets = [
+        ("stock_ledger", "ledger_type"),
+        ("purchase_order_group", "status"),
+        ("purchase_order", "status"),
+        ("receipt", "status"),
+        ("non_conformance", "occur_type"),
+        ("non_conformance", "disposal"),
+        ("non_conformance", "status"),
+        ("ncr_appeal", "status"),
+        ("quality_claim", "status"),
+        ("quality_claim", "m4_category"),
+        ("process_outgoing_defect", "inspect_type"),
+        ("process_outgoing_defect", "source_type"),
+        # 이미 완료된 것도 idempotent하게 포함
+        ("inspection", "result"),
+        ("inspection", "disposal"),
+        ("inspection", "approval_status"),
+        ("inspection_standard", "status"),
+    ]
+
+    results = {}
+    conn = engine.connect()
+    try:
+        for table, col in targets:
+            key = f"{table}.{col}"
+            try:
+                conn.execute(text(
+                    f"ALTER TABLE {table} "
+                    f"ALTER COLUMN {col} TYPE varchar(50) USING {col}::text"
+                ))
+                results[key] = "완료"
+            except Exception as e:
+                results[key] = f"SKIP: {str(e)[:120]}"
+        conn.commit()
+    finally:
+        conn.close()
+
+    return {"ok": True, "results": results}
+
+
 @router.post("/delete-hyundai-nov-shipments")
 def delete_hyundai_nov_shipments(confirm: str):
     """
