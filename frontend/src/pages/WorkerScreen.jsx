@@ -16,6 +16,7 @@ export default function WorkerScreen() {
   const [machineId, setMachineId] = useState('')
   const [myWos, setMyWos] = useState([])
   const [session, setSession] = useState(null)
+  const [kpi, setKpi] = useState(null)
   const [goodQty, setGoodQty] = useState('')
   const [defectQty, setDefectQty] = useState('')
   const [defectType, setDefectType] = useState('')
@@ -45,12 +46,20 @@ export default function WorkerScreen() {
       .catch(() => setSession(null))
   }, [workerId])
 
+  const loadKpi = useCallback(() => {
+    if (!workerId) return
+    api.get(`/mes-floor/worker-kpi?worker_id=${workerId}`)
+      .then(r => setKpi(r.data))
+      .catch(() => {})
+  }, [workerId])
+
   useEffect(() => {
     loadMyWos()
     loadSession()
-    const t = setInterval(() => { loadSession() }, 30000)
+    loadKpi()
+    const t = setInterval(() => { loadSession(); loadKpi() }, 30000)
     return () => clearInterval(t)
-  }, [loadMyWos, loadSession])
+  }, [loadMyWos, loadSession, loadKpi])
 
   const startSession = async (wo) => {
     setLoading(true)
@@ -102,7 +111,16 @@ export default function WorkerScreen() {
       {/* 헤더 */}
       <div style={{ background: '#1e293b', padding: '12px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #334155' }}>
         <div style={{ fontWeight: 800, fontSize: 18 }}>🏭 현장 작업자 화면</div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          {kpi && (
+            <span style={{
+              padding: '3px 10px', borderRadius: 20, fontSize: 11, fontWeight: 700,
+              background: kpi.current_shift === '주간' ? '#fef3c7' : '#1e1b4b',
+              color: kpi.current_shift === '주간' ? '#92400e' : '#a5b4fc',
+            }}>
+              {kpi.current_shift === '주간' ? '☀ 주간' : '🌙 야간'} {kpi.shift_label}
+            </span>
+          )}
           <span style={{ fontSize: 13, color: '#94a3b8' }}>{workerName}</span>
           <span style={{ fontSize: 11, color: '#475569' }}>
             {new Date().toLocaleDateString('ko-KR', { month: 'long', day: 'numeric', weekday: 'short' })}
@@ -156,6 +174,24 @@ export default function WorkerScreen() {
               <div>
                 <div style={LABEL}>OEE</div>
                 <div style={{ fontSize: 20, fontWeight: 700, color: '#a78bfa' }}>{session.oee}%</div>
+              </div>
+              <div>
+                <div style={LABEL}>교대 / 실적공수</div>
+                <div style={{ fontSize: 14, fontWeight: 700 }}>
+                  <span style={{ color: session.shift === '주간' ? '#fbbf24' : '#818cf8' }}>
+                    {session.shift === '주간' ? '☀' : '🌙'} {session.shift}
+                  </span>
+                  <span style={{ color: '#94a3b8', marginLeft: 6 }}>
+                    {session.man_hour_min}분
+                  </span>
+                </div>
+              </div>
+              <div>
+                <div style={LABEL}>공수 가동률</div>
+                <div style={{ fontSize: 20, fontWeight: 700, color: session.man_hour_rate >= 80 ? '#4ade80' : '#fbbf24' }}>
+                  {session.man_hour_rate}%
+                </div>
+                <div style={{ fontSize: 10, color: '#475569' }}>계획 {session.plan_hour_min}분</div>
               </div>
             </div>
 
@@ -220,7 +256,34 @@ export default function WorkerScreen() {
               ))}
             </div>
 
-            {/* 미지정 작업지시도 볼 수 있게 (호기 선택 후 직접 시작) */}
+            {/* 오늘의 공수 현황 */}
+            {kpi && (
+              <div style={{ background: '#1e293b', borderRadius: 10, padding: 16, marginBottom: 12 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: '#e2e8f0', marginBottom: 10 }}>
+                  📊 오늘의 공수 현황
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                  {[
+                    { label: '☀ 주간 실적공수', val: `${kpi.day_shift.man_hour_min}분 (${Math.floor(kpi.day_shift.man_hour_min/60)}h ${kpi.day_shift.man_hour_min%60}m)`, rate: kpi.day_shift.man_hour_rate },
+                    { label: '🌙 야간 실적공수', val: `${kpi.night_shift.man_hour_min}분`, rate: kpi.night_shift.man_hour_rate },
+                    { label: '☀ 주간 양품', val: `${fmt(kpi.day_shift.good_qty)} EA`, rate: null, color: '#22d3ee' },
+                    { label: '🌙 야간 양품', val: `${fmt(kpi.night_shift.good_qty)} EA`, rate: null, color: '#818cf8' },
+                  ].map((item, i) => (
+                    <div key={i} style={{ background: '#0f172a', borderRadius: 8, padding: '10px 12px' }}>
+                      <div style={{ fontSize: 10, color: '#475569', marginBottom: 4 }}>{item.label}</div>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: item.color || '#f8fafc' }}>{item.val}</div>
+                      {item.rate !== null && (
+                        <div style={{ fontSize: 10, color: item.rate >= 80 ? '#4ade80' : '#fbbf24', marginTop: 2 }}>
+                          공수 가동률 {item.rate}% / 계획 720분
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* 안내 */}
             <div style={{ background: '#1e293b', borderRadius: 10, padding: 16 }}>
               <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 4 }}>💡 작업지시가 보이지 않으면 관리자에게 담당 작업자 지정을 요청하세요.</div>
               <div style={{ fontSize: 11, color: '#475569' }}>또는 작업지시 관리 메뉴에서 직접 세션을 시작할 수 있습니다.</div>

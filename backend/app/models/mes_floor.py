@@ -85,6 +85,7 @@ class WorkerSession(Base):
     wo_no: Mapped[str] = mapped_column(ForeignKey("mes_work_order.wo_no"), nullable=False)
     machine_id: Mapped[str] = mapped_column(ForeignKey("machine.machine_id"), nullable=False)
     worker_id: Mapped[str] = mapped_column(ForeignKey("user.username"), nullable=False)
+    shift: Mapped[str | None] = mapped_column(String(10), nullable=True)  # 주간 / 야간
     start_time: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
     end_time: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     good_qty: Mapped[int] = mapped_column(Integer, default=0)

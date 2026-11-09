@@ -136,6 +136,8 @@ with engine.connect() as _conn:
         "ALTER TABLE item ADD COLUMN IF NOT EXISTS cavity_count INTEGER DEFAULT 1",
         # 작업지시 — 담당 작업자 지정
         "ALTER TABLE mes_work_order ADD COLUMN IF NOT EXISTS assigned_worker_id VARCHAR(50)",
+        # 작업 세션 — 주야 교대 (주간 08:30~20:30 / 야간 20:30~08:30)
+        "ALTER TABLE worker_session ADD COLUMN IF NOT EXISTS shift VARCHAR(10)",
     ]:
         try:
             _conn.execute(_text(_sql))

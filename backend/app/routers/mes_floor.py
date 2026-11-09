@@ -7,13 +7,24 @@ MES 현장 라우터
 - 관리자 대시보드
 - 작업자 KPI
 """
-from datetime import datetime, date, timedelta
+from datetime import datetime, date, timedelta, time as dt_time
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import func, and_
 from pydantic import BaseModel
 from typing import Optional
 import json
+
+# ── 교대 설정 (주간 08:30~20:30 / 야간 20:30~08:30, 각 12시간) ──────────
+SHIFT_DAY_START = dt_time(8, 30)
+SHIFT_DAY_END   = dt_time(20, 30)
+SHIFT_PLAN_MIN  = 720  # 12시간 = 720분
+
+def get_shift(dt: Optional[datetime] = None) -> str:
+    t = (dt or datetime.now()).time()
+    if SHIFT_DAY_START <= t < SHIFT_DAY_END:
+        return "주간"
+    return "야간"
 
 from app.database import get_db
 from app.routers.auth import get_current_user
@@ -215,6 +226,7 @@ def start_session(body: SessionStart, db: Session = Depends(get_db)):
         wo_no=body.wo_no,
         machine_id=wo.machine_id,
         worker_id=body.worker_id,
+        shift=get_shift(),
     )
     db.add(session)
     db.commit()
@@ -383,6 +395,11 @@ def _session_detail(db: Session, session: WorkerSession) -> dict:
         "quality_rate": quality_rate,
         "is_down": open_dt is not None,
         "downtime_reason": open_dt.reason if open_dt else None,
+        # 공수 (주야 2교대 각 12h=720분 기준)
+        "shift": session.shift or get_shift(session.start_time),
+        "man_hour_min": round(elapsed_min, 1),
+        "plan_hour_min": SHIFT_PLAN_MIN,
+        "man_hour_rate": round(min(elapsed_min / SHIFT_PLAN_MIN * 100, 100), 1),
     }
 
 
@@ -435,6 +452,52 @@ def my_session(worker_id: str, db: Session = Depends(get_db)):
     if not session:
         return None
     return _session_detail(db, session)
+
+
+@router.get("/worker-kpi")
+def worker_kpi(worker_id: str, kpi_date: Optional[date] = None, db: Session = Depends(get_db)):
+    """작업자 일별 공수 KPI (주야 교대 집계)"""
+    target = kpi_date or date.today()
+    day_start = datetime.combine(target, dt_time(0, 0))
+    day_end   = datetime.combine(target + timedelta(days=1), dt_time(0, 0))
+
+    sessions = db.query(WorkerSession).filter(
+        WorkerSession.worker_id == worker_id,
+        WorkerSession.start_time >= day_start,
+        WorkerSession.start_time < day_end,
+    ).all()
+
+    agg = {"주간": {"min": 0.0, "good": 0, "defect": 0}, "야간": {"min": 0.0, "good": 0, "defect": 0}}
+    for s in sessions:
+        sh = s.shift or get_shift(s.start_time)
+        end = s.end_time or datetime.now()
+        agg[sh]["min"] += (end - s.start_time).total_seconds() / 60
+        agg[sh]["good"]   += s.good_qty
+        agg[sh]["defect"] += s.defect_qty
+
+    from app.models.auth import User as AuthUser
+    worker = db.get(AuthUser, worker_id)
+
+    def _shift_out(d):
+        m = d["min"]
+        return {
+            "man_hour_min":  round(m, 1),
+            "man_hour_h":    round(m / 60, 2),
+            "man_hour_rate": round(min(m / SHIFT_PLAN_MIN * 100, 100), 1),
+            "good_qty":  d["good"],
+            "defect_qty": d["defect"],
+            "plan_hour_min": SHIFT_PLAN_MIN,
+        }
+
+    return {
+        "worker_id":    worker_id,
+        "worker_name":  worker.name if worker else worker_id,
+        "date":         str(target),
+        "current_shift": get_shift(),
+        "shift_label":  "08:30~20:30" if get_shift() == "주간" else "20:30~08:30",
+        "day_shift":    _shift_out(agg["주간"]),
+        "night_shift":  _shift_out(agg["야간"]),
+    }
 
 
 # ── 관리자 전체 대시보드 ──────────────────────────────────────────────
