@@ -304,6 +304,51 @@ def init_machines():
     return {"ok": True, "created": created}
 
 
+@router.post("/migrate-inspection-enums-to-varchar")
+def migrate_inspection_enums_to_varchar(confirm: str):
+    """
+    inspection 테이블의 PG native enum 컬럼 → VARCHAR 변환.
+    confirm="MIGRATE_ENUMS" 를 전달해야 실행됨.
+
+    배경: result/disposal/approval_status 컬럼이 PG native enum(영문 이름)으로
+    생성되어 있어 한글 값 저장 시 "invalid input value for enum" 오류 발생.
+    VARCHAR로 변환하면 기존 영문값(레거시) + 신규 한글값 모두 저장 가능.
+    """
+    if confirm != "MIGRATE_ENUMS":
+        raise HTTPException(400, "confirm='MIGRATE_ENUMS' 를 전달하세요")
+
+    results = {}
+    conn = engine.connect()
+    try:
+        # inspection 테이블 enum 컬럼 → varchar
+        for col in ("result", "disposal", "approval_status"):
+            try:
+                conn.execute(text(
+                    f"ALTER TABLE inspection "
+                    f"ALTER COLUMN {col} TYPE varchar(30) USING {col}::text"
+                ))
+                results[f"inspection.{col}"] = "varchar 변환 완료"
+            except Exception as e:
+                results[f"inspection.{col}"] = f"SKIP: {str(e)[:120]}"
+
+        # inspection_standard 테이블 status 컬럼도 확인
+        for col in ("status",):
+            try:
+                conn.execute(text(
+                    f"ALTER TABLE inspection_standard "
+                    f"ALTER COLUMN {col} TYPE varchar(30) USING {col}::text"
+                ))
+                results[f"inspection_standard.{col}"] = "varchar 변환 완료"
+            except Exception as e:
+                results[f"inspection_standard.{col}"] = f"SKIP: {str(e)[:120]}"
+
+        conn.commit()
+    finally:
+        conn.close()
+
+    return {"ok": True, "results": results}
+
+
 @router.post("/delete-hyundai-nov-shipments")
 def delete_hyundai_nov_shipments(confirm: str):
     """
