@@ -70,7 +70,7 @@ class EmployeeIn(BaseModel):
     hourly_rate: float = 0               # 시급제: 시급
     weekly_hours: int = 40
     std_monthly_hours: int = 209
-    meal_allow_fixed: float = 200000
+    meal_allow_fixed: float = 0           # 사내식당 운영시 0
     vehicle_allow_fixed: float = 200000
     resident_no: Optional[str] = None
     phone: Optional[str] = None

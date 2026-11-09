@@ -149,165 +149,197 @@ export default function HrPayroll() {
   )
 }
 
-/* ── 대기업형 흑백 급여명세서 ──────────────────────────────────────── */
+/* ── 대기업형 A4 급여명세서 ─────────────────────────────────────────── */
 function PayslipModal({ payroll: p, onClose }) {
   const W = (n) => Number(n || 0).toLocaleString()
   const fmtTime = (h, m) => (h || m) ? (m ? `${h}h ${m}m` : `${h}h`) : null
+  const payDate = `${p.year}년 ${String(p.month).padStart(2,'0')}월 25일`
 
   const payItems = [
-    { label: '기본급',      sub: p.std_hourly ? `통상시급 ${W(p.std_hourly)}원 × ${p.std_hrs||209}h` : null, val: p.base_pay },
-    { label: '연장수당',    sub: fmtTime(p.pay_ot_hrs, p.pay_ot_min) ? `${fmtTime(p.pay_ot_hrs, p.pay_ot_min)} × 1.5` : null, val: p.ot_pay },
-    { label: '심야수당',    sub: p.pay_night_hrs ? `${p.pay_night_hrs}h × 0.5` : null, val: p.night_pay },
-    { label: '휴일수당',    sub: fmtTime(p.pay_holiday_hrs, p.pay_holiday_min) ? `${fmtTime(p.pay_holiday_hrs, p.pay_holiday_min)} × 1.5` : null, val: p.holiday_pay },
-    { label: '식대',        sub: '비과세', val: p.meal_allow },
-    { label: '차량유지비',  sub: '비과세', val: p.vehicle_allow },
-    { label: '성과/상여',   sub: null, val: p.bonus },
+    { label: '기  본  급',    sub: p.std_hourly ? `시급 ${W(p.std_hourly)}×${p.std_hrs||209}h` : null, val: p.base_pay },
+    { label: '연  장  수  당', sub: fmtTime(p.pay_ot_hrs, p.pay_ot_min) ? `${fmtTime(p.pay_ot_hrs, p.pay_ot_min)} × 1.5` : null, val: p.ot_pay },
+    { label: '심  야  수  당', sub: p.pay_night_hrs ? `${p.pay_night_hrs}h × 0.5` : null, val: p.night_pay },
+    { label: '휴  일  수  당', sub: fmtTime(p.pay_holiday_hrs, p.pay_holiday_min) ? `${fmtTime(p.pay_holiday_hrs, p.pay_holiday_min)} × 1.5` : null, val: p.holiday_pay },
+    { label: '식       대',   sub: '비과세', val: p.meal_allow },
+    { label: '차 량 유 지 비', sub: '비과세', val: p.vehicle_allow },
+    { label: '성  과 / 상  여', sub: null, val: p.bonus },
   ].filter(r => Number(r.val) > 0)
 
   const deductItems = [
-    { label: '국민연금', val: p.deduct_pension },
-    { label: '건강보험', val: p.deduct_health },
-    { label: '장기요양', val: p.deduct_lcare },
-    { label: '고용보험', val: p.deduct_employ },
-    { label: '갑근세',   val: p.deduct_income_tax },
-    { label: '주민세',   val: p.deduct_local_tax },
+    { label: '국  민  연  금', val: p.deduct_pension },
+    { label: '건  강  보  험', val: p.deduct_health },
+    { label: '장  기  요  양', val: p.deduct_lcare },
+    { label: '고  용  보  험', val: p.deduct_employ },
+    { label: '갑    근    세', val: p.deduct_income_tax },
+    { label: '주    민    세', val: p.deduct_local_tax },
   ].filter(r => Number(r.val) > 0)
 
-  const rows = Math.max(payItems.length, deductItems.length)
+  const rows = Math.max(payItems.length, deductItems.length, 6)
   const pad = (arr) => [...arr, ...Array(Math.max(0, rows - arr.length)).fill(null)]
+  const taxable = Number(p.gross_pay||0) - Number(p.meal_allow||0) - Number(p.vehicle_allow||0)
+  const nontax  = Number(p.meal_allow||0) + Number(p.vehicle_allow||0)
 
-  const BRD = '1px solid #333'
-  const BRD_LIGHT = '1px solid #bbb'
+  const B = '1px solid #555'
+  const BL = '1px solid #bbb'
+  const TH = { background: '#444', color: '#fff', border: B, padding: '4px 8px', textAlign: 'center', fontWeight: 700, fontSize: 11 }
+  const TD = { border: BL, padding: '3px 8px' }
+  const TDR = { border: BL, padding: '3px 8px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }
 
   return (
     <div className="modal-overlay" onClick={onClose}>
       <style>{`
         @media print {
-          body > *:not(.ps-overlay) { display: none !important; }
-          .ps-overlay { position: static !important; background: none !important; display: block !important; }
-          .ps-modal { box-shadow: none !important; border: none !important; max-width: 100% !important; }
+          body > *:not(.ps-wrap) { display: none !important; }
+          .ps-wrap { position: static !important; background: none !important; display: block !important; padding: 0 !important; }
+          .ps-modal { box-shadow: none !important; border: none !important; max-width: 100% !important; margin: 0; }
           .ps-no-print { display: none !important; }
-          @page { margin: 15mm; size: A4 portrait; }
+          @page { margin: 12mm 14mm; size: A4 portrait; }
         }
-        .ps-overlay { z-index: 1000; }
+        .ps-wrap { z-index: 9999; }
       `}</style>
 
-      <div className="modal ps-modal ps-overlay"
-        style={{ maxWidth: 640, width: '100%', background: '#fff', color: '#000',
-          fontFamily: '"Malgun Gothic","Apple SD Gothic Neo",sans-serif', fontSize: 12 }}
+      <div className="modal ps-modal ps-wrap"
+        style={{ maxWidth: 660, width: '100%', background: '#fff', color: '#000',
+          fontFamily: '"Malgun Gothic","Apple SD Gothic Neo",sans-serif', fontSize: 11, lineHeight: 1.4 }}
         onClick={e => e.stopPropagation()}>
 
-        {/* 제목 */}
-        <div style={{ textAlign: 'center', borderBottom: '3px double #000', paddingBottom: 12, marginBottom: 16 }}>
-          <div style={{ fontSize: 22, fontWeight: 700, letterSpacing: 8, color: '#000' }}>급  여  명  세  서</div>
-          <div style={{ fontSize: 11, color: '#444', marginTop: 4, letterSpacing: 2 }}>{p.year}년 {p.month}월분</div>
+        {/* ── 헤더 ── */}
+        <div style={{ textAlign: 'center', marginBottom: 12 }}>
+          <div style={{ fontSize: 11, color: '#444', letterSpacing: 1, marginBottom: 2 }}>조이산업 주식회사</div>
+          <div style={{ fontSize: 20, fontWeight: 700, letterSpacing: 12,
+            borderTop: '2px solid #000', borderBottom: '2px solid #000', padding: '5px 0', margin: '4px 0' }}>
+            급 여 명 세 서
+          </div>
+          <div style={{ fontSize: 10, color: '#444', marginTop: 3, letterSpacing: 1 }}>
+            {p.year}년 {String(p.month).padStart(2,'0')}월 &nbsp;(지급일 : {payDate})
+          </div>
         </div>
 
-        {/* 사원 정보 */}
-        <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: 14 }}>
+        {/* ── 인적사항 ── */}
+        <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: 8 }}>
           <tbody>
             <tr>
-              {[['사  번', p.emp_id], ['성  명', p.name], ['부  서', p.dept || '—'], ['직  급', p.position || '—']].map(([k, v]) => (
-                <>
-                  <th key={k} style={{ background: '#222', color: '#fff', border: BRD, padding: '5px 10px',
-                    textAlign: 'center', fontWeight: 700, fontSize: 11, width: 68, letterSpacing: 1 }}>{k}</th>
-                  <td key={v} style={{ border: BRD, padding: '5px 10px', minWidth: 90 }}>{v}</td>
-                </>
-              ))}
+              <th style={{ ...TH, width: '14%' }}>사   번</th>
+              <td style={{ ...TD, width: '19%' }}>{p.emp_id}</td>
+              <th style={{ ...TH, width: '12%' }}>성   명</th>
+              <td style={{ ...TD, width: '19%' }}>{p.name}</td>
+              <th style={{ ...TH, width: '12%' }}>부   서</th>
+              <td style={TD}>{p.dept || '—'}</td>
             </tr>
             <tr>
-              <th style={{ background: '#222', color: '#fff', border: BRD, padding: '5px 10px', textAlign: 'center', fontWeight: 700, fontSize: 11 }}>고용형태</th>
-              <td style={{ border: BRD, padding: '5px 10px' }}>{p.emp_type === 'annual' ? '연봉제' : '시급제'}</td>
-              <th style={{ background: '#222', color: '#fff', border: BRD, padding: '5px 10px', textAlign: 'center', fontWeight: 700, fontSize: 11 }}>통상시급</th>
-              <td style={{ border: BRD, padding: '5px 10px' }}>{p.std_hourly ? `${W(p.std_hourly)} 원` : '—'}</td>
-              <th style={{ background: '#222', color: '#fff', border: BRD, padding: '5px 10px', textAlign: 'center', fontWeight: 700, fontSize: 11 }}>소정근로</th>
-              <td style={{ border: BRD, padding: '5px 10px' }}>{p.std_hrs || 209}h / 월</td>
-              <th style={{ background: '#222', color: '#fff', border: BRD, padding: '5px 10px', textAlign: 'center', fontWeight: 700, fontSize: 11 }}>연장시간</th>
-              <td style={{ border: BRD, padding: '5px 10px' }}>{fmtTime(p.pay_ot_hrs, p.pay_ot_min) || '0h'}</td>
+              <th style={TH}>직   급</th>
+              <td style={TD}>{p.position || '—'}</td>
+              <th style={TH}>고용형태</th>
+              <td style={TD}>{p.emp_type === 'annual' ? '연봉제' : '시급제'}</td>
+              <th style={TH}>통상시급</th>
+              <td style={TD}>{p.std_hourly ? `${W(p.std_hourly)} 원` : '—'}</td>
+            </tr>
+            <tr>
+              <th style={TH}>소정근로</th>
+              <td style={TD}>{p.std_hrs || 209} h</td>
+              <th style={TH}>연장근로</th>
+              <td style={TD}>{fmtTime(p.pay_ot_hrs, p.pay_ot_min) || '0h'}</td>
+              <th style={TH}>휴일근로</th>
+              <td style={TD}>{fmtTime(p.pay_holiday_hrs, p.pay_holiday_min) || '0h'}</td>
             </tr>
           </tbody>
         </table>
 
-        {/* 지급 / 공제 테이블 */}
-        <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: 14 }}>
+        {/* ── 지급 / 공제 테이블 ── */}
+        <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: 8 }}>
           <thead>
             <tr>
-              <th colSpan={2} style={{ background: '#000', color: '#fff', border: BRD, padding: '6px 10px',
-                textAlign: 'center', fontWeight: 700, fontSize: 11, letterSpacing: 2 }}>지  급  항  목</th>
-              <th colSpan={2} style={{ background: '#000', color: '#fff', border: BRD, padding: '6px 10px',
-                textAlign: 'center', fontWeight: 700, fontSize: 11, letterSpacing: 2 }}>공  제  항  목</th>
+              <th colSpan={2} style={{ background: '#222', color: '#fff', border: B, padding: '5px', textAlign: 'center', letterSpacing: 3, fontSize: 11 }}>
+                지   급   내   역
+              </th>
+              <th colSpan={2} style={{ background: '#222', color: '#fff', border: B, padding: '5px', textAlign: 'center', letterSpacing: 3, fontSize: 11 }}>
+                공   제   내   역
+              </th>
             </tr>
-            <tr style={{ background: '#f0f0f0' }}>
-              <th style={{ border: BRD_LIGHT, padding: '4px 10px', fontSize: 11, fontWeight: 700, width: '25%', textAlign: 'center' }}>항목</th>
-              <th style={{ border: BRD_LIGHT, padding: '4px 10px', fontSize: 11, fontWeight: 700, width: '25%', textAlign: 'center' }}>금액(원)</th>
-              <th style={{ border: BRD_LIGHT, padding: '4px 10px', fontSize: 11, fontWeight: 700, width: '25%', textAlign: 'center' }}>항목</th>
-              <th style={{ border: BRD_LIGHT, padding: '4px 10px', fontSize: 11, fontWeight: 700, width: '25%', textAlign: 'center' }}>금액(원)</th>
+            <tr style={{ background: '#ddd' }}>
+              <th style={{ border: BL, padding: '3px 8px', textAlign: 'center', width: '26%', fontWeight: 700 }}>항&nbsp;&nbsp;&nbsp;목</th>
+              <th style={{ border: BL, padding: '3px 8px', textAlign: 'right', width: '24%', fontWeight: 700 }}>금&nbsp;&nbsp;&nbsp;액</th>
+              <th style={{ border: BL, padding: '3px 8px', textAlign: 'center', width: '26%', fontWeight: 700 }}>항&nbsp;&nbsp;&nbsp;목</th>
+              <th style={{ border: BL, padding: '3px 8px', textAlign: 'right', width: '24%', fontWeight: 700 }}>금&nbsp;&nbsp;&nbsp;액</th>
             </tr>
           </thead>
           <tbody>
             {pad(payItems).map((pay, i) => {
               const ded = pad(deductItems)[i]
               return (
-                <tr key={i} style={{ background: i % 2 === 0 ? '#fff' : '#fafafa' }}>
+                <tr key={i} style={{ background: i % 2 === 0 ? '#fff' : '#f7f7f7' }}>
                   {pay ? (
                     <>
-                      <td style={{ border: BRD_LIGHT, padding: '5px 10px' }}>
+                      <td style={TD}>
                         {pay.label}
-                        {pay.sub && <span style={{ display: 'block', fontSize: 10, color: '#555' }}>{pay.sub}</span>}
+                        {pay.sub && <span style={{ fontSize: 9, color: '#666', marginLeft: 4 }}>{pay.sub}</span>}
                       </td>
-                      <td style={{ border: BRD_LIGHT, padding: '5px 10px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
-                        {W(pay.val)}
-                      </td>
+                      <td style={TDR}>{W(pay.val)}</td>
                     </>
                   ) : (
-                    <><td style={{ border: BRD_LIGHT, padding: '5px 10px' }}>&nbsp;</td><td style={{ border: BRD_LIGHT }} /></>
+                    <><td style={{ ...TD, color: '#ccc' }}>—</td><td style={TD} /></>
                   )}
                   {ded ? (
                     <>
-                      <td style={{ border: BRD_LIGHT, padding: '5px 10px' }}>{ded.label}</td>
-                      <td style={{ border: BRD_LIGHT, padding: '5px 10px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
-                        {W(ded.val)}
-                      </td>
+                      <td style={TD}>{ded.label}</td>
+                      <td style={TDR}>{W(ded.val)}</td>
                     </>
                   ) : (
-                    <><td style={{ border: BRD_LIGHT, padding: '5px 10px' }}>&nbsp;</td><td style={{ border: BRD_LIGHT }} /></>
+                    <><td style={{ ...TD, color: '#ccc' }}>—</td><td style={TD} /></>
                   )}
                 </tr>
               )
             })}
-            {/* 합계행 */}
-            <tr style={{ background: '#e8e8e8', fontWeight: 700 }}>
-              <td style={{ border: BRD, padding: '6px 10px', textAlign: 'center', letterSpacing: 1 }}>지 급 합 계</td>
-              <td style={{ border: BRD, padding: '6px 10px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{W(p.gross_pay)}</td>
-              <td style={{ border: BRD, padding: '6px 10px', textAlign: 'center', letterSpacing: 1 }}>공 제 합 계</td>
-              <td style={{ border: BRD, padding: '6px 10px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{W(p.total_deduct)}</td>
-            </tr>
           </tbody>
+          <tfoot>
+            <tr style={{ background: '#ddd', fontWeight: 700 }}>
+              <td style={{ border: B, padding: '4px 8px', textAlign: 'center', letterSpacing: 2 }}>지 급 합 계</td>
+              <td style={{ border: B, padding: '4px 8px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{W(p.gross_pay)}</td>
+              <td style={{ border: B, padding: '4px 8px', textAlign: 'center', letterSpacing: 2 }}>공 제 합 계</td>
+              <td style={{ border: B, padding: '4px 8px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{W(p.total_deduct)}</td>
+            </tr>
+          </tfoot>
         </table>
 
-        {/* 차감지급액 */}
-        <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: 16 }}>
+        {/* ── 차감지급액 ── */}
+        <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: 14 }}>
           <tbody>
             <tr>
-              <td style={{ border: '2px solid #000', background: '#000', color: '#fff',
-                padding: '8px 16px', fontWeight: 700, fontSize: 13, letterSpacing: 3, width: '40%', textAlign: 'center' }}>
+              <td style={{ background: '#111', color: '#fff', border: '1px solid #000', padding: '7px 12px',
+                textAlign: 'center', fontWeight: 700, fontSize: 12, letterSpacing: 4, width: '36%' }}>
                 차  감  지  급  액
               </td>
-              <td style={{ border: '2px solid #000', padding: '8px 20px',
-                textAlign: 'right', fontSize: 20, fontWeight: 700, letterSpacing: 1, fontVariantNumeric: 'tabular-nums' }}>
+              <td style={{ border: '2px solid #000', padding: '7px 16px',
+                textAlign: 'right', fontSize: 18, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
                 {W(p.net_pay)} 원
+              </td>
+              <td style={{ border: '1px solid #aaa', padding: '6px 10px', fontSize: 10, color: '#444', width: '26%' }}>
+                과 세 표 준 : {W(taxable)} 원<br />
+                비 과 세 합 계 : {W(nontax)} 원
               </td>
             </tr>
           </tbody>
         </table>
 
-        {/* 서명란 */}
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 60, fontSize: 12, color: '#333', marginBottom: 8 }}>
-          <span>확&nbsp;&nbsp;인&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;(인)</span>
-          <span>수&nbsp;령&nbsp;인&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;(인)</span>
+        {/* ── 서명란 ── */}
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11, marginBottom: 8 }}>
+          <tbody>
+            <tr>
+              {[['확 인 자',''], ['대 표 이 사',''], ['수 령 인','']].map(([label]) => (
+                <td key={label} style={{ border: '1px solid #aaa', padding: '5px 12px', textAlign: 'center', width: '33%' }}>
+                  <div style={{ marginBottom: 18 }}>{label}</div>
+                  <div style={{ fontSize: 10, color: '#999' }}>(인)</div>
+                </td>
+              ))}
+            </tr>
+          </tbody>
+        </table>
+
+        <div style={{ textAlign: 'center', fontSize: 9, color: '#888', borderTop: '1px solid #ddd', paddingTop: 6 }}>
+          본 명세서는 소득세법 시행규칙 제100조에 의거 발행한 급여명세서입니다.
         </div>
 
-        <div className="modal-footer ps-no-print" style={{ marginTop: 16 }}>
+        <div className="modal-footer ps-no-print" style={{ marginTop: 14 }}>
           <button className="btn btn-outline" onClick={onClose}>닫기</button>
           <button className="btn btn-primary" onClick={() => window.print()}>인쇄</button>
         </div>
