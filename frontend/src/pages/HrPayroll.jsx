@@ -14,9 +14,8 @@ export default function HrPayroll() {
   const [year, setYear] = useState(now.getFullYear())
   const [month, setMonth] = useState(now.getMonth() + 1)
   const [payrolls, setPayrolls] = useState([])
-  const [loading, setLoading] = useState(false)
   const [calcLoading, setCalcLoading] = useState(false)
-  const [selected, setSelected] = useState(null)  // 명세서 팝업
+  const [selected, setSelected] = useState(null)
 
   const load = useCallback(() => {
     api.get(`/hr/payroll?year=${year}&month=${month}`).then(r => setPayrolls(r.data)).catch(() => setPayrolls([]))
@@ -37,7 +36,7 @@ export default function HrPayroll() {
     }
   }
 
-  const confirm = async (id) => {
+  const confirmPay = async (id) => {
     await api.patch(`/hr/payroll/${id}/confirm`).catch(e => alert(e.response?.data?.detail || e.message))
     load()
   }
@@ -55,7 +54,6 @@ export default function HrPayroll() {
 
   return (
     <div style={{ padding: '16px 20px' }}>
-      {/* 헤더 */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
         <h2 style={{ margin: 0, fontSize: 18, fontWeight: 800 }}>월급 명세서</h2>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
@@ -72,7 +70,6 @@ export default function HrPayroll() {
         </div>
       </div>
 
-      {/* 집계 요약 */}
       {payrolls.length > 0 && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 14 }}>
           {[
@@ -88,31 +85,24 @@ export default function HrPayroll() {
         </div>
       )}
 
-      {/* 급여 테이블 */}
       <div className="table-wrap">
         <table className="table">
           <thead>
             <tr>
-              <th>사번</th>
-              <th>이름</th>
-              <th>부서</th>
-              <th>고용형태</th>
+              <th>사번</th><th>이름</th><th>부서</th><th>고용형태</th>
               <th style={{ textAlign: 'right' }}>기본급</th>
               <th style={{ textAlign: 'right' }}>연장수당</th>
               <th style={{ textAlign: 'right' }}>총지급</th>
               <th style={{ textAlign: 'right' }}>총공제</th>
               <th style={{ textAlign: 'right' }}>실수령액</th>
-              <th>상태</th>
-              <th></th>
+              <th>상태</th><th></th>
             </tr>
           </thead>
           <tbody>
             {payrolls.length === 0 && (
-              <tr>
-                <td colSpan={11} style={{ textAlign: 'center', color: '#94a3b8', padding: 32 }}>
-                  급여 데이터가 없습니다. <strong>자동 계산</strong> 버튼을 눌러 계산하세요.
-                </td>
-              </tr>
+              <tr><td colSpan={11} style={{ textAlign: 'center', color: '#94a3b8', padding: 32 }}>
+                급여 데이터가 없습니다. <strong>자동 계산</strong> 버튼을 눌러 계산하세요.
+              </td></tr>
             )}
             {payrolls.map(p => {
               const st = STATUS_STYLE[p.status] || STATUS_STYLE['계산중']
@@ -140,7 +130,7 @@ export default function HrPayroll() {
                     <button className="btn btn-sm" style={{ marginRight: 4 }} onClick={() => setSelected(p)}>명세서</button>
                     {p.status === '계산중' && (
                       <button className="btn btn-sm" style={{ marginRight: 4, background: '#dbeafe', color: '#1d4ed8', border: 'none' }}
-                        onClick={() => confirm(p.id)}>확정</button>
+                        onClick={() => confirmPay(p.id)}>확정</button>
                     )}
                     {p.status === '확정' && (
                       <button className="btn btn-sm" style={{ background: '#dcfce7', color: '#16a34a', border: 'none' }}
@@ -154,151 +144,172 @@ export default function HrPayroll() {
         </table>
       </div>
 
-      {/* 명세서 팝업 */}
       {selected && <PayslipModal payroll={selected} onClose={() => setSelected(null)} />}
     </div>
   )
 }
 
+/* ── 대기업형 흑백 급여명세서 ──────────────────────────────────────── */
 function PayslipModal({ payroll: p, onClose }) {
-  const print = () => window.print()
+  const W = (n) => Number(n || 0).toLocaleString()
+  const fmtTime = (h, m) => (h || m) ? (m ? `${h}h ${m}m` : `${h}h`) : null
 
-  const fmtTime = (h, m) => {
-    if (!h && !m) return null
-    return m ? `${h}h ${m}m` : `${h}h`
-  }
-
-  // 지급 항목 (산출식 포함)
   const payItems = [
-    {
-      label: '기본급',
-      formula: p.std_hourly
-        ? `통상시급 ${Number(p.std_hourly).toLocaleString()}원 × ${p.std_hrs || 209}h`
-        : null,
-      value: p.base_pay,
-    },
-    {
-      label: '연장수당',
-      formula: fmtTime(p.pay_ot_hrs, p.pay_ot_min)
-        ? `${fmtTime(p.pay_ot_hrs, p.pay_ot_min)} × 1.5`
-        : null,
-      value: p.ot_pay,
-    },
-    {
-      label: '심야수당',
-      formula: p.pay_night_hrs
-        ? `${p.pay_night_hrs}h × 0.5`
-        : null,
-      value: p.night_pay,
-    },
-    {
-      label: '휴일수당',
-      formula: fmtTime(p.pay_holiday_hrs, p.pay_holiday_min)
-        ? `${fmtTime(p.pay_holiday_hrs, p.pay_holiday_min)} × 1.5`
-        : null,
-      value: p.holiday_pay,
-    },
-    { label: '식대(비과세)',      formula: null, value: p.meal_allow },
-    { label: '차량유지비(비과세)', formula: null, value: p.vehicle_allow },
-    { label: '성과/상여',         formula: null, value: p.bonus },
-  ].filter(item => Number(item.value) > 0)
+    { label: '기본급',      sub: p.std_hourly ? `통상시급 ${W(p.std_hourly)}원 × ${p.std_hrs||209}h` : null, val: p.base_pay },
+    { label: '연장수당',    sub: fmtTime(p.pay_ot_hrs, p.pay_ot_min) ? `${fmtTime(p.pay_ot_hrs, p.pay_ot_min)} × 1.5` : null, val: p.ot_pay },
+    { label: '심야수당',    sub: p.pay_night_hrs ? `${p.pay_night_hrs}h × 0.5` : null, val: p.night_pay },
+    { label: '휴일수당',    sub: fmtTime(p.pay_holiday_hrs, p.pay_holiday_min) ? `${fmtTime(p.pay_holiday_hrs, p.pay_holiday_min)} × 1.5` : null, val: p.holiday_pay },
+    { label: '식대',        sub: '비과세', val: p.meal_allow },
+    { label: '차량유지비',  sub: '비과세', val: p.vehicle_allow },
+    { label: '성과/상여',   sub: null, val: p.bonus },
+  ].filter(r => Number(r.val) > 0)
 
   const deductItems = [
-    { label: '국민연금',  value: p.deduct_pension },
-    { label: '건강보험',  value: p.deduct_health },
-    { label: '장기요양',  value: p.deduct_lcare },
-    { label: '고용보험',  value: p.deduct_employ },
-    { label: '갑근세',    value: p.deduct_income_tax },
-    { label: '주민세',    value: p.deduct_local_tax },
-  ].filter(item => Number(item.value) > 0)
+    { label: '국민연금', val: p.deduct_pension },
+    { label: '건강보험', val: p.deduct_health },
+    { label: '장기요양', val: p.deduct_lcare },
+    { label: '고용보험', val: p.deduct_employ },
+    { label: '갑근세',   val: p.deduct_income_tax },
+    { label: '주민세',   val: p.deduct_local_tax },
+  ].filter(r => Number(r.val) > 0)
+
+  const rows = Math.max(payItems.length, deductItems.length)
+  const pad = (arr) => [...arr, ...Array(Math.max(0, rows - arr.length)).fill(null)]
+
+  const BRD = '1px solid #333'
+  const BRD_LIGHT = '1px solid #bbb'
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" style={{ maxWidth: 520, width: '100%' }} onClick={e => e.stopPropagation()}>
-        <style>{`
-          @media print {
-            body > *:not(.modal-overlay) { display: none !important; }
-            .modal-overlay { position: static !important; background: none !important; }
-            .modal { box-shadow: none !important; border: 1px solid #ccc; max-width: 100% !important; }
-            .no-print { display: none !important; }
-          }
-        `}</style>
+      <style>{`
+        @media print {
+          body > *:not(.ps-overlay) { display: none !important; }
+          .ps-overlay { position: static !important; background: none !important; display: block !important; }
+          .ps-modal { box-shadow: none !important; border: none !important; max-width: 100% !important; }
+          .ps-no-print { display: none !important; }
+          @page { margin: 15mm; size: A4 portrait; }
+        }
+        .ps-overlay { z-index: 1000; }
+      `}</style>
 
-        {/* 명세서 헤더 */}
-        <div style={{ textAlign: 'center', marginBottom: 16, borderBottom: '2px solid #1d4ed8', paddingBottom: 12 }}>
-          <div style={{ fontSize: 18, fontWeight: 800, color: '#1d4ed8', letterSpacing: 4 }}>급 여 명 세 서</div>
-          <div style={{ fontSize: 12, color: '#64748b', marginTop: 4 }}>{p.year}년 {p.month}월분</div>
+      <div className="modal ps-modal ps-overlay"
+        style={{ maxWidth: 640, width: '100%', background: '#fff', color: '#000',
+          fontFamily: '"Malgun Gothic","Apple SD Gothic Neo",sans-serif', fontSize: 12 }}
+        onClick={e => e.stopPropagation()}>
+
+        {/* 제목 */}
+        <div style={{ textAlign: 'center', borderBottom: '3px double #000', paddingBottom: 12, marginBottom: 16 }}>
+          <div style={{ fontSize: 22, fontWeight: 700, letterSpacing: 8, color: '#000' }}>급  여  명  세  서</div>
+          <div style={{ fontSize: 11, color: '#444', marginTop: 4, letterSpacing: 2 }}>{p.year}년 {p.month}월분</div>
         </div>
 
         {/* 사원 정보 */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 6, marginBottom: 14,
-          background: '#f8fafc', borderRadius: 6, padding: '8px 12px', fontSize: 12 }}>
-          {[['사번', p.emp_id], ['이름', p.name], ['부서', p.dept || '—'], ['직급', p.position || '—']].map(([k, v]) => (
-            <div key={k}>
-              <div style={{ color: '#94a3b8', fontSize: 10, marginBottom: 2 }}>{k}</div>
-              <div style={{ fontWeight: 700 }}>{v}</div>
-            </div>
-          ))}
+        <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: 14 }}>
+          <tbody>
+            <tr>
+              {[['사  번', p.emp_id], ['성  명', p.name], ['부  서', p.dept || '—'], ['직  급', p.position || '—']].map(([k, v]) => (
+                <>
+                  <th key={k} style={{ background: '#222', color: '#fff', border: BRD, padding: '5px 10px',
+                    textAlign: 'center', fontWeight: 700, fontSize: 11, width: 68, letterSpacing: 1 }}>{k}</th>
+                  <td key={v} style={{ border: BRD, padding: '5px 10px', minWidth: 90 }}>{v}</td>
+                </>
+              ))}
+            </tr>
+            <tr>
+              <th style={{ background: '#222', color: '#fff', border: BRD, padding: '5px 10px', textAlign: 'center', fontWeight: 700, fontSize: 11 }}>고용형태</th>
+              <td style={{ border: BRD, padding: '5px 10px' }}>{p.emp_type === 'annual' ? '연봉제' : '시급제'}</td>
+              <th style={{ background: '#222', color: '#fff', border: BRD, padding: '5px 10px', textAlign: 'center', fontWeight: 700, fontSize: 11 }}>통상시급</th>
+              <td style={{ border: BRD, padding: '5px 10px' }}>{p.std_hourly ? `${W(p.std_hourly)} 원` : '—'}</td>
+              <th style={{ background: '#222', color: '#fff', border: BRD, padding: '5px 10px', textAlign: 'center', fontWeight: 700, fontSize: 11 }}>소정근로</th>
+              <td style={{ border: BRD, padding: '5px 10px' }}>{p.std_hrs || 209}h / 월</td>
+              <th style={{ background: '#222', color: '#fff', border: BRD, padding: '5px 10px', textAlign: 'center', fontWeight: 700, fontSize: 11 }}>연장시간</th>
+              <td style={{ border: BRD, padding: '5px 10px' }}>{fmtTime(p.pay_ot_hrs, p.pay_ot_min) || '0h'}</td>
+            </tr>
+          </tbody>
+        </table>
+
+        {/* 지급 / 공제 테이블 */}
+        <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: 14 }}>
+          <thead>
+            <tr>
+              <th colSpan={2} style={{ background: '#000', color: '#fff', border: BRD, padding: '6px 10px',
+                textAlign: 'center', fontWeight: 700, fontSize: 11, letterSpacing: 2 }}>지  급  항  목</th>
+              <th colSpan={2} style={{ background: '#000', color: '#fff', border: BRD, padding: '6px 10px',
+                textAlign: 'center', fontWeight: 700, fontSize: 11, letterSpacing: 2 }}>공  제  항  목</th>
+            </tr>
+            <tr style={{ background: '#f0f0f0' }}>
+              <th style={{ border: BRD_LIGHT, padding: '4px 10px', fontSize: 11, fontWeight: 700, width: '25%', textAlign: 'center' }}>항목</th>
+              <th style={{ border: BRD_LIGHT, padding: '4px 10px', fontSize: 11, fontWeight: 700, width: '25%', textAlign: 'center' }}>금액(원)</th>
+              <th style={{ border: BRD_LIGHT, padding: '4px 10px', fontSize: 11, fontWeight: 700, width: '25%', textAlign: 'center' }}>항목</th>
+              <th style={{ border: BRD_LIGHT, padding: '4px 10px', fontSize: 11, fontWeight: 700, width: '25%', textAlign: 'center' }}>금액(원)</th>
+            </tr>
+          </thead>
+          <tbody>
+            {pad(payItems).map((pay, i) => {
+              const ded = pad(deductItems)[i]
+              return (
+                <tr key={i} style={{ background: i % 2 === 0 ? '#fff' : '#fafafa' }}>
+                  {pay ? (
+                    <>
+                      <td style={{ border: BRD_LIGHT, padding: '5px 10px' }}>
+                        {pay.label}
+                        {pay.sub && <span style={{ display: 'block', fontSize: 10, color: '#555' }}>{pay.sub}</span>}
+                      </td>
+                      <td style={{ border: BRD_LIGHT, padding: '5px 10px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                        {W(pay.val)}
+                      </td>
+                    </>
+                  ) : (
+                    <><td style={{ border: BRD_LIGHT, padding: '5px 10px' }}>&nbsp;</td><td style={{ border: BRD_LIGHT }} /></>
+                  )}
+                  {ded ? (
+                    <>
+                      <td style={{ border: BRD_LIGHT, padding: '5px 10px' }}>{ded.label}</td>
+                      <td style={{ border: BRD_LIGHT, padding: '5px 10px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                        {W(ded.val)}
+                      </td>
+                    </>
+                  ) : (
+                    <><td style={{ border: BRD_LIGHT, padding: '5px 10px' }}>&nbsp;</td><td style={{ border: BRD_LIGHT }} /></>
+                  )}
+                </tr>
+              )
+            })}
+            {/* 합계행 */}
+            <tr style={{ background: '#e8e8e8', fontWeight: 700 }}>
+              <td style={{ border: BRD, padding: '6px 10px', textAlign: 'center', letterSpacing: 1 }}>지 급 합 계</td>
+              <td style={{ border: BRD, padding: '6px 10px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{W(p.gross_pay)}</td>
+              <td style={{ border: BRD, padding: '6px 10px', textAlign: 'center', letterSpacing: 1 }}>공 제 합 계</td>
+              <td style={{ border: BRD, padding: '6px 10px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{W(p.total_deduct)}</td>
+            </tr>
+          </tbody>
+        </table>
+
+        {/* 차감지급액 */}
+        <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: 16 }}>
+          <tbody>
+            <tr>
+              <td style={{ border: '2px solid #000', background: '#000', color: '#fff',
+                padding: '8px 16px', fontWeight: 700, fontSize: 13, letterSpacing: 3, width: '40%', textAlign: 'center' }}>
+                차  감  지  급  액
+              </td>
+              <td style={{ border: '2px solid #000', padding: '8px 20px',
+                textAlign: 'right', fontSize: 20, fontWeight: 700, letterSpacing: 1, fontVariantNumeric: 'tabular-nums' }}>
+                {W(p.net_pay)} 원
+              </td>
+            </tr>
+          </tbody>
+        </table>
+
+        {/* 서명란 */}
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 60, fontSize: 12, color: '#333', marginBottom: 8 }}>
+          <span>확&nbsp;&nbsp;인&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;(인)</span>
+          <span>수&nbsp;령&nbsp;인&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;(인)</span>
         </div>
 
-        {/* 지급/공제 2단 */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
-          {/* 지급 */}
-          <div>
-            <div style={{ fontSize: 11, fontWeight: 700, color: '#1d4ed8', marginBottom: 6,
-              borderBottom: '1px solid #bfdbfe', paddingBottom: 4 }}>지 급 항 목</div>
-            {payItems.map(({ label, formula, value }) => (
-              <div key={label} style={{ display: 'flex', justifyContent: 'space-between',
-                fontSize: 12, marginBottom: 4, alignItems: 'flex-start' }}>
-                <div>
-                  <div style={{ color: '#1e293b' }}>{label}</div>
-                  {formula && <div style={{ fontSize: 10, color: '#94a3b8' }}>{formula}</div>}
-                </div>
-                <span style={{ fontWeight: 600, whiteSpace: 'nowrap', paddingLeft: 4 }}>
-                  {Number(value).toLocaleString()}
-                </span>
-              </div>
-            ))}
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13,
-              fontWeight: 800, color: '#1d4ed8', borderTop: '1px solid #bfdbfe',
-              paddingTop: 6, marginTop: 4 }}>
-              <span>지급합계</span>
-              <span>{Number(p.gross_pay).toLocaleString()}</span>
-            </div>
-          </div>
-
-          {/* 공제 */}
-          <div>
-            <div style={{ fontSize: 11, fontWeight: 700, color: '#dc2626', marginBottom: 6,
-              borderBottom: '1px solid #fecaca', paddingBottom: 4 }}>공 제 항 목</div>
-            {deductItems.map(({ label, value }) => (
-              <div key={label} style={{ display: 'flex', justifyContent: 'space-between',
-                fontSize: 12, marginBottom: 4 }}>
-                <span style={{ color: '#1e293b' }}>{label}</span>
-                <span style={{ fontWeight: 600 }}>{Number(value).toLocaleString()}</span>
-              </div>
-            ))}
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13,
-              fontWeight: 800, color: '#dc2626', borderTop: '1px solid #fecaca',
-              paddingTop: 6, marginTop: 4 }}>
-              <span>공제합계</span>
-              <span>{Number(p.total_deduct).toLocaleString()}</span>
-            </div>
-          </div>
-        </div>
-
-        {/* 실수령액 */}
-        <div style={{ background: '#eff6ff', borderRadius: 8, padding: '12px 16px',
-          display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-          <span style={{ fontSize: 13, fontWeight: 700, color: '#1d4ed8' }}>차 감 지 급 액</span>
-          <span style={{ fontSize: 24, fontWeight: 900, color: '#1d4ed8' }}>
-            {Number(p.net_pay).toLocaleString()}<span style={{ fontSize: 13 }}>원</span>
-          </span>
-        </div>
-
-        <div className="modal-footer no-print">
+        <div className="modal-footer ps-no-print" style={{ marginTop: 16 }}>
           <button className="btn btn-outline" onClick={onClose}>닫기</button>
-          <button className="btn btn-primary" onClick={print}>인쇄</button>
+          <button className="btn btn-primary" onClick={() => window.print()}>인쇄</button>
         </div>
       </div>
     </div>
