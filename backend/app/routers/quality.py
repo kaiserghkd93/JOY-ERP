@@ -129,8 +129,10 @@ def post_inspection(body: InspectionCreate, db: Session = Depends(get_db), user:
 
 @router.get("/inspections", response_model=list[InspectionOut])
 def list_inspections(limit: int = 500, offset: int = 0, db: Session = Depends(get_db)):
-    rows = db.query(Inspection).order_by(Inspection.inspect_date.desc()).offset(offset).limit(limit).all()
-    # 개별 직렬화 — 문제 행을 건너뛰어 나머지 데이터 보호
+    try:
+        rows = db.query(Inspection).order_by(Inspection.inspect_date.desc()).offset(offset).limit(limit).all()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"DB조회오류: {type(e).__name__}: {e}")
     result = []
     for row in rows:
         try:
