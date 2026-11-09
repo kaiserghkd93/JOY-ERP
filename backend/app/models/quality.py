@@ -11,6 +11,17 @@ class InspectionResult(str, enum.Enum):
     fail = "불합격"
     partial = "부분합격"
 
+    @classmethod
+    def _missing_(cls, value):
+        # 레거시 영문 키 이름(구버전 DB 값) → 현재 enum 멤버로 매핑
+        _legacy = {
+            "pending_insp": cls.pending_insp,
+            "pass_": cls.pass_,
+            "fail": cls.fail,
+            "partial": cls.partial,
+        }
+        return _legacy.get(value)
+
 
 class DisposalType(str, enum.Enum):
     return_ = "반품"
@@ -18,6 +29,17 @@ class DisposalType(str, enum.Enum):
     concession = "특채"
     pending = "보류"
     accepted = "합격"
+
+    @classmethod
+    def _missing_(cls, value):
+        _legacy = {
+            "return_": cls.return_,
+            "scrap": cls.scrap,
+            "concession": cls.concession,
+            "pending": cls.pending,
+            "accepted": cls.accepted,
+        }
+        return _legacy.get(value)
 
 
 class ClaimStatus(str, enum.Enum):

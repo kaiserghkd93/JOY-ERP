@@ -22,8 +22,8 @@ class InspectionOut(BaseModel):
     inspect_qty: int
     pass_qty: int
     fail_qty: int
-    result: InspectionResult
-    disposal: DisposalType
+    result: InspectionResult | None = None
+    disposal: DisposalType | None = None
     defect_note: str | None
     approval_status: ApprovalStatus | None = None
     inspector_id: str | None = None
