@@ -321,20 +321,6 @@ function PayslipModal({ payroll: p, onClose }) {
           </tbody>
         </table>
 
-        {/* ── 서명란 ── */}
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11, marginBottom: 8 }}>
-          <tbody>
-            <tr>
-              {[['확 인 자',''], ['대 표 이 사',''], ['수 령 인','']].map(([label]) => (
-                <td key={label} style={{ border: '1px solid #aaa', padding: '5px 12px', textAlign: 'center', width: '33%' }}>
-                  <div style={{ marginBottom: 18 }}>{label}</div>
-                  <div style={{ fontSize: 10, color: '#999' }}>(인)</div>
-                </td>
-              ))}
-            </tr>
-          </tbody>
-        </table>
-
         <div style={{ textAlign: 'center', fontSize: 9, color: '#888', borderTop: '1px solid #ddd', paddingTop: 6 }}>
           본 명세서는 소득세법 시행규칙 제100조에 의거 발행한 급여명세서입니다.
         </div>
