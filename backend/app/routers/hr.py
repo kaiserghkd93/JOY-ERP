@@ -1,25 +1,59 @@
 """
 인사(HR) 라우터
 - 사원 마스터 CRUD
-- 출퇴근 일별 관리 + 캡스 Excel 업로드
-- 월 급여 자동계산 + 명세서
+- 출퇴근 일별 관리 + 캡스 Excel 업로드 (시간 + 분 단위 추적)
+- 월 급여 자동계산
+
+[급여 계산 기준]
+ 연봉제: 통상시급 = 월기본급 / 월소정근로시간(기본209h)
+ 시급제: 통상시급 = 직접 등록한 시급
+ 기본급  = 통상시급 × 209h
+ 연장수당 = 통상시급 × 연장h × 1.5 + 통상시급 × 연장분/60 × 1.5
+ 심야수당 = 통상시급 × 야간h × 0.5  (기본급에 포함된 부분 제외, 추가분만)
+ 휴일수당 = 통상시급 × 휴일h × 1.5 + 통상시급 × 휴일분/60 × 1.5
+ 차량유지비/식대 = 사원별 고정 비과세 수당
+ 과세표준 = 총지급 - min(식대,200000) - min(차량,200000)
+ 4대보험 = 과세표준 × 법정요율 (10원 단위 반올림)
 """
 from datetime import date, datetime, time as dtime
-from decimal import Decimal
-from typing import Optional, List
+from decimal import Decimal, ROUND_HALF_UP
+from typing import Optional
 from io import BytesIO
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query
 from sqlalchemy.orm import Session
-from sqlalchemy import func, and_, Integer, cast
+from sqlalchemy import func, Integer, cast
 from pydantic import BaseModel
 
 from app.database import get_db
 from app.routers.auth import get_current_user
-from app.models.auth import User
 from app.models.hr import Employee, Attendance, Payroll
 
 router = APIRouter(prefix="/hr", tags=["인사"])
+
+# ── 2026 법정 보험요율 (근로자 부담) ──────────────────────────────────
+RATE_PENSION  = Decimal("0.045")     # 국민연금 4.5%
+RATE_HEALTH   = Decimal("0.03545")   # 건강보험 3.545%
+RATE_LCARE    = Decimal("0.1295")    # 장기요양 (건강보험료의 12.95%)
+RATE_EMPLOY   = Decimal("0.009")     # 고용보험 0.9%
+NON_TAX_MEAL  = Decimal("200000")    # 식대 비과세 한도
+NON_TAX_VEH   = Decimal("200000")    # 차량유지비 비과세 한도
+
+
+def _round10(v: Decimal) -> Decimal:
+    """10원 단위 반올림"""
+    return (v / 10).quantize(Decimal("1"), rounding=ROUND_HALF_UP) * 10
+
+
+def _income_tax(taxable: Decimal) -> Decimal:
+    """소득세 간이세액표 (1인 기준, 2024 기준)"""
+    g = int(taxable)
+    if g <= 1_060_000: return Decimal(0)
+    if g <= 1_500_000: return _round10(Decimal(round(g * 0.0106)))
+    if g <= 3_000_000: return _round10(Decimal(round((g - 1_500_000) * 0.15 + 15900)))
+    if g <= 4_500_000: return _round10(Decimal(round((g - 3_000_000) * 0.24 + 240900)))
+    if g <= 8_000_000: return _round10(Decimal(round((g - 4_500_000) * 0.35 + 600900)))
+    return _round10(Decimal(round((g - 8_000_000) * 0.38 + 1_825_900)))
 
 
 # ── 사원 마스터 ────────────────────────────────────────────────────────
@@ -31,11 +65,13 @@ class EmployeeIn(BaseModel):
     position: Optional[str] = None
     hire_date: Optional[date] = None
     retire_date: Optional[date] = None
-    emp_type: str = "annual"           # annual / hourly
-    base_salary: float = 0
-    hourly_rate: float = 0
+    emp_type: str = "annual"              # annual / hourly
+    base_salary: float = 0               # 연봉제: 월 기본급
+    hourly_rate: float = 0               # 시급제: 시급
     weekly_hours: int = 40
-    ot_rate: float = 1.5
+    std_monthly_hours: int = 209
+    meal_allow_fixed: float = 200000
+    vehicle_allow_fixed: float = 200000
     resident_no: Optional[str] = None
     phone: Optional[str] = None
     bank: Optional[str] = None
@@ -89,8 +125,14 @@ def deactivate_employee(emp_id: str, db: Session = Depends(get_db), _=Depends(ge
 class AttendanceIn(BaseModel):
     emp_id: str
     work_date: date
-    check_in: Optional[str] = None    # "08:30"
-    check_out: Optional[str] = None   # "17:30"
+    check_in: Optional[str] = None      # "08:30"
+    check_out: Optional[str] = None     # "17:30"
+    ot_hrs: int = 0                     # 연장 시간(h) — 수기 입력
+    ot_min: int = 0                     # 연장 분(m)
+    night_hrs: int = 0                  # 야간 시간(h)
+    night_min: int = 0
+    holiday_hrs: int = 0                # 휴일 시간(h)
+    holiday_min: int = 0
     holiday: bool = False
     absent: bool = False
     half_day: bool = False
@@ -101,46 +143,20 @@ def _parse_time(s: Optional[str]) -> Optional[dtime]:
     if not s:
         return None
     try:
-        parts = s.replace(":", "").strip()
-        if len(parts) == 4:
-            return dtime(int(parts[:2]), int(parts[2:]))
-        return None
+        s = s.strip().replace(".", ":")
+        parts = s.split(":")
+        return dtime(int(parts[0]), int(parts[1]) if len(parts) > 1 else 0)
     except Exception:
         return None
 
 
-def _calc_hours(check_in: Optional[dtime], check_out: Optional[dtime],
-                std_start: dtime = dtime(8, 30), std_end: dtime = dtime(17, 30),
-                break_hrs: float = 1.0) -> dict:
-    """실근무·연장·야간 시간 계산"""
+def _total_work_hrs(check_in: Optional[dtime], check_out: Optional[dtime],
+                    break_hrs: float = 1.0) -> float:
     if not check_in or not check_out:
-        return {"work_hrs": 0.0, "ot_hrs": 0.0, "night_hrs": 0.0}
-
-    def to_min(t: dtime) -> int:
-        return t.hour * 60 + t.minute
-
-    total_min = max(0, to_min(check_out) - to_min(check_in)) - int(break_hrs * 60)
-    work_min = max(0, total_min)
-
-    std_min = max(0, to_min(std_end) - to_min(std_in := std_start)) - int(break_hrs * 60)
-    ot_min = max(0, work_min - std_min)
-
-    # 야간: 22:00 ~ 06:00
-    night_start = 22 * 60
-    night_end_next = 6 * 60 + 24 * 60
-    out_min = to_min(check_out)
-    in_min = to_min(check_in)
-    night_min = 0
-    if out_min > night_start:
-        night_min = out_min - night_start
-    if in_min < 6 * 60:
-        night_min += 6 * 60 - in_min
-
-    return {
-        "work_hrs": round(work_min / 60, 2),
-        "ot_hrs": round(ot_min / 60, 2),
-        "night_hrs": round(min(night_min, work_min) / 60, 2),
-    }
+        return 0.0
+    total_min = (check_out.hour * 60 + check_out.minute) - (check_in.hour * 60 + check_in.minute)
+    work_min = max(0, total_min - int(break_hrs * 60))
+    return round(work_min / 60, 2)
 
 
 @router.get("/attendance")
@@ -149,23 +165,31 @@ def list_attendance(
     emp_id: Optional[str] = None,
     db: Session = Depends(get_db), _=Depends(get_current_user),
 ):
-    start = date(year, month, 1)
     import calendar
+    start = date(year, month, 1)
     end = date(year, month, calendar.monthrange(year, month)[1])
     q = db.query(Attendance).filter(
         Attendance.work_date >= start, Attendance.work_date <= end
     )
     if emp_id:
         q = q.filter(Attendance.emp_id == emp_id)
-    rows = q.order_by(Attendance.work_date, Attendance.emp_id).all()
-    return rows
+    return q.order_by(Attendance.work_date, Attendance.emp_id).all()
 
 
 @router.post("/attendance")
 def upsert_attendance(body: AttendanceIn, db: Session = Depends(get_db), _=Depends(get_current_user)):
     ci = _parse_time(body.check_in)
     co = _parse_time(body.check_out)
-    hrs = _calc_hours(ci, co)
+    work_hrs = _total_work_hrs(ci, co)
+
+    data = dict(
+        check_in=ci, check_out=co, work_hrs=work_hrs,
+        ot_hrs=body.ot_hrs, ot_min=body.ot_min,
+        night_hrs=body.night_hrs, night_min=body.night_min,
+        holiday_hrs=body.holiday_hrs, holiday_min=body.holiday_min,
+        holiday=body.holiday, absent=body.absent, half_day=body.half_day,
+        note=body.note,
+    )
 
     existing = db.query(Attendance).filter(
         Attendance.emp_id == body.emp_id,
@@ -173,32 +197,12 @@ def upsert_attendance(body: AttendanceIn, db: Session = Depends(get_db), _=Depen
     ).first()
 
     if existing:
-        existing.check_in = ci
-        existing.check_out = co
-        existing.work_hrs = hrs["work_hrs"]
-        existing.ot_hrs = hrs["ot_hrs"]
-        existing.night_hrs = hrs["night_hrs"]
-        existing.holiday = body.holiday
-        existing.absent = body.absent
-        existing.half_day = body.half_day
-        existing.note = body.note
+        for k, v in data.items():
+            setattr(existing, k, v)
         db.commit()
         return existing
     else:
-        a = Attendance(
-            emp_id=body.emp_id,
-            work_date=body.work_date,
-            check_in=ci,
-            check_out=co,
-            work_hrs=hrs["work_hrs"],
-            ot_hrs=hrs["ot_hrs"],
-            night_hrs=hrs["night_hrs"],
-            holiday=body.holiday,
-            absent=body.absent,
-            half_day=body.half_day,
-            note=body.note,
-            source="manual",
-        )
+        a = Attendance(emp_id=body.emp_id, work_date=body.work_date, source="manual", **data)
         db.add(a)
         db.commit()
         db.refresh(a)
@@ -220,15 +224,12 @@ def delete_attendance(att_id: int, db: Session = Depends(get_db), _=Depends(get_
 @router.post("/attendance/upload-caps")
 async def upload_caps_excel(
     file: UploadFile = File(...),
-    db: Session = Depends(get_db),
-    _=Depends(get_current_user),
+    db: Session = Depends(get_db), _=Depends(get_current_user),
 ):
     """
     캡스(CAPS) 출퇴근 Excel 업로드.
-    컬럼 자동 감지: 사번/이름, 날짜, 출근시간, 퇴근시간
-    컬럼명 후보: ['사번','직원번호','emp_id'], ['이름','성명','name'],
-                 ['날짜','일자','date'], ['출근','출근시간','check_in'],
-                 ['퇴근','퇴근시간','check_out']
+    컬럼 자동감지: 사번(사번/직원번호), 이름(이름/성명), 날짜(날짜/일자),
+                   출근(출근시간/입실), 퇴근(퇴근시간/퇴실)
     """
     try:
         import openpyxl
@@ -252,28 +253,23 @@ async def upload_caps_excel(
                     return i
         return None
 
-    col_emp_id  = find_col(['사번', '직원번호', 'emp_id', 'EMP'])
-    col_name    = find_col(['이름', '성명', '직원명', 'name'])
-    col_date    = find_col(['날짜', '일자', '근무일', 'date'])
-    col_in      = find_col(['출근', '출근시간', 'check_in', '입실'])
-    col_out     = find_col(['퇴근', '퇴근시간', 'check_out', '퇴실'])
+    col_emp_id = find_col(['사번', '직원번호', 'emp_id', 'EMP'])
+    col_name   = find_col(['이름', '성명', '직원명', 'name'])
+    col_date   = find_col(['날짜', '일자', '근무일', 'date'])
+    col_in     = find_col(['출근', '출근시간', 'check_in', '입실'])
+    col_out    = find_col(['퇴근', '퇴근시간', 'check_out', '퇴실'])
 
     if col_date is None:
         raise HTTPException(400, f"날짜 컬럼을 찾을 수 없습니다. 헤더: {headers}")
 
-    created = 0
-    updated = 0
-    errors = []
-
-    # 사원이름 → emp_id 매핑 (이름 기반 업로드 대응)
     name_map = {e.name: e.emp_id for e in db.query(Employee).all()}
+    created = updated = 0
+    errors = []
 
     for row_idx, row in enumerate(rows[1:], start=2):
         try:
-            # 사번 결정
             raw_emp = str(row[col_emp_id]).strip() if col_emp_id is not None and row[col_emp_id] is not None else ""
-            if not raw_emp or raw_emp == "None":
-                # 이름으로 매핑
+            if not raw_emp or raw_emp in ("None", "nan"):
                 raw_name = str(row[col_name]).strip() if col_name is not None and row[col_name] is not None else ""
                 emp_id = name_map.get(raw_name)
                 if not emp_id:
@@ -282,7 +278,6 @@ async def upload_caps_excel(
             else:
                 emp_id = raw_emp
 
-            # 날짜 파싱
             raw_date = row[col_date]
             if raw_date is None:
                 continue
@@ -292,7 +287,6 @@ async def upload_caps_excel(
                 s = str(raw_date).strip().replace("/", "-").replace(".", "-")
                 work_date = date.fromisoformat(s[:10])
 
-            # 시간 파싱
             def parse_cell_time(val) -> Optional[str]:
                 if val is None:
                     return None
@@ -305,35 +299,29 @@ async def upload_caps_excel(
                     return f"{s[:2]}:{s[2:]}"
                 return s or None
 
-            check_in_str  = parse_cell_time(row[col_in])  if col_in  is not None else None
-            check_out_str = parse_cell_time(row[col_out]) if col_out is not None else None
-
-            ci = _parse_time(check_in_str)
-            co = _parse_time(check_out_str)
-            hrs = _calc_hours(ci, co)
+            ci_str = parse_cell_time(row[col_in])  if col_in  is not None else None
+            co_str = parse_cell_time(row[col_out]) if col_out is not None else None
+            ci = _parse_time(ci_str)
+            co = _parse_time(co_str)
+            work_hrs = _total_work_hrs(ci, co)
 
             existing = db.query(Attendance).filter(
-                Attendance.emp_id == emp_id,
-                Attendance.work_date == work_date,
+                Attendance.emp_id == emp_id, Attendance.work_date == work_date,
             ).first()
 
             if existing:
-                existing.check_in  = ci
+                existing.check_in = ci
                 existing.check_out = co
-                existing.work_hrs  = hrs["work_hrs"]
-                existing.ot_hrs    = hrs["ot_hrs"]
-                existing.night_hrs = hrs["night_hrs"]
-                existing.source    = "caps_excel"
+                existing.work_hrs = work_hrs
+                existing.source = "caps_excel"
                 updated += 1
             else:
                 db.add(Attendance(
                     emp_id=emp_id, work_date=work_date,
-                    check_in=ci, check_out=co,
-                    work_hrs=hrs["work_hrs"], ot_hrs=hrs["ot_hrs"], night_hrs=hrs["night_hrs"],
+                    check_in=ci, check_out=co, work_hrs=work_hrs,
                     source="caps_excel",
                 ))
                 created += 1
-
         except Exception as ex:
             errors.append({"row": row_idx, "msg": str(ex)})
 
@@ -343,30 +331,29 @@ async def upload_caps_excel(
 
 # ── 급여 계산 ─────────────────────────────────────────────────────────
 
-# 2024년 기준 4대보험 요율 (근로자 부담)
-INS_PENSION  = Decimal("0.045")     # 국민연금
-INS_HEALTH   = Decimal("0.03545")   # 건강보험
-INS_LCARE    = Decimal("0.1295")    # 장기요양 (건강보험료 × 12.95%)
-INS_EMPLOY   = Decimal("0.009")     # 고용보험
-
-# 소득세 간이세액표 (월급 구간별, 간략화 — 1인 기준)
-def _income_tax(gross: Decimal) -> Decimal:
-    g = int(gross)
-    if g <= 1_060_000: return Decimal(0)
-    if g <= 1_500_000: return Decimal(round(g * 0.0106))
-    if g <= 3_000_000: return Decimal(round((g - 1_500_000) * 0.15 + 15900))
-    if g <= 4_500_000: return Decimal(round((g - 3_000_000) * 0.24 + 240900))
-    if g <= 8_000_000: return Decimal(round((g - 4_500_000) * 0.35 + 600900))
-    return Decimal(round((g - 8_000_000) * 0.38 + 1825900))
-
-
 @router.post("/payroll/calculate")
 def calculate_payroll(
     year: int = Query(...), month: int = Query(...),
     emp_id: Optional[str] = None,
     db: Session = Depends(get_db), _=Depends(get_current_user),
 ):
-    """월 급여 자동계산 — 사원별 출퇴근 집계 → 급여 항목 계산 → upsert"""
+    """
+    월 급여 자동계산
+
+    연봉제:
+      통상시급 = 월기본급 / 월소정근로시간(기본 209h)
+      기본급   = 통상시급 × 209h (= 월기본급 그대로)
+    시급제:
+      통상시급 = 등록된 시급
+      기본급   = 통상시급 × 209h
+
+    연장수당 = 통상시급 × 연장h × 1.5 + 통상시급 × 연장분/60 × 1.5
+    심야수당 = 통상시급 × 야간h × 0.5  ← 추가 50%만 (기본은 기본급에 포함)
+    휴일수당 = 통상시급 × 휴일h × 1.5 + 통상시급 × 휴일분/60 × 1.5
+
+    과세표준 = 총지급 - min(식대, 200,000) - min(차량, 200,000)
+    4대보험  = 과세표준 × 요율 (10원 반올림)
+    """
     import calendar
     start = date(year, month, 1)
     end   = date(year, month, calendar.monthrange(year, month)[1])
@@ -378,50 +365,81 @@ def calculate_payroll(
 
     results = []
     for emp in emps:
-        # 출퇴근 집계
+        # ── 출퇴근 집계 ─────────────────────────────────────────────
         atts = db.query(Attendance).filter(
             Attendance.emp_id == emp.emp_id,
             Attendance.work_date >= start,
             Attendance.work_date <= end,
         ).all()
 
-        total_work = sum(a.work_hrs for a in atts)
-        total_ot   = sum(a.ot_hrs for a in atts)
-        total_night= sum(a.night_hrs for a in atts)
-        holidays   = sum(1 for a in atts if a.holiday)
-        absents    = sum(1 for a in atts if a.absent)
+        total_ot_hrs  = sum(a.ot_hrs for a in atts)
+        total_ot_min  = sum(a.ot_min for a in atts)
+        # 분이 60 이상이면 시간으로 올림
+        total_ot_hrs  += total_ot_min // 60
+        total_ot_min   = total_ot_min % 60
 
+        total_night_hrs = sum(a.night_hrs for a in atts)
+        total_night_min = sum(a.night_min for a in atts)
+        total_night_hrs += total_night_min // 60
+        total_night_min  = total_night_min % 60
+
+        total_hol_hrs = sum(a.holiday_hrs for a in atts)
+        total_hol_min = sum(a.holiday_min for a in atts)
+        total_hol_hrs += total_hol_min // 60
+        total_hol_min  = total_hol_min % 60
+
+        absents = sum(1 for a in atts if a.absent)
+
+        std_m_hrs = emp.std_monthly_hours or 209
+
+        # ── 통상시급 ───────────────────────────────────────────────
         if emp.emp_type == "hourly":
-            hr = Decimal(str(emp.hourly_rate))
-            base_pay    = hr * Decimal(str(total_work - total_ot))
-            ot_pay      = hr * Decimal(str(emp.ot_rate)) * Decimal(str(total_ot))
-            night_pay   = hr * Decimal("0.5") * Decimal(str(total_night))
-            holiday_pay = hr * Decimal("1.5") * Decimal(str(holidays * 8))
+            std_hourly = Decimal(str(emp.hourly_rate))
+            base_pay   = (std_hourly * std_m_hrs).quantize(Decimal("1"), ROUND_HALF_UP)
         else:
-            # 연봉제: 월 기본급 고정, 연장·야간은 통상임금 기준 추가 계산
-            base_pay   = Decimal(str(emp.base_salary))
-            hourly_std = base_pay / Decimal("209")  # 월 소정근로시간 209h
-            ot_pay     = hourly_std * Decimal("0.5") * Decimal(str(total_ot))  # 연장 추가 50%
-            night_pay  = hourly_std * Decimal("0.5") * Decimal(str(total_night))
-            holiday_pay= Decimal(0)
+            # 연봉제: 월기본급 등록 → 통상시급 역산
+            base_pay   = Decimal(str(emp.base_salary)).quantize(Decimal("1"), ROUND_HALF_UP)
+            std_hourly = (base_pay / Decimal(std_m_hrs)).quantize(Decimal("0.01"), ROUND_HALF_UP)
 
-        meal_allow  = Decimal("200000")   # 식대 20만원 비과세 고정
-        trans_allow = Decimal("200000")   # 교통비 20만원 비과세 고정 (실운영 시 개인별 설정 필요)
+        # ── 연장수당: 시급 × h × 1.5 + 시급 × 분/60 × 1.5 ─────────
+        ot_pay = (
+            std_hourly * Decimal(total_ot_hrs) * Decimal("1.5")
+            + std_hourly * (Decimal(total_ot_min) / 60) * Decimal("1.5")
+        ).quantize(Decimal("1"), ROUND_HALF_UP)
 
-        gross = base_pay + ot_pay + night_pay + holiday_pay + meal_allow + trans_allow
-        taxable = gross - meal_allow - trans_allow  # 비과세 제외 과세표준
+        # ── 심야수당: 시급 × h × 0.5 (추가분만) ───────────────────
+        night_pay = (
+            std_hourly * Decimal(total_night_hrs) * Decimal("0.5")
+            + std_hourly * (Decimal(total_night_min) / 60) * Decimal("0.5")
+        ).quantize(Decimal("1"), ROUND_HALF_UP)
 
-        pen  = (taxable * INS_PENSION).quantize(Decimal("1"))
-        hlt  = (taxable * INS_HEALTH).quantize(Decimal("1"))
-        lc   = (hlt * INS_LCARE).quantize(Decimal("1"))
-        emp_ = (taxable * INS_EMPLOY).quantize(Decimal("1"))
+        # ── 휴일수당: 시급 × h × 1.5 + 시급 × 분/60 × 1.5 ─────────
+        holiday_pay = (
+            std_hourly * Decimal(total_hol_hrs) * Decimal("1.5")
+            + std_hourly * (Decimal(total_hol_min) / 60) * Decimal("1.5")
+        ).quantize(Decimal("1"), ROUND_HALF_UP)
+
+        # ── 고정 비과세 수당 ───────────────────────────────────────
+        meal_allow    = Decimal(str(emp.meal_allow_fixed))
+        vehicle_allow = Decimal(str(emp.vehicle_allow_fixed))
+
+        gross = base_pay + ot_pay + night_pay + holiday_pay + meal_allow + vehicle_allow
+
+        # ── 과세표준 (비과세 제외) ──────────────────────────────────
+        taxable = gross - min(meal_allow, NON_TAX_MEAL) - min(vehicle_allow, NON_TAX_VEH)
+
+        # ── 4대보험 ────────────────────────────────────────────────
+        pen  = _round10(taxable * RATE_PENSION)
+        hlt  = _round10(taxable * RATE_HEALTH)
+        lc   = _round10(hlt * RATE_LCARE)
+        emp_ = _round10(taxable * RATE_EMPLOY)
         it   = _income_tax(taxable)
-        lt   = (it * Decimal("0.1")).quantize(Decimal("1"))
+        lt   = _round10(it * Decimal("0.1"))
 
         total_deduct = pen + hlt + lc + emp_ + it + lt
         net_pay = gross - total_deduct
 
-        # upsert
+        # ── upsert ─────────────────────────────────────────────────
         pr = db.query(Payroll).filter(
             Payroll.emp_id == emp.emp_id,
             Payroll.year == year,
@@ -431,29 +449,35 @@ def calculate_payroll(
             pr = Payroll(emp_id=emp.emp_id, year=year, month=month)
             db.add(pr)
 
-        pr.base_pay = base_pay
-        pr.ot_pay = ot_pay
-        pr.night_pay = night_pay
-        pr.holiday_pay = holiday_pay
-        pr.meal_allow = meal_allow
-        pr.trans_allow = trans_allow
-        pr.gross_pay = gross
-        pr.deduct_pension = pen
-        pr.deduct_health = hlt
-        pr.deduct_lcare = lc
-        pr.deduct_employ = emp_
-        pr.deduct_income_tax = it
-        pr.deduct_local_tax = lt
-        pr.total_deduct = total_deduct
-        pr.net_pay = net_pay
-        pr.status = "계산중"
+        pr.std_hrs       = std_m_hrs
+        pr.std_hourly    = std_hourly
+        pr.pay_ot_hrs    = total_ot_hrs
+        pr.pay_ot_min    = total_ot_min
+        pr.pay_night_hrs = total_night_hrs
+        pr.pay_holiday_hrs = total_hol_hrs
+        pr.pay_holiday_min = total_hol_min
+        pr.base_pay      = base_pay
+        pr.ot_pay        = ot_pay
+        pr.night_pay     = night_pay
+        pr.holiday_pay   = holiday_pay
+        pr.meal_allow    = meal_allow
+        pr.vehicle_allow = vehicle_allow
+        pr.gross_pay     = gross
+        pr.deduct_pension     = pen
+        pr.deduct_health      = hlt
+        pr.deduct_lcare       = lc
+        pr.deduct_employ      = emp_
+        pr.deduct_income_tax  = it
+        pr.deduct_local_tax   = lt
+        pr.total_deduct  = total_deduct
+        pr.net_pay       = net_pay
+        pr.status        = "계산중"
         pr.calculated_at = datetime.now()
 
         results.append({
-            "emp_id": emp.emp_id,
-            "name": emp.name,
-            "work_hrs": total_work,
-            "ot_hrs": total_ot,
+            "emp_id": emp.emp_id, "name": emp.name,
+            "std_hourly": float(std_hourly),
+            "ot_hrs": total_ot_hrs, "ot_min": total_ot_min,
             "absents": absents,
             "gross_pay": float(gross),
             "total_deduct": float(total_deduct),
@@ -483,8 +507,40 @@ def list_payroll(
         d["dept"] = emp.dept
         d["position"] = emp.position
         d["emp_type"] = emp.emp_type
+        # Decimal → float 변환
+        for k, v in d.items():
+            if isinstance(v, Decimal):
+                d[k] = float(v)
         result.append(d)
     return result
+
+
+@router.patch("/payroll/{payroll_id}/update")
+def update_payroll_deductions(
+    payroll_id: int,
+    body: dict,
+    db: Session = Depends(get_db), _=Depends(get_current_user),
+):
+    """4대보험 금액 수동 수정"""
+    pr = db.get(Payroll, payroll_id)
+    if not pr:
+        raise HTTPException(404)
+    allowed = {
+        "deduct_pension", "deduct_health", "deduct_lcare", "deduct_employ",
+        "deduct_income_tax", "deduct_local_tax", "bonus", "note",
+    }
+    for k, v in body.items():
+        if k in allowed:
+            setattr(pr, k, Decimal(str(v)) if v is not None else Decimal(0))
+    # 합계 재계산
+    pr.total_deduct = (
+        pr.deduct_pension + pr.deduct_health + pr.deduct_lcare + pr.deduct_employ
+        + pr.deduct_income_tax + pr.deduct_local_tax
+    )
+    pr.gross_pay = pr.base_pay + pr.ot_pay + pr.night_pay + pr.holiday_pay + pr.meal_allow + pr.vehicle_allow + pr.bonus
+    pr.net_pay   = pr.gross_pay - pr.total_deduct
+    db.commit()
+    return {"ok": True, "net_pay": float(pr.net_pay)}
 
 
 @router.patch("/payroll/{payroll_id}/confirm")
@@ -515,7 +571,6 @@ def attendance_summary(
     year: int = Query(...), month: int = Query(...),
     db: Session = Depends(get_db), _=Depends(get_current_user),
 ):
-    """사원별 월간 근무 집계"""
     import calendar
     start = date(year, month, 1)
     end   = date(year, month, calendar.monthrange(year, month)[1])
@@ -528,8 +583,10 @@ def attendance_summary(
             Employee.emp_type,
             func.count(Attendance.id).label("days"),
             func.sum(Attendance.work_hrs).label("total_work"),
-            func.sum(Attendance.ot_hrs).label("total_ot"),
-            func.sum(Attendance.night_hrs).label("total_night"),
+            func.sum(Attendance.ot_hrs).label("total_ot_hrs"),
+            func.sum(Attendance.ot_min).label("total_ot_min"),
+            func.sum(Attendance.night_hrs).label("total_night_hrs"),
+            func.sum(Attendance.holiday_hrs).label("total_hol_hrs"),
             func.sum(cast(Attendance.absent, Integer)).label("absents"),
             func.sum(cast(Attendance.holiday, Integer)).label("holidays"),
         )
@@ -544,10 +601,12 @@ def attendance_summary(
             "emp_id": r.emp_id, "name": r.name, "dept": r.dept, "emp_type": r.emp_type,
             "days": r.days or 0,
             "total_work": round(float(r.total_work or 0), 1),
-            "total_ot": round(float(r.total_ot or 0), 1),
-            "total_night": round(float(r.total_night or 0), 1),
-            "absents": r.absents or 0,
-            "holidays": r.holidays or 0,
+            "total_ot_hrs": int(r.total_ot_hrs or 0),
+            "total_ot_min": int(r.total_ot_min or 0),
+            "total_night_hrs": int(r.total_night_hrs or 0),
+            "total_hol_hrs": int(r.total_hol_hrs or 0),
+            "absents": int(r.absents or 0),
+            "holidays": int(r.holidays or 0),
         }
         for r in rows
     ]

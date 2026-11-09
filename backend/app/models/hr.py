@@ -18,10 +18,13 @@ class Employee(Base):
     retire_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     emp_type: Mapped[str] = mapped_column(String(20), default="annual")  # annual / hourly
     # 급여 기준
-    base_salary: Mapped[Decimal] = mapped_column(Numeric(15, 2), default=0)   # 연봉제: 월 기본급
-    hourly_rate: Mapped[Decimal] = mapped_column(Numeric(10, 2), default=0)   # 시급제: 시간당 단가
-    weekly_hours: Mapped[int] = mapped_column(Integer, default=40)             # 소정근로시간/주
-    ot_rate: Mapped[float] = mapped_column(Float, default=1.5)                 # 연장근로 배율
+    base_salary: Mapped[Decimal] = mapped_column(Numeric(15, 2), default=0)   # 연봉제: 월 기본급 / 시급제: 사용안함
+    hourly_rate: Mapped[Decimal] = mapped_column(Numeric(10, 2), default=0)   # 시급제: 시급 (연봉제: 통상시급=base_salary/209 자동계산)
+    weekly_hours: Mapped[int] = mapped_column(Integer, default=40)             # 소정근로시간/주 (보통 40h)
+    std_monthly_hours: Mapped[int] = mapped_column(Integer, default=209)       # 월 소정근로시간 (주40h = 209h)
+    # 고정 수당 (비과세)
+    meal_allow_fixed: Mapped[Decimal] = mapped_column(Numeric(15, 2), default=200000)    # 식대 (200,000 비과세)
+    vehicle_allow_fixed: Mapped[Decimal] = mapped_column(Numeric(15, 2), default=200000) # 차량유지비 (200,000 비과세)
     # 개인정보
     resident_no: Mapped[str | None] = mapped_column(String(14))          # 주민등록번호 (평문: 실운영시 암호화 필요)
     phone: Mapped[str | None] = mapped_column(String(20))
@@ -45,12 +48,16 @@ class Attendance(Base):
     work_date: Mapped[date] = mapped_column(Date, nullable=False)
     check_in: Mapped[time | None] = mapped_column(Time)
     check_out: Mapped[time | None] = mapped_column(Time)
-    work_hrs: Mapped[float] = mapped_column(Float, default=0.0)   # 실근무시간
-    ot_hrs: Mapped[float] = mapped_column(Float, default=0.0)     # 연장근무
-    night_hrs: Mapped[float] = mapped_column(Float, default=0.0)  # 야간근무
-    holiday: Mapped[bool] = mapped_column(Boolean, default=False)  # 휴일근무
-    absent: Mapped[bool] = mapped_column(Boolean, default=False)   # 결근
-    half_day: Mapped[bool] = mapped_column(Boolean, default=False) # 반차
+    work_hrs: Mapped[float] = mapped_column(Float, default=0.0)    # 총 근무시간(h)
+    ot_hrs: Mapped[int] = mapped_column(Integer, default=0)         # 연장근무 시간(h)
+    ot_min: Mapped[int] = mapped_column(Integer, default=0)         # 연장근무 분(m, 0~59)
+    night_hrs: Mapped[int] = mapped_column(Integer, default=0)      # 야간근무 시간(h)
+    night_min: Mapped[int] = mapped_column(Integer, default=0)      # 야간근무 분(m)
+    holiday_hrs: Mapped[int] = mapped_column(Integer, default=0)    # 휴일근무 시간(h)
+    holiday_min: Mapped[int] = mapped_column(Integer, default=0)    # 휴일근무 분(m)
+    holiday: Mapped[bool] = mapped_column(Boolean, default=False)   # 휴일근무 여부
+    absent: Mapped[bool] = mapped_column(Boolean, default=False)    # 결근
+    half_day: Mapped[bool] = mapped_column(Boolean, default=False)  # 반차
     note: Mapped[str | None] = mapped_column(String(200))
     source: Mapped[str | None] = mapped_column(String(20), default="manual")  # manual / caps_excel
 
@@ -69,13 +76,21 @@ class Payroll(Base):
     emp_id: Mapped[str] = mapped_column(ForeignKey("hr_employee.emp_id"), nullable=False)
     year: Mapped[int] = mapped_column(Integer, nullable=False)
     month: Mapped[int] = mapped_column(Integer, nullable=False)
+    # 근무 집계 (명세서 표시용)
+    std_hrs: Mapped[int] = mapped_column(Integer, default=209)       # 소정근로(h)
+    pay_ot_hrs: Mapped[int] = mapped_column(Integer, default=0)      # 연장(h)
+    pay_ot_min: Mapped[int] = mapped_column(Integer, default=0)      # 연장(m)
+    pay_night_hrs: Mapped[int] = mapped_column(Integer, default=0)   # 야간(h)
+    pay_holiday_hrs: Mapped[int] = mapped_column(Integer, default=0) # 휴일(h)
+    pay_holiday_min: Mapped[int] = mapped_column(Integer, default=0) # 휴일(m)
+    std_hourly: Mapped[Decimal] = mapped_column(Numeric(10, 2), default=0)   # 통상시급
     # 지급
-    base_pay: Mapped[Decimal] = mapped_column(Numeric(15, 2), default=0)     # 기본급
+    base_pay: Mapped[Decimal] = mapped_column(Numeric(15, 2), default=0)     # 기본급 (시급×209)
     ot_pay: Mapped[Decimal] = mapped_column(Numeric(15, 2), default=0)       # 연장수당
-    night_pay: Mapped[Decimal] = mapped_column(Numeric(15, 2), default=0)    # 야간수당
+    night_pay: Mapped[Decimal] = mapped_column(Numeric(15, 2), default=0)    # 심야수당
     holiday_pay: Mapped[Decimal] = mapped_column(Numeric(15, 2), default=0)  # 휴일수당
-    meal_allow: Mapped[Decimal] = mapped_column(Numeric(15, 2), default=0)   # 식대
-    trans_allow: Mapped[Decimal] = mapped_column(Numeric(15, 2), default=0)  # 교통비
+    meal_allow: Mapped[Decimal] = mapped_column(Numeric(15, 2), default=0)   # 식대 (비과세)
+    vehicle_allow: Mapped[Decimal] = mapped_column(Numeric(15, 2), default=0) # 차량유지비 (비과세)
     bonus: Mapped[Decimal] = mapped_column(Numeric(15, 2), default=0)        # 성과/상여
     gross_pay: Mapped[Decimal] = mapped_column(Numeric(15, 2), default=0)    # 총지급액
     # 공제

@@ -163,9 +163,58 @@ export default function HrPayroll() {
 function PayslipModal({ payroll: p, onClose }) {
   const print = () => window.print()
 
+  const fmtTime = (h, m) => {
+    if (!h && !m) return null
+    return m ? `${h}h ${m}m` : `${h}h`
+  }
+
+  // 지급 항목 (산출식 포함)
+  const payItems = [
+    {
+      label: '기본급',
+      formula: p.std_hourly
+        ? `통상시급 ${Number(p.std_hourly).toLocaleString()}원 × ${p.std_hrs || 209}h`
+        : null,
+      value: p.base_pay,
+    },
+    {
+      label: '연장수당',
+      formula: fmtTime(p.pay_ot_hrs, p.pay_ot_min)
+        ? `${fmtTime(p.pay_ot_hrs, p.pay_ot_min)} × 1.5`
+        : null,
+      value: p.ot_pay,
+    },
+    {
+      label: '심야수당',
+      formula: p.pay_night_hrs
+        ? `${p.pay_night_hrs}h × 0.5`
+        : null,
+      value: p.night_pay,
+    },
+    {
+      label: '휴일수당',
+      formula: fmtTime(p.pay_holiday_hrs, p.pay_holiday_min)
+        ? `${fmtTime(p.pay_holiday_hrs, p.pay_holiday_min)} × 1.5`
+        : null,
+      value: p.holiday_pay,
+    },
+    { label: '식대(비과세)',      formula: null, value: p.meal_allow },
+    { label: '차량유지비(비과세)', formula: null, value: p.vehicle_allow },
+    { label: '성과/상여',         formula: null, value: p.bonus },
+  ].filter(item => Number(item.value) > 0)
+
+  const deductItems = [
+    { label: '국민연금',  value: p.deduct_pension },
+    { label: '건강보험',  value: p.deduct_health },
+    { label: '장기요양',  value: p.deduct_lcare },
+    { label: '고용보험',  value: p.deduct_employ },
+    { label: '갑근세',    value: p.deduct_income_tax },
+    { label: '주민세',    value: p.deduct_local_tax },
+  ].filter(item => Number(item.value) > 0)
+
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" style={{ maxWidth: 480, width: '100%' }} onClick={e => e.stopPropagation()}>
+      <div className="modal" style={{ maxWidth: 520, width: '100%' }} onClick={e => e.stopPropagation()}>
         <style>{`
           @media print {
             body > *:not(.modal-overlay) { display: none !important; }
@@ -176,75 +225,75 @@ function PayslipModal({ payroll: p, onClose }) {
         `}</style>
 
         {/* 명세서 헤더 */}
-        <div style={{ textAlign: 'center', marginBottom: 20, borderBottom: '2px solid #1d4ed8', paddingBottom: 12 }}>
-          <div style={{ fontSize: 18, fontWeight: 800, color: '#1d4ed8' }}>급 여 명 세 서</div>
+        <div style={{ textAlign: 'center', marginBottom: 16, borderBottom: '2px solid #1d4ed8', paddingBottom: 12 }}>
+          <div style={{ fontSize: 18, fontWeight: 800, color: '#1d4ed8', letterSpacing: 4 }}>급 여 명 세 서</div>
           <div style={{ fontSize: 12, color: '#64748b', marginTop: 4 }}>{p.year}년 {p.month}월분</div>
         </div>
 
         {/* 사원 정보 */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginBottom: 16, fontSize: 13 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 6, marginBottom: 14,
+          background: '#f8fafc', borderRadius: 6, padding: '8px 12px', fontSize: 12 }}>
           {[['사번', p.emp_id], ['이름', p.name], ['부서', p.dept || '—'], ['직급', p.position || '—']].map(([k, v]) => (
-            <div key={k} style={{ display: 'flex', gap: 8 }}>
-              <span style={{ color: '#64748b', width: 36 }}>{k}</span>
-              <strong>{v}</strong>
+            <div key={k}>
+              <div style={{ color: '#94a3b8', fontSize: 10, marginBottom: 2 }}>{k}</div>
+              <div style={{ fontWeight: 700 }}>{v}</div>
             </div>
           ))}
         </div>
 
         {/* 지급/공제 2단 */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
           {/* 지급 */}
           <div>
-            <div style={{ fontSize: 12, fontWeight: 700, color: '#1d4ed8', marginBottom: 8, borderBottom: '1px solid #bfdbfe', paddingBottom: 4 }}>지 급 항 목</div>
-            {[
-              ['기본급', p.base_pay],
-              ['연장수당', p.ot_pay],
-              ['야간수당', p.night_pay],
-              ['휴일수당', p.holiday_pay],
-              ['식대', p.meal_allow],
-              ['교통비', p.trans_allow],
-              ['성과/상여', p.bonus],
-            ].filter(([,v]) => Number(v) > 0).map(([k, v]) => (
-              <div key={k} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 3 }}>
-                <span style={{ color: '#475569' }}>{k}</span>
-                <span>{Number(v).toLocaleString()}원</span>
+            <div style={{ fontSize: 11, fontWeight: 700, color: '#1d4ed8', marginBottom: 6,
+              borderBottom: '1px solid #bfdbfe', paddingBottom: 4 }}>지 급 항 목</div>
+            {payItems.map(({ label, formula, value }) => (
+              <div key={label} style={{ display: 'flex', justifyContent: 'space-between',
+                fontSize: 12, marginBottom: 4, alignItems: 'flex-start' }}>
+                <div>
+                  <div style={{ color: '#1e293b' }}>{label}</div>
+                  {formula && <div style={{ fontSize: 10, color: '#94a3b8' }}>{formula}</div>}
+                </div>
+                <span style={{ fontWeight: 600, whiteSpace: 'nowrap', paddingLeft: 4 }}>
+                  {Number(value).toLocaleString()}
+                </span>
               </div>
             ))}
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, fontWeight: 800, color: '#1d4ed8', borderTop: '1px solid #bfdbfe', paddingTop: 6, marginTop: 4 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13,
+              fontWeight: 800, color: '#1d4ed8', borderTop: '1px solid #bfdbfe',
+              paddingTop: 6, marginTop: 4 }}>
               <span>지급합계</span>
-              <span>{Number(p.gross_pay).toLocaleString()}원</span>
+              <span>{Number(p.gross_pay).toLocaleString()}</span>
             </div>
           </div>
 
           {/* 공제 */}
           <div>
-            <div style={{ fontSize: 12, fontWeight: 700, color: '#dc2626', marginBottom: 8, borderBottom: '1px solid #fecaca', paddingBottom: 4 }}>공 제 항 목</div>
-            {[
-              ['국민연금', p.deduct_pension],
-              ['건강보험', p.deduct_health],
-              ['장기요양', p.deduct_lcare],
-              ['고용보험', p.deduct_employ],
-              ['소득세', p.deduct_income_tax],
-              ['지방소득세', p.deduct_local_tax],
-            ].filter(([,v]) => Number(v) > 0).map(([k, v]) => (
-              <div key={k} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 3 }}>
-                <span style={{ color: '#475569' }}>{k}</span>
-                <span>{Number(v).toLocaleString()}원</span>
+            <div style={{ fontSize: 11, fontWeight: 700, color: '#dc2626', marginBottom: 6,
+              borderBottom: '1px solid #fecaca', paddingBottom: 4 }}>공 제 항 목</div>
+            {deductItems.map(({ label, value }) => (
+              <div key={label} style={{ display: 'flex', justifyContent: 'space-between',
+                fontSize: 12, marginBottom: 4 }}>
+                <span style={{ color: '#1e293b' }}>{label}</span>
+                <span style={{ fontWeight: 600 }}>{Number(value).toLocaleString()}</span>
               </div>
             ))}
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, fontWeight: 800, color: '#dc2626', borderTop: '1px solid #fecaca', paddingTop: 6, marginTop: 4 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13,
+              fontWeight: 800, color: '#dc2626', borderTop: '1px solid #fecaca',
+              paddingTop: 6, marginTop: 4 }}>
               <span>공제합계</span>
-              <span>{Number(p.total_deduct).toLocaleString()}원</span>
+              <span>{Number(p.total_deduct).toLocaleString()}</span>
             </div>
           </div>
         </div>
 
         {/* 실수령액 */}
-        <div style={{ background: '#eff6ff', borderRadius: 8, padding: '12px 16px', textAlign: 'center', marginBottom: 16 }}>
-          <div style={{ fontSize: 12, color: '#64748b' }}>실 수 령 액</div>
-          <div style={{ fontSize: 24, fontWeight: 900, color: '#1d4ed8' }}>
-            {Number(p.net_pay).toLocaleString()}원
-          </div>
+        <div style={{ background: '#eff6ff', borderRadius: 8, padding: '12px 16px',
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+          <span style={{ fontSize: 13, fontWeight: 700, color: '#1d4ed8' }}>차 감 지 급 액</span>
+          <span style={{ fontSize: 24, fontWeight: 900, color: '#1d4ed8' }}>
+            {Number(p.net_pay).toLocaleString()}<span style={{ fontSize: 13 }}>원</span>
+          </span>
         </div>
 
         <div className="modal-footer no-print">

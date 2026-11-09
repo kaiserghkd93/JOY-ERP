@@ -247,6 +247,9 @@ function AttendanceModal({ employees, onClose, onSaved }) {
   }
   const [form, setForm] = useState({
     emp_id: '', work_date: today(), check_in: '08:30', check_out: '17:30',
+    ot_hrs: 0, ot_min: 0,
+    night_hrs: 0, night_min: 0,
+    holiday_hrs: 0, holiday_min: 0,
     holiday: false, absent: false, half_day: false, note: '',
   })
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
@@ -287,6 +290,32 @@ function AttendanceModal({ employees, onClose, onSaved }) {
             <label>퇴근시간</label>
             <input className="form-control" value={form.check_out} onChange={e => set('check_out', e.target.value)} placeholder="17:30" disabled={form.absent} />
           </div>
+        </div>
+        {/* 연장/야간/휴일 시간+분 */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 12 }}>
+          {[
+            { label: '연장', hk: 'ot_hrs', mk: 'ot_min' },
+            { label: '야간(심야)', hk: 'night_hrs', mk: 'night_min' },
+            { label: '휴일', hk: 'holiday_hrs', mk: 'holiday_min' },
+          ].map(({ label, hk, mk }) => (
+            <div key={hk} style={{ background: '#f8fafc', borderRadius: 6, padding: '8px 10px' }}>
+              <div style={{ fontSize: 11, color: '#64748b', marginBottom: 6 }}>{label}</div>
+              <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                <input
+                  type="number" min={0} max={23}
+                  className="form-control" style={{ width: 56, textAlign: 'center', padding: '4px 6px' }}
+                  value={form[hk]} onChange={e => set(hk, Math.max(0, +e.target.value))}
+                />
+                <span style={{ fontSize: 12, color: '#475569' }}>h</span>
+                <input
+                  type="number" min={0} max={59}
+                  className="form-control" style={{ width: 56, textAlign: 'center', padding: '4px 6px' }}
+                  value={form[mk]} onChange={e => set(mk, Math.max(0, Math.min(59, +e.target.value)))}
+                />
+                <span style={{ fontSize: 12, color: '#475569' }}>m</span>
+              </div>
+            </div>
+          ))}
         </div>
         <div style={{ display: 'flex', gap: 16, marginBottom: 12 }}>
           {[['absent','결근'],['holiday','휴일근무'],['half_day','반차']].map(([k,l]) => (
