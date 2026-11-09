@@ -1,12 +1,19 @@
 from datetime import date
 from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy import func, text as _sql
 from app.models.quality import Inspection, QualityClaim, InspectionResult, DisposalType, ClaimStatus
 from app.models.purchase import Receipt, ReceiptStatus
 from app.models.ledger import LedgerType
 from app.services.doc_no import next_doc_no
 from app.services.ledger_service import post_ledger, get_avg_price
 from fastapi import HTTPException
+
+
+def _to_str(v) -> str:
+    """enum 또는 문자열 → 순수 str (SQLAlchemy enum 타입 검증 완전 우회)"""
+    if hasattr(v, 'value'):
+        return str(v.value)
+    return str(v)
 
 
 def register_inspection(
@@ -27,41 +34,65 @@ def register_inspection(
     if receipt.status == ReceiptStatus.cancelled:
         raise HTTPException(400, "취소 입고는 검사 불가")
 
-    existing = db.query(Inspection).filter(Inspection.gr_no == gr_no).first()
-    if existing and existing.result != InspectionResult.pending_insp:
-        raise HTTPException(409, "이미 검사 등록된 입고")
-
     inspect_qty = pass_qty + fail_qty
     if inspect_qty > receipt.qty:
         raise HTTPException(400, f"검사수량({inspect_qty}) > 입고수량({receipt.qty})")
 
+    # 판정 결정
     if result is not None:
-        result = InspectionResult(result)
+        result_str = _to_str(result) if hasattr(result, 'value') else result
     elif pass_qty > 0 and fail_qty > 0:
-        result = InspectionResult.partial
+        result_str = "부분합격"
     elif fail_qty > 0:
-        result = InspectionResult.fail
+        result_str = "불합격"
     else:
-        result = InspectionResult.pass_
+        result_str = "합격"
 
-    if existing:
-        # 포털 자동생성된 "검사대기" 레코드 → 결과로 업데이트
-        existing.inspect_date = inspect_date
-        existing.inspect_qty = inspect_qty
-        existing.pass_qty = pass_qty
-        existing.fail_qty = fail_qty
-        existing.result = result
-        existing.disposal = disposal
-        existing.defect_note = defect_note
-        insp = existing
+    disposal_str = _to_str(disposal)
+
+    # 기존 레코드 확인 (raw SQL — ORM enum 타입 검증 우회)
+    existing_row = db.execute(
+        _sql("SELECT id, result FROM inspection WHERE gr_no = :gr"), {"gr": gr_no}
+    ).first()
+
+    _PENDING_VALUES = {"pending_insp", "검사대기"}
+
+    if existing_row:
+        existing_result = existing_row[1] or ""
+        if existing_result not in _PENDING_VALUES:
+            raise HTTPException(409, "이미 검사 등록된 입고")
+        # 기존 레코드 업데이트 (raw SQL)
+        db.execute(_sql(
+            "UPDATE inspection SET "
+            "inspect_date = :date, inspect_qty = :iqty, "
+            "pass_qty = :pq, fail_qty = :fq, "
+            "result = :result, disposal = :disposal, defect_note = :note "
+            "WHERE gr_no = :gr"
+        ), {
+            "date": inspect_date, "iqty": inspect_qty,
+            "pq": pass_qty, "fq": fail_qty,
+            "result": result_str, "disposal": disposal_str,
+            "note": defect_note, "gr": gr_no,
+        })
+        insp_id = existing_row[0]
     else:
-        insp = Inspection(
-            gr_no=gr_no, inspect_date=inspect_date,
-            inspect_qty=inspect_qty, pass_qty=pass_qty, fail_qty=fail_qty,
-            result=result, disposal=disposal, defect_note=defect_note,
-        )
-        db.add(insp)
-    db.flush()
+        # 새 레코드 INSERT (raw SQL)
+        db.execute(_sql(
+            "INSERT INTO inspection "
+            "(gr_no, inspect_date, inspect_qty, pass_qty, fail_qty, result, disposal, defect_note) "
+            "VALUES (:gr, :date, :iqty, :pq, :fq, :result, :disposal, :note)"
+        ), {
+            "gr": gr_no, "date": inspect_date, "iqty": inspect_qty,
+            "pq": pass_qty, "fq": fail_qty,
+            "result": result_str, "disposal": disposal_str,
+            "note": defect_note,
+        })
+        row = db.execute(_sql("SELECT id FROM inspection WHERE gr_no = :gr"), {"gr": gr_no}).first()
+        insp_id = row[0]
+
+    # ORM 세션 캐시 무효화 후 재로드
+    db.expire_all()
+    insp = db.get(Inspection, insp_id)
 
     # 합격수량만 재고원장에 입고(+) — 핵심 게이트
     if pass_qty > 0:
@@ -69,10 +100,10 @@ def register_inspection(
         post_ledger(
             db, receipt.part_no, inspect_date,
             LedgerType.receipt, +pass_qty, float(receipt.unit_price),
-            ref_type="GR", ref_no=gr_no, lot_no=receipt.lot_no, note=f"검사합격 {pass_qty}/{inspect_qty}",
+            ref_type="GR", ref_no=gr_no, lot_no=receipt.lot_no,
+            note=f"검사합격 {pass_qty}/{inspect_qty}",
         )
     else:
-        # 전량 불합격 — 입고 상태를 cancelled로
         receipt.status = ReceiptStatus.cancelled
 
     db.flush()

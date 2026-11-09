@@ -79,13 +79,27 @@ def post_inspection(body: InspectionCreate, db: Session = Depends(get_db), user:
         raise
     except Exception as _re:
         raise HTTPException(500, f"register오류: {type(_re).__name__}: {str(_re)[:400]}")
-    insp.inspector_id = user.username
-    insp.approval_status = ApprovalStatus.draft
-    insp.standard_id = body.standard_id
-    insp.lot_size = lot
-    insp.sample_size = sample_size
-    insp.ac = ac
-    insp.re = re
+
+    # ORM enum 검증 우회 — raw SQL로 추가 필드 업데이트
+    from sqlalchemy import text as _t
+    db.execute(_t(
+        "UPDATE inspection SET "
+        "inspector_id = :uid, approval_status = :astat, "
+        "standard_id = :std, lot_size = :lot, "
+        "sample_size = :ss, ac = :ac, re = :re "
+        "WHERE id = :id"
+    ), {
+        "uid": user.username,
+        "astat": "작성중",
+        "std": body.standard_id,
+        "lot": lot,
+        "ss": sample_size,
+        "ac": ac,
+        "re": re,
+        "id": insp.id,
+    })
+    db.expire(insp)
+    insp = db.get(type(insp), insp.id)
 
     # 입고전표에 납품수량(delivered_qty) 자동 기록 및 반품수량 설정
     from app.models.purchase import Receipt
