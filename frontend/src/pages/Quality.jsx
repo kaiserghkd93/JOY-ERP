@@ -1482,7 +1482,7 @@ export default function Quality() {
   const [rejectReason, setRejectReason] = useState('')
   const [defRegList, setDefRegList] = useState([])
   const [showDefRegModal, setShowDefRegModal] = useState(false)
-  const [defRegForm, setDefRegForm] = useState({ defect_date: new Date().toISOString().slice(0,10), inspect_type:'공정검사', source_type:'자체생산', partner_id:'', part_no:'', part_name:'', defect_type:'', defect_qty:0, inspect_qty:0, unit_price:0, line_no:'', cause:'', action_taken:'', note:'' })
+  const [defRegForm, setDefRegForm] = useState({ defect_date: new Date().toISOString().slice(0,10), inspect_type:'공정검사', source_type:'자체생산', partner_id:'', part_no:'', part_name:'', defect_type:'', defect_qty:0, inspect_qty:0, unit_price:0, line_no:'', cause:'', action_taken:'', note:'', registered_by:'김의진' })
   const [defRegMonthly, setDefRegMonthly] = useState(null)
   const [defRegMonth, setDefRegMonth] = useState(new Date().toISOString().slice(0,7))
   const [editDefReg, setEditDefReg] = useState(null)
@@ -2201,6 +2201,11 @@ export default function Quality() {
                   {(defRegForm.defect_qty * defRegForm.unit_price).toLocaleString()}원
                 </div>
               </div>
+            </div>
+            <div className="form-group">
+              <label>등록자</label>
+              <input value={defRegForm.registered_by}
+                onChange={e=>setDefRegForm(p=>({...p,registered_by:e.target.value}))} />
             </div>
             <div className="form-group">
               <label>불량원인</label>

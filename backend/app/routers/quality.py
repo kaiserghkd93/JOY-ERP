@@ -625,6 +625,7 @@ class DefectRegCreate(BaseModel):
     cause: str | None = None
     action_taken: str | None = None
     note: str | None = None
+    registered_by: str | None = None   # 미입력 시 로그인 사용자
 
 
 def _defect_row(r) -> dict:
@@ -709,7 +710,7 @@ def create_defect_reg(body: DefectRegCreate, current_user: User = Depends(get_cu
         line_no=body.line_no,
         cause=body.cause,
         action_taken=body.action_taken,
-        registered_by=current_user.username,
+        registered_by=body.registered_by or current_user.username,
         note=body.note,
     )
     db.add(row)
