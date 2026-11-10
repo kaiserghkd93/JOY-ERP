@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
+import QRCode from 'qrcode'
 import api from '../api'
 import { getUser } from '../auth'
 
@@ -22,6 +23,8 @@ export default function WorkerScreen() {
   const [defectType, setDefectType] = useState('')
   const [msg, setMsg] = useState('')
   const [loading, setLoading] = useState(false)
+  const [palletModal, setPalletModal] = useState(null)  // { pallet_id, qr_text, qty, part_name, ... }
+  const qrCanvasRef = useRef(null)
 
   const flash = (m) => { setMsg(m); setTimeout(() => setMsg(''), 3000) }
 
@@ -90,8 +93,49 @@ export default function WorkerScreen() {
     } finally { setLoading(false) }
   }
 
+  const closePallet = async () => {
+    if (!session) return
+    setLoading(true)
+    try {
+      const r = await api.post(`/mes-floor/sessions/${session.session_id}/pallet-close`)
+      setPalletModal(r.data)
+    } catch (e) {
+      flash('파렛트 발행 실패: ' + (e.response?.data?.detail || e.message))
+    } finally { setLoading(false) }
+  }
+
+  // QR 캔버스 렌더링
+  useEffect(() => {
+    if (palletModal && qrCanvasRef.current) {
+      QRCode.toCanvas(qrCanvasRef.current, palletModal.qr_text, { width: 200, margin: 2 }, () => {})
+    }
+  }, [palletModal])
+
+  const printPallet = () => {
+    if (!palletModal || !qrCanvasRef.current) return
+    const canvas = qrCanvasRef.current
+    const win = window.open('', '_blank')
+    win.document.write(`
+      <html><body style="font-family:sans-serif;padding:20px;text-align:center">
+        <h2 style="font-size:16px;margin:0 0 8px">${palletModal.part_name}</h2>
+        <p style="margin:4px 0;font-size:13px">품번: ${palletModal.part_no || ''}</p>
+        <p style="margin:4px 0;font-size:13px">수량: <strong>${palletModal.qty} EA</strong></p>
+        <p style="margin:4px 0;font-size:13px">LOT: <strong>${palletModal.pallet_id}</strong></p>
+        <p style="margin:4px 0;font-size:12px;color:#666">WO: ${palletModal.wo_no}</p>
+        <p style="margin:4px 0;font-size:12px;color:#666">${new Date().toLocaleDateString('ko-KR')}</p>
+        <img src="${canvas.toDataURL()}" style="margin-top:8px;width:150px" />
+        <script>window.onload=()=>{window.print();window.close()}</script>
+      </body></html>
+    `)
+  }
+
   const endSession = async () => {
-    if (!session || !window.confirm('작업을 완료 처리하시겠습니까?')) return
+    if (!session) return
+    // 불량 누락 확인
+    if (session.machine_connected && session.unaccounted_qty > 0) {
+      if (!window.confirm(`미신고 수량 ${session.unaccounted_qty}개가 있습니다.\n불량으로 추가 등록 후 완료하세요.\n그래도 완료하시겠습니까?`)) return
+    }
+    if (!window.confirm('작업을 완료 처리하시겠습니까?')) return
     setLoading(true)
     try {
       await api.post(`/mes-floor/sessions/${session.session_id}/complete`)
@@ -193,7 +237,31 @@ export default function WorkerScreen() {
                 </div>
                 <div style={{ fontSize: 10, color: '#475569' }}>계획 {session.plan_hour_min}분</div>
               </div>
+              {session.machine_connected && (
+                <div style={{ gridColumn: '1 / -1', background: session.unaccounted_qty > 0 ? '#450a0a' : '#052e16', borderRadius: 8, padding: '10px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <div style={{ fontSize: 10, color: '#94a3b8', marginBottom: 2 }}>미신고 수량 (기계 기준)</div>
+                    <div style={{ fontSize: 22, fontWeight: 800, color: session.unaccounted_qty > 0 ? '#f87171' : '#4ade80' }}>
+                      {session.unaccounted_qty > 0 ? `⚠ ${session.unaccounted_qty} EA 미신고` : '✓ 수량 일치'}
+                    </div>
+                  </div>
+                  <div style={{ fontSize: 11, color: '#475569', textAlign: 'right' }}>
+                    <div>기계 총생산 {fmt(session.shot_count * (session.cavity_count || 1))}</div>
+                    <div>양품+불량 {fmt((session.good_qty || 0) + (session.defect_qty || 0))}</div>
+                  </div>
+                </div>
+              )}
             </div>
+
+            {/* 파렛트 발행 */}
+            {session.pallet_std_qty > 0 && session.good_qty >= session.pallet_std_qty && (
+              <div style={{ marginBottom: 16 }}>
+                <button onClick={closePallet} disabled={loading}
+                  style={{ width: '100%', padding: '13px', borderRadius: 10, border: 'none', background: '#7c3aed', color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
+                  📦 파렛트 완성 ({session.pallet_std_qty} EA) — LOT 발행
+                </button>
+              </div>
+            )}
 
             {/* 실적 입력 */}
             <div style={{ borderTop: '1px solid #334155', paddingTop: 16, marginBottom: 16 }}>
@@ -291,6 +359,30 @@ export default function WorkerScreen() {
           </>
         )}
       </div>
+
+      {/* 파렛트 QR 모달 */}
+      {palletModal && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+          <div style={{ background: '#1e293b', borderRadius: 16, padding: 28, width: 320, textAlign: 'center' }}>
+            <div style={{ fontSize: 15, fontWeight: 800, marginBottom: 4 }}>{palletModal.part_name}</div>
+            <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 16 }}>{palletModal.part_no}</div>
+            <canvas ref={qrCanvasRef} style={{ borderRadius: 8, background: '#fff', padding: 4 }} />
+            <div style={{ marginTop: 12, fontSize: 18, fontWeight: 800, color: '#a78bfa' }}>{palletModal.pallet_id}</div>
+            <div style={{ fontSize: 13, color: '#94a3b8', marginTop: 4 }}>수량: <strong style={{ color: '#f8fafc' }}>{fmt(palletModal.qty)} EA</strong></div>
+            <div style={{ fontSize: 11, color: '#475569', marginTop: 4 }}>{palletModal.wo_no}</div>
+            <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
+              <button onClick={printPallet}
+                style={{ flex: 1, padding: '11px', borderRadius: 8, border: 'none', background: '#1d4ed8', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
+                🖨 라벨 출력
+              </button>
+              <button onClick={() => setPalletModal(null)}
+                style={{ flex: 1, padding: '11px', borderRadius: 8, border: '1px solid #334155', background: 'transparent', color: '#94a3b8', fontSize: 13, cursor: 'pointer' }}>
+                닫기
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

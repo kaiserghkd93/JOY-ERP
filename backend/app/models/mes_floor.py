@@ -135,6 +135,21 @@ class DowntimeLog(Base):
     session: Mapped["WorkerSession"] = relationship(back_populates="downtime_logs")
 
 
+class MesPallet(Base):
+    """파렛트 LOT — 생산 단위 묶음 (IATF 16949 LOT 추적)"""
+    __tablename__ = "mes_pallet"
+
+    pallet_id: Mapped[str] = mapped_column(String(30), primary_key=True)   # PLT-YYYYMMDD-NNN
+    wo_no: Mapped[str] = mapped_column(ForeignKey("mes_work_order.wo_no"), nullable=False)
+    session_id: Mapped[int] = mapped_column(ForeignKey("worker_session.id"), nullable=False)
+    part_no: Mapped[str] = mapped_column(ForeignKey("item.part_no"), nullable=False)
+    machine_id: Mapped[str] = mapped_column(ForeignKey("machine.machine_id"), nullable=False)
+    worker_id: Mapped[str] = mapped_column(ForeignKey("user.username"), nullable=False)
+    qty: Mapped[int] = mapped_column(Integer, nullable=False)              # 파렛트 수량
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+    status: Mapped[str] = mapped_column(String(20), default="생산완료")    # 생산완료, 출하, 불량
+
+
 class AndonCall(Base):
     """Toyota 안돈 호출 기록"""
     __tablename__ = "mes_andon_call"

@@ -147,6 +147,8 @@ with engine.connect() as _conn:
         # 작업 세션 — 사출기 숏트수 연동
         "ALTER TABLE worker_session ADD COLUMN IF NOT EXISTS shot_count INTEGER DEFAULT 0",
         "ALTER TABLE worker_session ADD COLUMN IF NOT EXISTS shot_base INTEGER",
+        # 품목 — 파렛트 기준수량
+        "ALTER TABLE item ADD COLUMN IF NOT EXISTS pallet_std_qty INTEGER DEFAULT 0",
     ]:
         try:
             _conn.execute(_text(_sql))

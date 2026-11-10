@@ -31,7 +31,7 @@ from app.routers.auth import get_current_user
 from app.models.auth import User
 from app.models.mes_floor import (
     Machine, MesWorkOrder, WorkerSession, ProdLog, DowntimeLog,
-    WOStatus, SessionStatus, DowntimeReason, MachineStatus, AndonCall,
+    WOStatus, SessionStatus, DowntimeReason, MachineStatus, AndonCall, MesPallet,
 )
 from app.models.master import Item
 from app.services.doc_no import next_doc_no
@@ -455,6 +455,118 @@ def complete_session(session_id: int, db: Session = Depends(get_db)):
     return _session_detail(db, session)
 
 
+# ── 파렛트 LOT ───────────────────────────────────────────────────────
+
+@router.post("/sessions/{session_id}/pallet-close")
+def pallet_close(session_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    """파렛트 완성 처리 — 현재 양품수량으로 파렛트 LOT 생성"""
+    session = db.get(WorkerSession, session_id)
+    if not session:
+        raise HTTPException(404)
+    if session.worker_id != user.username:
+        raise HTTPException(403, "본인 세션만 처리 가능")
+
+    wo = db.get(MesWorkOrder, session.wo_no)
+    if not wo:
+        raise HTTPException(404)
+
+    # 이미 발행된 파렛트 수량 합산
+    issued = db.query(func.sum(MesPallet.qty)).filter(
+        MesPallet.session_id == session_id
+    ).scalar() or 0
+
+    # 이번 파렛트 수량 = 현재 good_qty - 이미 발행된 수량
+    pallet_qty = session.good_qty - issued
+    if pallet_qty <= 0:
+        raise HTTPException(400, f"발행할 수량 없음 (양품 {session.good_qty} - 기발행 {issued} = {pallet_qty})")
+
+    pallet_id = next_doc_no(db, "PLT", "mes_pallet", "pallet_id")
+    pallet = MesPallet(
+        pallet_id=pallet_id,
+        wo_no=session.wo_no,
+        session_id=session_id,
+        part_no=wo.part_no,
+        machine_id=session.machine_id,
+        worker_id=session.worker_id,
+        qty=pallet_qty,
+    )
+    db.add(pallet)
+    db.commit()
+    db.refresh(pallet)
+
+    item = db.get(type(wo.item), wo.part_no) if wo.item else None
+    machine = db.get(Machine, session.machine_id)
+    return {
+        "pallet_id": pallet_id,
+        "part_no": wo.part_no,
+        "part_name": wo.item.name if wo.item else "",
+        "machine_name": machine.name if machine else "",
+        "worker_id": session.worker_id,
+        "qty": pallet_qty,
+        "wo_no": session.wo_no,
+        "created_at": pallet.created_at.isoformat(),
+        # QR에 담을 데이터 (프론트에서 렌더링)
+        "qr_text": f"{pallet_id}|{wo.part_no}|{pallet_qty}|{session.wo_no}",
+    }
+
+
+@router.get("/pallets/{pallet_id}")
+def get_pallet(pallet_id: str, db: Session = Depends(get_db)):
+    """파렛트 LOT 조회 — QR 스캔 후 추적 화면"""
+    p = db.get(MesPallet, pallet_id)
+    if not p:
+        raise HTTPException(404, f"파렛트 없음: {pallet_id}")
+    wo = db.get(MesWorkOrder, p.wo_no)
+    session = db.get(WorkerSession, p.session_id)
+    machine = db.get(Machine, p.machine_id)
+    from app.models.auth import User as AuthUser
+    worker = db.get(AuthUser, p.worker_id)
+    return {
+        "pallet_id": p.pallet_id,
+        "status": p.status,
+        "part_no": p.part_no,
+        "part_name": wo.item.name if wo and wo.item else "",
+        "qty": p.qty,
+        "wo_no": p.wo_no,
+        "machine_name": machine.name if machine else p.machine_id,
+        "worker_name": worker.name if worker else p.worker_id,
+        "created_at": p.created_at.isoformat(),
+        "shift": session.shift if session else None,
+        "mold_no": wo.mold_no if wo else None,
+    }
+
+
+@router.get("/pallets")
+def list_pallets(
+    wo_no: Optional[str] = None,
+    part_no: Optional[str] = None,
+    limit: int = 50,
+    db: Session = Depends(get_db),
+):
+    q = db.query(MesPallet).order_by(MesPallet.created_at.desc())
+    if wo_no:
+        q = q.filter(MesPallet.wo_no == wo_no)
+    if part_no:
+        q = q.filter(MesPallet.part_no == part_no)
+    pallets = q.limit(limit).all()
+    result = []
+    for p in pallets:
+        wo = db.get(MesWorkOrder, p.wo_no)
+        machine = db.get(Machine, p.machine_id)
+        result.append({
+            "pallet_id": p.pallet_id,
+            "part_no": p.part_no,
+            "part_name": wo.item.name if wo and wo.item else "",
+            "qty": p.qty,
+            "wo_no": p.wo_no,
+            "machine_name": machine.name if machine else p.machine_id,
+            "worker_id": p.worker_id,
+            "created_at": p.created_at.isoformat(),
+            "status": p.status,
+        })
+    return result
+
+
 def _session_detail(db: Session, session: WorkerSession) -> dict:
     wo = db.get(MesWorkOrder, session.wo_no)
     machine = db.get(Machine, session.machine_id)
@@ -522,6 +634,15 @@ def _session_detail(db: Session, session: WorkerSession) -> dict:
         "man_hour_min": round(elapsed_min, 1),
         "plan_hour_min": SHIFT_PLAN_MIN,
         "man_hour_rate": round(min(elapsed_min / SHIFT_PLAN_MIN * 100, 100), 1),
+        # 불량 누락 감지 (기계 연동 시에만 유효)
+        "shot_count": session.shot_count,
+        "machine_connected": session.shot_base is not None,
+        "unaccounted_qty": (
+            max(0, session.shot_count * cavity - (session.good_qty + session.defect_qty))
+            if session.shot_base is not None else None
+        ),
+        # 파렛트 기준수량 (품목 설정값)
+        "pallet_std_qty": int(wo_item.pallet_std_qty) if wo_item and getattr(wo_item, "pallet_std_qty", None) else 0,
     }
 
 
