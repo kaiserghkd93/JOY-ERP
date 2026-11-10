@@ -149,6 +149,10 @@ with engine.connect() as _conn:
         "ALTER TABLE worker_session ADD COLUMN IF NOT EXISTS shot_base INTEGER",
         # 품목 — 파렛트 기준수량
         "ALTER TABLE item ADD COLUMN IF NOT EXISTS pallet_std_qty INTEGER DEFAULT 0",
+        # 등록자 FK 제약 제거 (varchar 텍스트로 자유 사용)
+        "ALTER TABLE process_outgoing_defect DROP CONSTRAINT IF EXISTS process_outgoing_defect_registered_by_fkey",
+        # admin으로 등록된 불량 → 김의진으로 일괄 변경
+        "UPDATE process_outgoing_defect SET registered_by = '김의진' WHERE registered_by = 'admin'",
     ]:
         try:
             _conn.execute(_text(_sql))

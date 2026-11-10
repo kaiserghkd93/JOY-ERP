@@ -819,21 +819,21 @@ def loss_analysis(
     part_no: str | None = Query(None),
     db: Session = Depends(get_db),
 ):
-    """불량유형별 불량금액·로스율 집계"""
+    """불량유형별 불량금액·로스율 집계 (공정/출하 불량 등록 기준)"""
     sql = """
         SELECT
             d.defect_type,
-            COUNT(*)                      AS rows,
-            SUM(d.defect_qty)             AS total_defect_qty,
-            SUM(d.defect_cost)            AS total_defect_cost,
-            SUM(d.production_cost)        AS total_production_cost,
-            COUNT(DISTINCT d.part_no)     AS part_count
-        FROM mes_defect_detail d
-        WHERE d.prod_date BETWEEN :s AND :e
+            COUNT(*)                                       AS rows,
+            SUM(d.defect_qty)                              AS total_defect_qty,
+            SUM(d.defect_qty * COALESCE(d.unit_price, 0)) AS total_defect_cost,
+            SUM(d.inspect_qty * COALESCE(d.unit_price, 0)) AS total_production_cost,
+            COUNT(DISTINCT d.part_no)                      AS part_count
+        FROM process_outgoing_defect d
+        WHERE d.defect_date BETWEEN :s AND :e
           AND (:part_no IS NULL OR d.part_no = :part_no)
           AND d.defect_qty > 0
         GROUP BY d.defect_type
-        ORDER BY SUM(d.defect_cost) DESC
+        ORDER BY SUM(d.defect_qty * COALESCE(d.unit_price, 0)) DESC
     """
     rows = db.execute(text(sql), {"s": start, "e": end, "part_no": part_no}).fetchall()
 
@@ -873,19 +873,19 @@ def loss_by_part(
     end: str = Query(...),
     db: Session = Depends(get_db),
 ):
-    """품번별 불량금액·로스율 집계"""
+    """품번별 불량금액·로스율 집계 (공정/출하 불량 등록 기준)"""
     sql = """
         SELECT
             d.part_no,
-            MAX(d.part_name)              AS part_name,
-            SUM(d.defect_qty)             AS total_defect_qty,
-            SUM(d.defect_cost)            AS total_defect_cost,
-            SUM(d.production_cost)        AS total_production_cost,
-            COUNT(DISTINCT d.defect_type) AS defect_type_count
-        FROM mes_defect_detail d
-        WHERE d.prod_date BETWEEN :s AND :e AND d.defect_qty > 0
+            MAX(d.part_name)                               AS part_name,
+            SUM(d.defect_qty)                              AS total_defect_qty,
+            SUM(d.defect_qty * COALESCE(d.unit_price, 0)) AS total_defect_cost,
+            SUM(d.inspect_qty * COALESCE(d.unit_price, 0)) AS total_production_cost,
+            COUNT(DISTINCT d.defect_type)                  AS defect_type_count
+        FROM process_outgoing_defect d
+        WHERE d.defect_date BETWEEN :s AND :e AND d.defect_qty > 0
         GROUP BY d.part_no
-        ORDER BY SUM(d.defect_cost) DESC
+        ORDER BY SUM(d.defect_qty * COALESCE(d.unit_price, 0)) DESC
     """
     rows = db.execute(text(sql), {"s": start, "e": end}).fetchall()
     result = []
