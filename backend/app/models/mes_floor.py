@@ -54,6 +54,12 @@ class Machine(Base):
     cavity_count: Mapped[int] = mapped_column(Integer, default=1)           # 캐비티 수
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     note: Mapped[str | None] = mapped_column(Text)
+    # 통신 프로토콜 설정
+    protocol_type: Mapped[str | None] = mapped_column(String(20), nullable=True)  # modbus_rtu, modbus_tcp, fanuc_focas
+    comm_host: Mapped[str | None] = mapped_column(String(100), nullable=True)    # IP:Port (TCP) or COM포트 (RTU)
+    modbus_slave_id: Mapped[int] = mapped_column(Integer, default=1)             # Slave ID / Unit ID
+    counter_register_addr: Mapped[int | None] = mapped_column(Integer, nullable=True)  # 생산카운터 레지스터 주소
+    counter_register_count: Mapped[int] = mapped_column(Integer, default=2)      # 1=16bit, 2=32bit(HI+LO)
 
 
 class MesWorkOrder(Base):
@@ -90,6 +96,9 @@ class WorkerSession(Base):
     end_time: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     good_qty: Mapped[int] = mapped_column(Integer, default=0)
     defect_qty: Mapped[int] = mapped_column(Integer, default=0)
+    # 사출기 숏트수 연동
+    shot_count: Mapped[int] = mapped_column(Integer, default=0)       # 세션 중 발생 숏트수
+    shot_base: Mapped[int | None] = mapped_column(Integer, nullable=True)  # 세션 시작 시 기계 총 숏트수
     status: Mapped[SessionStatus] = mapped_column(SAEnum(SessionStatus, native_enum=False), default=SessionStatus.running)
 
     work_order: Mapped["MesWorkOrder"] = relationship(back_populates="sessions")

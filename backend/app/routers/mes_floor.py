@@ -55,6 +55,24 @@ class MachineIn(BaseModel):
     std_cycle_sec: float = 30.0
     cavity_count: int = 1
     note: Optional[str] = None
+    protocol_type: Optional[str] = None      # modbus_rtu, modbus_tcp, fanuc_focas
+    comm_host: Optional[str] = None          # COM3 (RTU) or 192.168.1.10:502 (TCP)
+    modbus_slave_id: int = 1
+    counter_register_addr: Optional[int] = None
+    counter_register_count: int = 2
+
+
+class CommConfigIn(BaseModel):
+    protocol_type: Optional[str] = None     # modbus_rtu / modbus_tcp / fanuc_focas
+    comm_host: Optional[str] = None         # COM3 or 192.168.1.10:502
+    modbus_slave_id: int = 1
+    counter_register_addr: Optional[int] = None
+    counter_register_count: int = 2         # 1=16bit, 2=32bit
+
+
+class ShotPushIn(BaseModel):
+    machine_total_shot: int                 # 기계의 현재 누적 총 숏트수
+    timestamp: Optional[str] = None        # ISO 형식 (없으면 서버 시간 사용)
 
 
 @router.get("/machines")
@@ -92,6 +110,110 @@ def delete_machine(machine_id: str, db: Session = Depends(get_db), _: User = Dep
     m.is_active = False
     db.commit()
     return {"ok": True}
+
+
+# ── 호기 Modbus 설정 ─────────────────────────────────────────────────
+
+@router.get("/machines/{machine_id}/comm-config")
+def get_comm_config(machine_id: str, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+    m = db.get(Machine, machine_id)
+    if not m:
+        raise HTTPException(404)
+    return {
+        "machine_id": m.machine_id,
+        "name": m.name,
+        "protocol_type": m.protocol_type,
+        "comm_host": m.comm_host,
+        "modbus_slave_id": m.modbus_slave_id,
+        "counter_register_addr": m.counter_register_addr,
+        "counter_register_count": m.counter_register_count,
+        "cavity_count": m.cavity_count,
+    }
+
+
+@router.patch("/machines/{machine_id}/comm-config")
+def update_comm_config(machine_id: str, body: CommConfigIn, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+    m = db.get(Machine, machine_id)
+    if not m:
+        raise HTTPException(404)
+    m.protocol_type = body.protocol_type
+    m.comm_host = body.comm_host
+    m.modbus_slave_id = body.modbus_slave_id
+    m.counter_register_addr = body.counter_register_addr
+    m.counter_register_count = body.counter_register_count
+    db.commit()
+    return {"ok": True}
+
+
+@router.post("/machines/{machine_id}/shot-push")
+def shot_push(machine_id: str, body: ShotPushIn, db: Session = Depends(get_db)):
+    """
+    미들웨어(공장 PC)에서 주기적으로 호출.
+    machine_total_shot: 기계의 현재 누적 총 숏트수
+    → 진행 중인 세션의 shot_count, good_qty 자동 갱신
+    """
+    import os
+    # 간단한 토큰 인증 (env MACHINE_TOKEN 미설정 시 인증 생략)
+    machine_token = os.environ.get("MACHINE_TOKEN", "")
+    # (필요 시 Header 인증 추가 가능)
+
+    m = db.get(Machine, machine_id)
+    if not m:
+        raise HTTPException(404, f"호기 없음: {machine_id}")
+
+    session = db.query(WorkerSession).filter(
+        WorkerSession.machine_id == machine_id,
+        WorkerSession.status == SessionStatus.running,
+    ).order_by(WorkerSession.start_time.desc()).first()
+
+    if not session:
+        return {"ok": False, "reason": "no_active_session", "machine_id": machine_id}
+
+    # 세션 시작 시 기준값 설정
+    if session.shot_base is None:
+        session.shot_base = body.machine_total_shot
+        session.shot_count = 0
+    else:
+        session.shot_count = max(0, body.machine_total_shot - session.shot_base)
+
+    # 양품 = 사이클수 × 캐비티(사출기) or 1(단품 가공) - 불량
+    total_produced = session.shot_count * m.cavity_count
+    session.good_qty = max(0, total_produced - session.defect_qty)
+
+    db.commit()
+    return {
+        "ok": True,
+        "machine_id": machine_id,
+        "machine_total_count": body.machine_total_shot,
+        "session_count": session.shot_count,
+        "total_produced": total_produced,
+        "good_qty": session.good_qty,
+        "defect_qty": session.defect_qty,
+    }
+
+
+@router.get("/machines/{machine_id}/shot-status")
+def shot_status(machine_id: str, db: Session = Depends(get_db)):
+    """현재 세션의 숏트 현황 조회"""
+    m = db.get(Machine, machine_id)
+    if not m:
+        raise HTTPException(404)
+    session = db.query(WorkerSession).filter(
+        WorkerSession.machine_id == machine_id,
+        WorkerSession.status == SessionStatus.running,
+    ).order_by(WorkerSession.start_time.desc()).first()
+    if not session:
+        return {"machine_id": machine_id, "active": False}
+    return {
+        "machine_id": machine_id,
+        "active": True,
+        "session_id": session.id,
+        "shot_count": session.shot_count,
+        "total_produced": session.shot_count * m.cavity_count,
+        "good_qty": session.good_qty,
+        "defect_qty": session.defect_qty,
+        "shot_base": session.shot_base,
+    }
 
 
 # ── 작업지시서 ────────────────────────────────────────────────────────

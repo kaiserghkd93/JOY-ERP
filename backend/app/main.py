@@ -138,6 +138,15 @@ with engine.connect() as _conn:
         "ALTER TABLE mes_work_order ADD COLUMN IF NOT EXISTS assigned_worker_id VARCHAR(50)",
         # 작업 세션 — 주야 교대 (주간 08:30~20:30 / 야간 20:30~08:30)
         "ALTER TABLE worker_session ADD COLUMN IF NOT EXISTS shift VARCHAR(10)",
+        # 설비 통신 연동 설정 (사출기/CNC/방전기/자동화장비 공통)
+        "ALTER TABLE machine ADD COLUMN IF NOT EXISTS protocol_type VARCHAR(20)",
+        "ALTER TABLE machine ADD COLUMN IF NOT EXISTS comm_host VARCHAR(100)",
+        "ALTER TABLE machine ADD COLUMN IF NOT EXISTS modbus_slave_id INTEGER DEFAULT 1",
+        "ALTER TABLE machine ADD COLUMN IF NOT EXISTS counter_register_addr INTEGER",
+        "ALTER TABLE machine ADD COLUMN IF NOT EXISTS counter_register_count INTEGER DEFAULT 2",
+        # 작업 세션 — 사출기 숏트수 연동
+        "ALTER TABLE worker_session ADD COLUMN IF NOT EXISTS shot_count INTEGER DEFAULT 0",
+        "ALTER TABLE worker_session ADD COLUMN IF NOT EXISTS shot_base INTEGER",
     ]:
         try:
             _conn.execute(_text(_sql))
