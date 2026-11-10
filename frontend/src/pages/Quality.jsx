@@ -2147,7 +2147,7 @@ export default function Quality() {
                           onMouseEnter={e=>e.currentTarget.style.background='#f0f9ff'}
                           onMouseLeave={e=>e.currentTarget.style.background='#fff'}
                           onMouseDown={()=>{
-                            setDefRegForm(p=>({...p,part_no:it.part_no,part_name:it.name||''}))
+                            setDefRegForm(p=>({...p,part_no:it.part_no,part_name:it.name||'',unit_price:it.std_sell_price||0}))
                             setPartAcOpen(false)
                             setPartAcList([])
                           }}>
