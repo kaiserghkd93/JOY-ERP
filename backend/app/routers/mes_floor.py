@@ -116,7 +116,7 @@ def create_wo(body: WOCreate, db: Session = Depends(get_db), user: User = Depend
     if body.assigned_worker_id and not db.get(AuthUser, body.assigned_worker_id):
         raise HTTPException(404, f"작업자 없음: {body.assigned_worker_id}")
 
-    wo_no = next_doc_no(db, "WO", body.plan_date)
+    wo_no = next_doc_no(db, "WO", "mes_work_order", "wo_no")
     wo = MesWorkOrder(
         wo_no=wo_no,
         part_no=body.part_no,
@@ -455,9 +455,9 @@ def my_session(worker_id: str, db: Session = Depends(get_db)):
 
 
 @router.get("/worker-kpi")
-def worker_kpi(worker_id: str, kpi_date: Optional[date] = None, db: Session = Depends(get_db)):
+def worker_kpi(worker_id: str, kpi_date: Optional[str] = None, db: Session = Depends(get_db)):
     """작업자 일별 공수 KPI (주야 교대 집계)"""
-    target = kpi_date or date.today()
+    target: date = date.fromisoformat(kpi_date) if kpi_date else date.today()
     day_start = datetime.combine(target, dt_time(0, 0))
     day_end   = datetime.combine(target + timedelta(days=1), dt_time(0, 0))
 
