@@ -553,14 +553,22 @@ async def upload_excel(file: UploadFile = File(...), db: Session = Depends(get_d
     def to_date(v):
         if v is None:
             return None
-        if isinstance(v, (date, datetime)):
-            return v.date() if isinstance(v, datetime) else v
+        if isinstance(v, datetime):
+            return v.date()
+        if isinstance(v, date):
+            return v
         s = str(v).strip()
-        for fmt in ["%Y-%m-%d", "%Y/%m/%d", "%Y.%m.%d", "%Y%m%d"]:
+        for fmt in ["%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M",
+                    "%Y-%m-%d", "%Y/%m/%d", "%Y.%m.%d", "%Y%m%d"]:
             try:
                 return datetime.strptime(s, fmt).date()
             except:
                 pass
+        # "YYYY-MM-DD ..." 앞 10자만 파싱 시도
+        try:
+            return datetime.strptime(s[:10], "%Y-%m-%d").date()
+        except:
+            pass
         return None
 
     # 매핑 테이블 로드 (mes_part_no → erp_part_no)
