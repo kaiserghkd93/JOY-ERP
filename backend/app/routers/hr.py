@@ -75,6 +75,7 @@ class EmployeeIn(BaseModel):
     fixed_holiday_hrs: int = 0           # 월 고정 특근시간 (과장급 이상 16h)
     fixed_income_tax: int = 0            # 소득세 고정 (0이면 자동계산)
     fixed_local_tax: int = 0             # 지방소득세 고정 (0이면 자동계산)
+    birth_date: Optional[date] = None    # 생년월일 (만 60세 이상 국민연금 면제)
     meal_allow_fixed: float = 0           # 사내식당 운영시 0
     vehicle_allow_fixed: float = 200000
     resident_no: Optional[str] = None
@@ -97,6 +98,7 @@ def _emp_dict(e: Employee) -> dict:
         "fixed_holiday_hrs": e.fixed_holiday_hrs or 0,
         "fixed_income_tax": e.fixed_income_tax or 0,
         "fixed_local_tax": e.fixed_local_tax or 0,
+        "birth_date": str(e.birth_date) if e.birth_date else None,
         "meal_allow_fixed": float(e.meal_allow_fixed),
         "vehicle_allow_fixed": float(e.vehicle_allow_fixed),
         "resident_no": e.resident_no, "phone": e.phone,
@@ -499,10 +501,22 @@ def calculate_payroll(
             gross   = base_pay + ot_pay + night_pay + holiday_pay + meal_allow + vehicle_allow
             taxable = gross - min(meal_allow, NON_TAX_MEAL) - min(vehicle_allow, NON_TAX_VEH)
 
-            pen  = _round10(taxable * RATE_PENSION)
+            # 나이 계산 (만 나이 기준)
+            age = 0
+            if emp.birth_date:
+                age = start.year - emp.birth_date.year
+                if (start.month, start.day) < (emp.birth_date.month, emp.birth_date.day):
+                    age -= 1
+
+            # 국민연금: 만 60세 미만만 적용
+            pen = Decimal(0) if age >= 60 else _round10(taxable * RATE_PENSION)
+
             hlt  = _round10(taxable * RATE_HEALTH)
             lc   = _round10(hlt * RATE_LCARE)
-            emp_ = _round10(taxable * RATE_EMPLOY)
+
+            # 고용보험: 대표 직급은 면제
+            emp_ = Decimal(0) if (emp.position or '') == '대표' else _round10(taxable * RATE_EMPLOY)
+
             # 소득세: 직원별 고정값이 있으면 사용, 없으면 간이세액표 자동계산
             if emp.fixed_income_tax and emp.fixed_income_tax > 0:
                 it = Decimal(str(emp.fixed_income_tax))
@@ -588,6 +602,8 @@ def list_payroll(
         d["position"] = emp.position
         d["emp_type"] = emp.emp_type
         d["company"] = emp.company or "조이산업"
+        d["birth_date"] = str(emp.birth_date) if emp.birth_date else None
+        d["resident_no"] = emp.resident_no
         # Decimal → float 변환
         for k, v in d.items():
             if isinstance(v, Decimal):

@@ -33,6 +33,7 @@ class Employee(Base):
     meal_allow_fixed: Mapped[Decimal] = mapped_column(Numeric(15, 2), default=0)          # 식대 비과세 (사내식당 운영시 0)
     vehicle_allow_fixed: Mapped[Decimal] = mapped_column(Numeric(15, 2), default=200000) # 차량유지비 (200,000 비과세)
     # 개인정보
+    birth_date: Mapped[date | None] = mapped_column(Date)                # 생년월일 (만 60세 이상 국민연금 면제 계산용)
     resident_no: Mapped[str | None] = mapped_column(String(14))          # 주민등록번호 (평문: 실운영시 암호화 필요)
     phone: Mapped[str | None] = mapped_column(String(20))
     bank: Mapped[str | None] = mapped_column(String(30))
