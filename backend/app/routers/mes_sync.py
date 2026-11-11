@@ -28,9 +28,16 @@ def _link_to_erp(db, log: MesProductionLog):
     MES 실적 로그를 ERP 생산오더에 연결.
     MES 작업지시번호(PWO...)가 있으면 그걸 그대로 pord_no로 사용.
     없으면 part_no+date 기준으로 탐색하거나 자동 채번.
+    ERP item 테이블에 없는 품번은 오더 생성 없이 로그만 저장.
     """
+    from app.models.master import Item
     part_no = log.part_no
     prod_date = log.prod_date
+
+    # ERP에 미등록 품번이면 생산오더/DailyActual 연결 생략
+    if not db.query(Item).filter(Item.part_no == part_no).first():
+        log.synced_to_erp = False
+        return
 
     if log.mes_order_no:
         # 1순위: MES 작업지시번호로 생산오더 탐색
