@@ -71,6 +71,8 @@ class EmployeeIn(BaseModel):
     hourly_rate: float = 0               # 시급제: 시급
     weekly_hours: int = 40
     std_monthly_hours: int = 209
+    fixed_ot_hrs: int = 0                # 월 고정 연장시간 (과장급 이상 50h)
+    fixed_holiday_hrs: int = 0           # 월 고정 특근시간 (과장급 이상 16h)
     meal_allow_fixed: float = 0           # 사내식당 운영시 0
     vehicle_allow_fixed: float = 200000
     resident_no: Optional[str] = None
@@ -89,6 +91,8 @@ def _emp_dict(e: Employee) -> dict:
         "emp_type": e.emp_type, "company": e.company,
         "base_salary": float(e.base_salary), "hourly_rate": float(e.hourly_rate),
         "weekly_hours": e.weekly_hours, "std_monthly_hours": e.std_monthly_hours,
+        "fixed_ot_hrs": e.fixed_ot_hrs or 0,
+        "fixed_holiday_hrs": e.fixed_holiday_hrs or 0,
         "meal_allow_fixed": float(e.meal_allow_fixed),
         "vehicle_allow_fixed": float(e.vehicle_allow_fixed),
         "resident_no": e.resident_no, "phone": e.phone,
@@ -431,6 +435,8 @@ def calculate_payroll(
             total_ot_min  = sum(a.ot_min for a in atts)
             total_ot_hrs  += total_ot_min // 60
             total_ot_min   = total_ot_min % 60
+            # 직급별 고정 연장시간 가산 (과장급 이상 50h)
+            total_ot_hrs  += emp.fixed_ot_hrs or 0
 
             total_night_hrs = sum(a.night_hrs for a in atts)
             total_night_min = sum(a.night_min for a in atts)
@@ -441,6 +447,8 @@ def calculate_payroll(
             total_hol_min = sum(a.holiday_min for a in atts)
             total_hol_hrs += total_hol_min // 60
             total_hol_min  = total_hol_min % 60
+            # 직급별 고정 특근시간 가산 (과장급 이상 16h)
+            total_hol_hrs += emp.fixed_holiday_hrs or 0
 
             absents   = sum(1 for a in atts if a.absent)
             std_m_hrs = emp.std_monthly_hours or 209
@@ -467,7 +475,7 @@ def calculate_payroll(
                 + std_hourly * (Decimal(total_hol_min) / 60) * Decimal("1.5")
             ).quantize(Decimal("1"), ROUND_HALF_UP)
 
-            meal_allow    = Decimal(str(emp.meal_allow_fixed))
+            meal_allow    = Decimal("0")  # 사내식당 운영으로 식대 비과세 없음
             vehicle_allow = Decimal(str(emp.vehicle_allow_fixed))
 
             gross   = base_pay + ot_pay + night_pay + holiday_pay + meal_allow + vehicle_allow

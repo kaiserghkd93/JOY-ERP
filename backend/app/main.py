@@ -168,6 +168,8 @@ with engine.connect() as _conn:
         "ALTER TABLE hr_employee ADD COLUMN IF NOT EXISTS std_monthly_hours INTEGER DEFAULT 209",
         "ALTER TABLE hr_employee ADD COLUMN IF NOT EXISTS meal_allow_fixed NUMERIC(15,2) DEFAULT 0",
         "ALTER TABLE hr_employee ADD COLUMN IF NOT EXISTS vehicle_allow_fixed NUMERIC(15,2) DEFAULT 200000",
+        "ALTER TABLE hr_employee ADD COLUMN IF NOT EXISTS fixed_ot_hrs INTEGER DEFAULT 0",
+        "ALTER TABLE hr_employee ADD COLUMN IF NOT EXISTS fixed_holiday_hrs INTEGER DEFAULT 0",
         "ALTER TABLE hr_employee ADD COLUMN IF NOT EXISTS resident_no VARCHAR(14)",
         "ALTER TABLE hr_employee ADD COLUMN IF NOT EXISTS phone VARCHAR(20)",
         "ALTER TABLE hr_employee ADD COLUMN IF NOT EXISTS bank VARCHAR(30)",

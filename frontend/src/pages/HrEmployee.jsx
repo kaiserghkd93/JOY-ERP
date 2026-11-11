@@ -132,14 +132,28 @@ export default function HrEmployee() {
   )
 }
 
+const SENIOR_POS = new Set(['과장', '차장', '부장', '이사', '대표'])
+
 function EmployeeModal({ employee, onClose, onSaved }) {
   const editing = !!employee
   const [form, setForm] = useState(employee || {
     emp_id: '', name: '', dept: '', position: '', hire_date: '', retire_date: '',
-    emp_type: 'annual', company: '조이산업', base_salary: '', hourly_rate: '', weekly_hours: 40, ot_rate: 1.5,
+    emp_type: 'hourly', company: '조이산업', base_salary: '', hourly_rate: '', weekly_hours: 40,
+    fixed_ot_hrs: 0, fixed_holiday_hrs: 0,
+    vehicle_allow_fixed: 200000,
     resident_no: '', phone: '', bank: '', bank_account: '', email: '', note: '',
   })
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
+
+  const handlePositionChange = (pos) => {
+    const isSenior = SENIOR_POS.has(pos)
+    setForm(f => ({
+      ...f,
+      position: pos,
+      fixed_ot_hrs: isSenior ? 50 : 0,
+      fixed_holiday_hrs: isSenior ? 16 : 0,
+    }))
+  }
 
   const submit = async () => {
     if (!form.emp_id) return alert('사번을 입력하세요')
@@ -149,7 +163,10 @@ function EmployeeModal({ employee, onClose, onSaved }) {
       base_salary: +form.base_salary || 0,
       hourly_rate: +form.hourly_rate || 0,
       weekly_hours: +form.weekly_hours || 40,
-      ot_rate: +form.ot_rate || 1.5,
+      fixed_ot_hrs: +form.fixed_ot_hrs || 0,
+      fixed_holiday_hrs: +form.fixed_holiday_hrs || 0,
+      vehicle_allow_fixed: +form.vehicle_allow_fixed ?? 200000,
+      meal_allow_fixed: 0,
       hire_date: form.hire_date || null,
       retire_date: form.retire_date || null,
     }
@@ -188,7 +205,7 @@ function EmployeeModal({ employee, onClose, onSaved }) {
           </div>
           <div className="form-group">
             <label>직급</label>
-            <select className="form-control" value={form.position || ''} onChange={e => set('position', e.target.value)}>
+            <select className="form-control" value={form.position || ''} onChange={e => handlePositionChange(e.target.value)}>
               <option value="">선택</option>
               {POS_LIST.map(p => <option key={p}>{p}</option>)}
             </select>
@@ -233,6 +250,27 @@ function EmployeeModal({ employee, onClose, onSaved }) {
             </div>
           </div>
         )}
+
+        <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: 12, marginTop: 8, marginBottom: 8, fontSize: 11, color: '#64748b', fontWeight: 600 }}>
+          수당 설정
+          <span style={{ marginLeft: 8, fontWeight: 400, color: '#94a3b8' }}>※ 과장급 이상 자동: 고정연장 50h / 고정특근 16h</span>
+        </div>
+
+        <div className="grid-2">
+          <div className="form-group">
+            <label>고정 연장시간 (h/월)</label>
+            <input className="form-control" type="number" min="0" value={form.fixed_ot_hrs ?? 0} onChange={e => set('fixed_ot_hrs', +e.target.value)} placeholder="0" />
+          </div>
+          <div className="form-group">
+            <label>고정 특근시간 (h/월)</label>
+            <input className="form-control" type="number" min="0" value={form.fixed_holiday_hrs ?? 0} onChange={e => set('fixed_holiday_hrs', +e.target.value)} placeholder="0" />
+          </div>
+        </div>
+
+        <div className="form-group">
+          <label>차량유지비 (원/월, 비과세)</label>
+          <input className="form-control" type="number" min="0" value={form.vehicle_allow_fixed ?? 200000} onChange={e => set('vehicle_allow_fixed', +e.target.value)} placeholder="200000" />
+        </div>
 
         <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: 12, marginTop: 4, marginBottom: 8, fontSize: 11, color: '#64748b', fontWeight: 600 }}>개인정보</div>
 
