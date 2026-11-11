@@ -811,7 +811,7 @@ def export_payroll_excel(
             tr = len(rows)+4
             mc = ws1.cell(row=tr,column=1,value="합 계"); mc.font=TF; mc.alignment=CA
             ws1.merge_cells(start_row=tr,start_column=1,end_row=tr,end_column=4)
-            for col in [C["rate"],C["base"],C["ot_pay"],C["night_pay"],C["hol_pay"],
+            for col in [C["base"],C["ot_pay"],C["night_pay"],C["hol_pay"],
                         C["foreman"],C["vehicle"],C["meal"],C["bonus"],C["gross"],
                         C["pension"],C["health"],C["employ"],C["lcare"],
                         C["income_tax"],C["local_tax"],C["total_deduct"],C["net"]]:
