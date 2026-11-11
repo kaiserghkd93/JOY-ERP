@@ -510,17 +510,18 @@ async def upload_excel(file: UploadFile = File(...), db: Session = Depends(get_d
 
     # 컬럼 매핑 (MES 양식 기준 + 한국어/영어 혼용 지원)
     COL_MAP = {
-        "날짜":      ["계획일", "날짜", "생산일", "작업일", "일자", "DATE", "PROD_DATE", "WOR_DATE", "ORD_DATE"],
-        "품번":      ["품목코드", "품번", "PART_NO", "ITEM_CD", "ITEM_CODE"],
-        "품명":      ["품명", "품목명", "PART_NAME", "ITEM_NM", "ITEM_NAME"],
-        "설비번호":  ["설비", "설비번호", "기계번호", "MACHINE_NO", "EQUIP_NAME", "EQP_NO"],
-        "교대":      ["주/야", "교/야", "교대", "SHIFT", "SHIFTWORK"],
-        "계획수량":  ["계획수량", "계획", "PLAN_QTY", "PLN_QTY"],
-        "실적수량":  ["실적수량", "실적", "양품수량", "생산수량", "GOOD_QTY", "ACT_QTY", "ACTUAL_QTY"],
-        "불량수량":  ["불량수량", "불량", "BAD_QTY", "NG_QTY", "DEFECT_QTY"],
+        "날짜":      ["생산시작", "생산종료", "계획일", "날짜", "생산일", "작업일", "일자", "DATE", "PROD_DATE", "WOR_DATE", "ORD_DATE"],
+        "품번":      ["품번", "품목코드", "PART_NO", "ITEM_CD", "ITEM_CODE"],
+        "품명":      ["품명", "제품명", "품목명", "PART_NAME", "ITEM_NM", "ITEM_NAME"],
+        "설비번호":  ["호기", "설비", "설비번호", "기계번호", "MACHINE_NO", "EQUIP_NAME", "EQP_NO"],
+        "교대":      ["작업조", "주/야", "교/야", "교대", "SHIFT", "SHIFTWORK"],
+        "계획수량":  ["목표수량", "계획수량", "계획", "PLAN_QTY", "PLN_QTY"],
+        "실적수량":  ["양품수", "양품수(개)", "실적수량", "실적", "양품수량", "GOOD_QTY", "ACT_QTY", "ACTUAL_QTY"],
+        "생산수량":  ["생산수량", "생산수량(개)", "PROD_QTY"],
+        "불량수량":  ["불량수", "불량수(개)", "불량수량", "불량수량(개)", "불량", "BAD_QTY", "NG_QTY", "DEFECT_QTY"],
         "불량원인":  ["불량원인", "불량원인명", "BAD_REASON", "NG_REASON", "DEFECT_REASON"],
         "가동시간":  ["가동시간", "RUN_TIME", "SILDONG_TIME"],
-        "비가동시간":["비가동시간", "STOP_MIN", "DOWN_TIME"],
+        "비가동시간":["비가동시간", "유실현황(분)", "STOP_MIN", "DOWN_TIME"],
         "비가동원인":["비가동원인", "STOP_REASON", "DOWN_REASON"],
         "작업자":    ["작업자", "작업자명", "WORKER", "WORKER_NM"],
         "작업지시번호": ["작업지시번호", "지시번호", "WO_NO", "PRD_WO_CD", "MES_ORDER_NO"],
@@ -591,6 +592,11 @@ async def upload_excel(file: UploadFile = File(...), db: Session = Depends(get_d
 
         try:
             actual_qty = int(float(cell_val(row, "실적수량", 0) or 0))
+            # 실적수량 미매핑 시 (생산수량 - 불량수)로 계산
+            if actual_qty == 0 and "생산수량" in col_idx:
+                prod_qty = int(float(cell_val(row, "생산수량", 0) or 0))
+                bad_qty  = int(float(cell_val(row, "불량수량", 0) or 0))
+                actual_qty = max(0, prod_qty - bad_qty)
             plan_qty   = int(float(cell_val(row, "계획수량", 0) or 0))
             defect_qty = int(float(cell_val(row, "불량수량", 0) or 0))
             machine_no = str(cell_val(row, "설비번호", "") or "").strip() or None
