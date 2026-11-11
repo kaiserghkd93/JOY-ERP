@@ -26,8 +26,8 @@ from sqlalchemy import func, Integer, cast
 from pydantic import BaseModel
 
 from app.database import get_db
-from app.routers.auth import get_current_user
-from app.models.hr import Employee, Attendance, Payroll
+from app.routers.auth import get_current_user, require_admin
+from app.models.hr import Employee, Attendance, Payroll, EmployeeKpi
 
 router = APIRouter(prefix="/hr", tags=["인사"])
 
@@ -934,3 +934,151 @@ def attendance_summary(
         }
         for r in rows
     ]
+
+
+# ── KPI 평가 ──────────────────────────────────────────────────────────
+
+GRADE_OPTIONS = ["S", "A", "B", "C", "D"]
+
+
+class KpiIn(BaseModel):
+    emp_id: str
+    year: int
+    month: int = 0  # 0 = 연간평가
+    score_production: Optional[float] = None   # 생산목표 달성률
+    score_quality: Optional[float] = None      # 품질
+    score_attendance: Optional[float] = None   # 출근율
+    score_attitude: Optional[float] = None     # 업무태도
+    total_score: Optional[float] = None        # 종합점수 (미입력 시 평균 자동계산)
+    grade: Optional[str] = None                # S/A/B/C/D
+    note: Optional[str] = None
+
+
+def _kpi_dict(k: EmployeeKpi, name: str = "") -> dict:
+    return {
+        "id": k.id,
+        "emp_id": k.emp_id,
+        "name": name,
+        "year": k.year,
+        "month": k.month,
+        "score_production": k.score_production,
+        "score_quality": k.score_quality,
+        "score_attendance": k.score_attendance,
+        "score_attitude": k.score_attitude,
+        "total_score": k.total_score,
+        "grade": k.grade,
+        "note": k.note,
+        "evaluated_by": k.evaluated_by,
+        "created_at": str(k.created_at) if k.created_at else None,
+        "updated_at": str(k.updated_at) if k.updated_at else None,
+    }
+
+
+def _auto_grade(score: float) -> str:
+    if score >= 90: return "S"
+    if score >= 80: return "A"
+    if score >= 70: return "B"
+    if score >= 60: return "C"
+    return "D"
+
+
+@router.get("/kpi")
+def list_kpi(
+    year: int = Query(...),
+    month: Optional[int] = Query(None),
+    emp_id: Optional[str] = None,
+    db: Session = Depends(get_db),
+    _=Depends(get_current_user),
+):
+    q = db.query(EmployeeKpi, Employee).join(Employee, EmployeeKpi.emp_id == Employee.emp_id)\
+        .filter(EmployeeKpi.year == year)
+    if month is not None:
+        q = q.filter(EmployeeKpi.month == month)
+    if emp_id:
+        q = q.filter(EmployeeKpi.emp_id == emp_id)
+    rows = q.order_by(EmployeeKpi.emp_id, EmployeeKpi.month).all()
+    return [_kpi_dict(k, e.name) for k, e in rows]
+
+
+@router.get("/kpi/latest")
+def latest_kpi_per_employee(
+    db: Session = Depends(get_db),
+    _=Depends(get_current_user),
+):
+    """사원별 최근 KPI 한 건씩 반환"""
+    from sqlalchemy import text as _t
+    rows = db.execute(_t("""
+        SELECT DISTINCT ON (emp_id) emp_id, id, year, month, total_score, grade, note
+        FROM hr_employee_kpi
+        ORDER BY emp_id, year DESC, month DESC
+    """)).fetchall()
+    return [
+        {
+            "emp_id": r[0], "id": r[1], "year": r[2], "month": r[3],
+            "total_score": r[4], "grade": r[5], "note": r[6],
+        }
+        for r in rows
+    ]
+
+
+@router.post("/kpi")
+def upsert_kpi(
+    body: KpiIn,
+    db: Session = Depends(get_db),
+    user=Depends(require_admin),
+):
+    scores = [s for s in [body.score_production, body.score_quality,
+                           body.score_attendance, body.score_attitude] if s is not None]
+    total = body.total_score if body.total_score is not None else (
+        round(sum(scores) / len(scores), 1) if scores else None
+    )
+    grade = body.grade or (_auto_grade(total) if total is not None else None)
+
+    existing = db.query(EmployeeKpi).filter(
+        EmployeeKpi.emp_id == body.emp_id,
+        EmployeeKpi.year == body.year,
+        EmployeeKpi.month == body.month,
+    ).first()
+
+    if existing:
+        existing.score_production = body.score_production
+        existing.score_quality = body.score_quality
+        existing.score_attendance = body.score_attendance
+        existing.score_attitude = body.score_attitude
+        existing.total_score = total
+        existing.grade = grade
+        existing.note = body.note
+        existing.evaluated_by = user.name or user.id
+        existing.updated_at = datetime.now()
+        db.commit()
+        emp = db.get(Employee, body.emp_id)
+        return _kpi_dict(existing, emp.name if emp else "")
+    else:
+        k = EmployeeKpi(
+            emp_id=body.emp_id,
+            year=body.year,
+            month=body.month,
+            score_production=body.score_production,
+            score_quality=body.score_quality,
+            score_attendance=body.score_attendance,
+            score_attitude=body.score_attitude,
+            total_score=total,
+            grade=grade,
+            note=body.note,
+            evaluated_by=user.name or user.id,
+        )
+        db.add(k)
+        db.commit()
+        db.refresh(k)
+        emp = db.get(Employee, body.emp_id)
+        return _kpi_dict(k, emp.name if emp else "")
+
+
+@router.delete("/kpi/{kpi_id}")
+def delete_kpi(kpi_id: int, db: Session = Depends(get_db), _=Depends(require_admin)):
+    k = db.get(EmployeeKpi, kpi_id)
+    if not k:
+        raise HTTPException(404)
+    db.delete(k)
+    db.commit()
+    return {"ok": True}

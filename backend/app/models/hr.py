@@ -47,6 +47,7 @@ class Employee(Base):
 
     attendances: Mapped[list["Attendance"]] = relationship(back_populates="employee", cascade="all, delete-orphan")
     payrolls: Mapped[list["Payroll"]] = relationship(back_populates="employee", cascade="all, delete-orphan")
+    kpis: Mapped[list["EmployeeKpi"]] = relationship(back_populates="employee", cascade="all, delete-orphan")
 
 
 class Attendance(Base):
@@ -75,6 +76,32 @@ class Attendance(Base):
 
     __table_args__ = (
         __import__('sqlalchemy').UniqueConstraint('emp_id', 'work_date', name='uq_attendance_emp_date'),
+    )
+
+
+class EmployeeKpi(Base):
+    """직원 KPI 평가"""
+    __tablename__ = "hr_employee_kpi"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    emp_id: Mapped[str] = mapped_column(ForeignKey("hr_employee.emp_id"), nullable=False)
+    year: Mapped[int] = mapped_column(Integer, nullable=False)
+    month: Mapped[int] = mapped_column(Integer, nullable=False)   # 0 = 연간평가
+    score_production: Mapped[float | None] = mapped_column(Float)   # 생산목표 달성률 (0-100)
+    score_quality: Mapped[float | None] = mapped_column(Float)       # 품질 (0-100)
+    score_attendance: Mapped[float | None] = mapped_column(Float)    # 출근율 (0-100)
+    score_attitude: Mapped[float | None] = mapped_column(Float)      # 업무태도 (0-100)
+    total_score: Mapped[float | None] = mapped_column(Float)         # 종합점수 (0-100)
+    grade: Mapped[str | None] = mapped_column(String(5))             # S/A/B/C/D
+    note: Mapped[str | None] = mapped_column(Text)
+    evaluated_by: Mapped[str | None] = mapped_column(String(50))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+    updated_at: Mapped[datetime | None] = mapped_column(DateTime, onupdate=datetime.now)
+
+    employee: Mapped["Employee"] = relationship(back_populates="kpis")
+
+    __table_args__ = (
+        __import__('sqlalchemy').UniqueConstraint('emp_id', 'year', 'month', name='uq_kpi_emp_ym'),
     )
 
 

@@ -43,7 +43,7 @@ export default function HrAttendance() {
     const fd = new FormData()
     fd.append('file', file)
     try {
-      const r = await api.post('/hr/attendance/upload-caps', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
+      const r = await api.post('/hr/attendance/upload-caps', fd)
       setUploadResult(r.data)
       loadSummary()
       loadDetail()
@@ -164,8 +164,8 @@ export default function HrAttendance() {
                   }}>{s.emp_type === 'annual' ? '연봉' : '시급'}</span></td>
                   <td style={{ textAlign: 'right' }}>{s.days}</td>
                   <td style={{ textAlign: 'right', fontWeight: 600 }}>{s.total_work}h</td>
-                  <td style={{ textAlign: 'right', color: s.total_ot > 0 ? '#d97706' : undefined }}>{s.total_ot}h</td>
-                  <td style={{ textAlign: 'right', color: s.total_night > 0 ? '#7c3aed' : undefined }}>{s.total_night}h</td>
+                  <td style={{ textAlign: 'right', color: s.total_ot_hrs > 0 ? '#d97706' : undefined }}>{s.total_ot_hrs}h</td>
+                  <td style={{ textAlign: 'right', color: s.total_night_hrs > 0 ? '#7c3aed' : undefined }}>{s.total_night_hrs}h</td>
                   <td style={{ textAlign: 'right', color: s.absents > 0 ? '#dc2626' : undefined }}>{s.absents}</td>
                   <td style={{ textAlign: 'right' }}>{s.holidays}</td>
                 </tr>
