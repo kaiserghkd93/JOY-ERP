@@ -98,12 +98,37 @@ def _emp_dict(e: Employee) -> dict:
     }
 
 
+@router.get("/employees/debug")
+def debug_employees(db: Session = Depends(get_db), _=Depends(get_current_user)):
+    """HR 테이블 디버그 — 오류 상세 반환"""
+    import traceback
+    try:
+        from sqlalchemy import text as _t
+        with db.bind.connect() as conn:
+            exists = conn.execute(_t(
+                "SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='hr_employee')"
+            )).scalar()
+            if exists:
+                cols = conn.execute(_t(
+                    "SELECT column_name, data_type FROM information_schema.columns "
+                    "WHERE table_name='hr_employee' ORDER BY ordinal_position"
+                )).fetchall()
+                return {"table_exists": True, "columns": [{"name": c[0], "type": c[1]} for c in cols]}
+            return {"table_exists": False}
+    except Exception as e:
+        return {"error": str(e), "traceback": traceback.format_exc()}
+
+
 @router.get("/employees")
 def list_employees(active_only: bool = True, db: Session = Depends(get_db), _=Depends(get_current_user)):
-    q = db.query(Employee)
-    if active_only:
-        q = q.filter(Employee.is_active == True)
-    return [_emp_dict(e) for e in q.order_by(Employee.emp_id).all()]
+    import traceback
+    try:
+        q = db.query(Employee)
+        if active_only:
+            q = q.filter(Employee.is_active == True)
+        return [_emp_dict(e) for e in q.order_by(Employee.emp_id).all()]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}\n{traceback.format_exc()}")
 
 
 @router.post("/employees")
