@@ -16,6 +16,7 @@ export default function HrEmployee() {
   const [q, setQ] = useState('')
   const [deptFilter, setDeptFilter] = useState('')
   const [typeFilter, setTypeFilter] = useState('')
+  const [companyFilter, setCompanyFilter] = useState('')
 
   const load = useCallback(() => {
     api.get('/hr/employees?active_only=false').then(r => setEmployees(r.data)).catch(() => {})
@@ -33,7 +34,8 @@ export default function HrEmployee() {
     const matchQ = !q || e.emp_id.includes(q) || e.name.includes(q)
     const matchD = !deptFilter || e.dept === deptFilter
     const matchT = !typeFilter || e.emp_type === typeFilter
-    return matchQ && matchD && matchT
+    const matchC = !companyFilter || (e.company || '조이산업') === companyFilter
+    return matchQ && matchD && matchT && matchC
   })
 
   return (
@@ -54,6 +56,10 @@ export default function HrEmployee() {
           <option value="">고용형태</option>
           <option value="annual">연봉제</option>
           <option value="hourly">시급제</option>
+        </select>
+        <select className="form-control" value={companyFilter} onChange={e => setCompanyFilter(e.target.value)} style={{ width: 110 }}>
+          <option value="">법인 전체</option>
+          {COMPANY_LIST.map(c => <option key={c}>{c}</option>)}
         </select>
       </div>
 
