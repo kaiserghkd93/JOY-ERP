@@ -145,6 +145,8 @@ with engine.connect() as _conn:
         "ALTER TABLE hr_attendance ADD COLUMN IF NOT EXISTS source VARCHAR(20) DEFAULT 'manual'",
         "ALTER TABLE hr_attendance ADD COLUMN IF NOT EXISTS absent BOOLEAN DEFAULT FALSE",
         "ALTER TABLE hr_attendance ADD COLUMN IF NOT EXISTS holiday BOOLEAN DEFAULT FALSE",
+        # HR — hr_payroll 잔존 NOT NULL 컬럼 기본값 설정
+        "ALTER TABLE hr_payroll ALTER COLUMN trans_allow SET DEFAULT 0",
         # HR — hr_payroll 누락 컬럼 추가
         "ALTER TABLE hr_payroll ADD COLUMN IF NOT EXISTS std_hrs INTEGER DEFAULT 209",
         "ALTER TABLE hr_payroll ADD COLUMN IF NOT EXISTS std_hourly NUMERIC(10,2) DEFAULT 0",

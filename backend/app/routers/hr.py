@@ -100,21 +100,26 @@ def _emp_dict(e: Employee) -> dict:
 
 @router.get("/employees/debug")
 def debug_employees(db: Session = Depends(get_db), _=Depends(get_current_user)):
-    """HR 테이블 디버그 — 오류 상세 반환"""
+    """HR 테이블 디버그 — 모든 HR 테이블 컬럼 및 NOT NULL 정보 반환"""
     import traceback
     try:
         from sqlalchemy import text as _t
+        result = {}
         with db.bind.connect() as conn:
-            exists = conn.execute(_t(
-                "SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='hr_employee')"
-            )).scalar()
-            if exists:
-                cols = conn.execute(_t(
-                    "SELECT column_name, data_type FROM information_schema.columns "
-                    "WHERE table_name='hr_employee' ORDER BY ordinal_position"
-                )).fetchall()
-                return {"table_exists": True, "columns": [{"name": c[0], "type": c[1]} for c in cols]}
-            return {"table_exists": False}
+            for tbl in ["hr_employee", "hr_attendance", "hr_payroll"]:
+                exists = conn.execute(_t(
+                    "SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name=:t)"
+                ), {"t": tbl}).scalar()
+                if exists:
+                    cols = conn.execute(_t(
+                        "SELECT column_name, data_type, is_nullable, column_default "
+                        "FROM information_schema.columns "
+                        "WHERE table_name=:t ORDER BY ordinal_position"
+                    ), {"t": tbl}).fetchall()
+                    result[tbl] = [{"name": c[0], "type": c[1], "nullable": c[2], "default": c[3]} for c in cols]
+                else:
+                    result[tbl] = None
+        return result
     except Exception as e:
         return {"error": str(e), "traceback": traceback.format_exc()}
 
