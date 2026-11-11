@@ -81,12 +81,29 @@ class EmployeeIn(BaseModel):
     note: Optional[str] = None
 
 
+def _emp_dict(e: Employee) -> dict:
+    return {
+        "emp_id": e.emp_id, "name": e.name, "dept": e.dept,
+        "position": e.position, "hire_date": str(e.hire_date) if e.hire_date else None,
+        "retire_date": str(e.retire_date) if e.retire_date else None,
+        "emp_type": e.emp_type, "company": e.company,
+        "base_salary": float(e.base_salary), "hourly_rate": float(e.hourly_rate),
+        "weekly_hours": e.weekly_hours, "std_monthly_hours": e.std_monthly_hours,
+        "meal_allow_fixed": float(e.meal_allow_fixed),
+        "vehicle_allow_fixed": float(e.vehicle_allow_fixed),
+        "resident_no": e.resident_no, "phone": e.phone,
+        "bank": e.bank, "bank_account": e.bank_account,
+        "email": e.email, "note": e.note, "is_active": e.is_active,
+        "created_at": str(e.created_at) if e.created_at else None,
+    }
+
+
 @router.get("/employees")
 def list_employees(active_only: bool = True, db: Session = Depends(get_db), _=Depends(get_current_user)):
     q = db.query(Employee)
     if active_only:
         q = q.filter(Employee.is_active == True)
-    return q.order_by(Employee.emp_id).all()
+    return [_emp_dict(e) for e in q.order_by(Employee.emp_id).all()]
 
 
 @router.post("/employees")
@@ -97,7 +114,7 @@ def create_employee(body: EmployeeIn, db: Session = Depends(get_db), _=Depends(g
     db.add(e)
     db.commit()
     db.refresh(e)
-    return e
+    return _emp_dict(e)
 
 
 @router.patch("/employees/{emp_id}")
@@ -108,7 +125,7 @@ def update_employee(emp_id: str, body: EmployeeIn, db: Session = Depends(get_db)
     for k, v in body.model_dump(exclude={"emp_id"}).items():
         setattr(e, k, v)
     db.commit()
-    return e
+    return _emp_dict(e)
 
 
 @router.delete("/employees/{emp_id}")
