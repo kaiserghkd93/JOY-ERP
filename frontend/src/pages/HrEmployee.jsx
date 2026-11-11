@@ -3,7 +3,7 @@ import api from '../api'
 
 const EMP_TYPE    = { annual: '연봉제', hourly: '시급제' }
 const DEPT_LIST   = ['생산', '품질', '영업', '구매', '관리', '경영', '금형']
-const POS_LIST    = ['사원', '주임', '대리', '과장', '차장', '부장', '이사', '대표']
+const POS_LIST    = ['사원', '주임', '대리', '과장', '차장', '부장', '실장', '이사', '상무이사', '전무이사', '대표']
 const COMPANY_LIST = ['조이산업', '넥스젬']
 
 function fmt(n) {
@@ -132,7 +132,7 @@ export default function HrEmployee() {
   )
 }
 
-const SENIOR_POS = new Set(['과장', '차장', '부장', '이사', '대표'])
+const SENIOR_POS = new Set(['과장', '차장', '부장', '실장', '이사', '상무이사', '전무이사', '대표'])
 
 function EmployeeModal({ employee, onClose, onSaved }) {
   const editing = !!employee
