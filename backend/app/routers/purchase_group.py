@@ -492,10 +492,16 @@ def download_pdf(group_no: str, db: Session = Depends(get_db)):
     from reportlab.pdfbase.ttfonts import TTFont
     import os
 
-    # 한글 폰트 등록 (Windows 맑은 고딕)
-    font_path = r"C:\Windows\Fonts\malgun.ttf"
-    if os.path.exists(font_path):
-        pdfmetrics.registerFont(TTFont('Korean', font_path))
+    # 한글 폰트 등록 (Windows/Linux 환경 자동 감지)
+    _font_candidates = [
+        r"C:\Windows\Fonts\malgun.ttf",                                     # Windows 맑은고딕
+        "/usr/share/fonts/truetype/nanum/NanumGothic.ttf",                  # Ubuntu fonts-nanum
+        "/usr/share/fonts/truetype/nanum/NanumBarunGothic.ttf",
+        "/usr/share/fonts/nanum/NanumGothic.ttf",
+    ]
+    _font_path = next((p for p in _font_candidates if os.path.exists(p)), None)
+    if _font_path:
+        pdfmetrics.registerFont(TTFont('Korean', _font_path))
         font = 'Korean'
     else:
         font = 'Helvetica'
