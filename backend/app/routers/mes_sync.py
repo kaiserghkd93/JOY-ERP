@@ -984,3 +984,18 @@ def loss_detail(
         "loss_rate": float(r[10]) if r[10] is not None else None,
         "calc_at": str(r[11])[:16],
     } for r in rows]
+
+
+@router.delete("/clear-all")
+def clear_all_mes_data(confirm: str = Query(...), db: Session = Depends(get_db)):
+    """MES 업로드 데이터 전체 삭제 (confirm=yes 필수)"""
+    if confirm != "yes":
+        raise HTTPException(400, "confirm=yes 필요")
+    db.execute(text("DELETE FROM mes_defect_detail"))
+    db.execute(text("DELETE FROM mes_production_cost"))
+    db.execute(text("DELETE FROM mes_production_log"))
+    db.execute(text("DELETE FROM mes_sync_log"))
+    db.execute(text("DELETE FROM daily_actual WHERE note = 'MES연동'"))
+    db.execute(text("DELETE FROM production_order WHERE pord_no LIKE 'WO-%'"))
+    db.commit()
+    return {"ok": True, "message": "MES 데이터 전체 삭제 완료"}
