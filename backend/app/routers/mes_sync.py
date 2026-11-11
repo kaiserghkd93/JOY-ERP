@@ -14,7 +14,7 @@ import io
 
 from app.database import get_db
 from app.models.mes import MesSyncLog, MesProductionLog, MesPartMap, MesProductionCost, MesDefectDetail
-from app.models.production import ProductionOrder, DailyActual, POrdStatus
+from app.models.production import ProductionOrder, DailyActual, MonthlyPlan, POrdStatus
 from app.models.ledger import StockLedger, LedgerType
 from app.models.cost import ProductCostStd, LaborRate
 from app.services.doc_no import next_doc_no
@@ -78,16 +78,22 @@ def _link_to_erp(db, log: MesProductionLog):
     elif actual > 0 and pord.status == POrdStatus.planned:
         pord.status = "진행중"
 
-    # DailyActual 업서트
-    da = db.query(DailyActual).filter(
-        DailyActual.plan_id == pord.pord_no,
-        DailyActual.prod_date == prod_date,
+    # DailyActual 업서트 (plan_id = monthly_plan.id integer)
+    monthly = db.query(MonthlyPlan).filter(
+        MonthlyPlan.part_no == part_no,
+        MonthlyPlan.year == prod_date.year,
+        MonthlyPlan.month == prod_date.month,
     ).first()
-    if da:
-        da.actual_qty = actual
-    else:
-        db.add(DailyActual(plan_id=pord.pord_no, prod_date=prod_date,
-                           actual_qty=actual, note="MES연동"))
+    if monthly:
+        da = db.query(DailyActual).filter(
+            DailyActual.plan_id == monthly.id,
+            DailyActual.prod_date == prod_date,
+        ).first()
+        if da:
+            da.actual_qty = actual
+        else:
+            db.add(DailyActual(plan_id=monthly.id, prod_date=prod_date,
+                               actual_qty=actual, note="MES연동"))
 
     log.synced_to_erp = True
     log.erp_pord_no = pord.pord_no
