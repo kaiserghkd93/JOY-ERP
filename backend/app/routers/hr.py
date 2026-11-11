@@ -404,138 +404,129 @@ def calculate_payroll(
     과세표준 = 총지급 - min(식대, 200,000) - min(차량, 200,000)
     4대보험  = 과세표준 × 요율 (10원 반올림)
     """
-    import calendar
-    start = date(year, month, 1)
-    end   = date(year, month, calendar.monthrange(year, month)[1])
+    import calendar, traceback
+    try:
+        start = date(year, month, 1)
+        end   = date(year, month, calendar.monthrange(year, month)[1])
 
-    emps = db.query(Employee).filter(Employee.is_active == True)
-    if emp_id:
-        emps = emps.filter(Employee.emp_id == emp_id)
-    emps = emps.all()
+        emps = db.query(Employee).filter(Employee.is_active == True)
+        if emp_id:
+            emps = emps.filter(Employee.emp_id == emp_id)
+        emps = emps.all()
 
-    results = []
-    for emp in emps:
-        # ── 출퇴근 집계 ─────────────────────────────────────────────
-        atts = db.query(Attendance).filter(
-            Attendance.emp_id == emp.emp_id,
-            Attendance.work_date >= start,
-            Attendance.work_date <= end,
-        ).all()
+        results = []
+        for emp in emps:
+            atts = db.query(Attendance).filter(
+                Attendance.emp_id == emp.emp_id,
+                Attendance.work_date >= start,
+                Attendance.work_date <= end,
+            ).all()
 
-        total_ot_hrs  = sum(a.ot_hrs for a in atts)
-        total_ot_min  = sum(a.ot_min for a in atts)
-        # 분이 60 이상이면 시간으로 올림
-        total_ot_hrs  += total_ot_min // 60
-        total_ot_min   = total_ot_min % 60
+            total_ot_hrs  = sum(a.ot_hrs for a in atts)
+            total_ot_min  = sum(a.ot_min for a in atts)
+            total_ot_hrs  += total_ot_min // 60
+            total_ot_min   = total_ot_min % 60
 
-        total_night_hrs = sum(a.night_hrs for a in atts)
-        total_night_min = sum(a.night_min for a in atts)
-        total_night_hrs += total_night_min // 60
-        total_night_min  = total_night_min % 60
+            total_night_hrs = sum(a.night_hrs for a in atts)
+            total_night_min = sum(a.night_min for a in atts)
+            total_night_hrs += total_night_min // 60
+            total_night_min  = total_night_min % 60
 
-        total_hol_hrs = sum(a.holiday_hrs for a in atts)
-        total_hol_min = sum(a.holiday_min for a in atts)
-        total_hol_hrs += total_hol_min // 60
-        total_hol_min  = total_hol_min % 60
+            total_hol_hrs = sum(a.holiday_hrs for a in atts)
+            total_hol_min = sum(a.holiday_min for a in atts)
+            total_hol_hrs += total_hol_min // 60
+            total_hol_min  = total_hol_min % 60
 
-        absents = sum(1 for a in atts if a.absent)
+            absents   = sum(1 for a in atts if a.absent)
+            std_m_hrs = emp.std_monthly_hours or 209
 
-        std_m_hrs = emp.std_monthly_hours or 209
+            if emp.emp_type == "hourly":
+                std_hourly = Decimal(str(emp.hourly_rate))
+                base_pay   = (std_hourly * std_m_hrs).quantize(Decimal("1"), ROUND_HALF_UP)
+            else:
+                base_pay   = Decimal(str(emp.base_salary)).quantize(Decimal("1"), ROUND_HALF_UP)
+                std_hourly = (base_pay / Decimal(std_m_hrs)).quantize(Decimal("0.01"), ROUND_HALF_UP)
 
-        # ── 통상시급 ───────────────────────────────────────────────
-        if emp.emp_type == "hourly":
-            std_hourly = Decimal(str(emp.hourly_rate))
-            base_pay   = (std_hourly * std_m_hrs).quantize(Decimal("1"), ROUND_HALF_UP)
-        else:
-            # 연봉제: 월기본급 등록 → 통상시급 역산
-            base_pay   = Decimal(str(emp.base_salary)).quantize(Decimal("1"), ROUND_HALF_UP)
-            std_hourly = (base_pay / Decimal(std_m_hrs)).quantize(Decimal("0.01"), ROUND_HALF_UP)
+            ot_pay = (
+                std_hourly * Decimal(total_ot_hrs) * Decimal("1.5")
+                + std_hourly * (Decimal(total_ot_min) / 60) * Decimal("1.5")
+            ).quantize(Decimal("1"), ROUND_HALF_UP)
 
-        # ── 연장수당: 시급 × h × 1.5 + 시급 × 분/60 × 1.5 ─────────
-        ot_pay = (
-            std_hourly * Decimal(total_ot_hrs) * Decimal("1.5")
-            + std_hourly * (Decimal(total_ot_min) / 60) * Decimal("1.5")
-        ).quantize(Decimal("1"), ROUND_HALF_UP)
+            night_pay = (
+                std_hourly * Decimal(total_night_hrs) * Decimal("0.5")
+                + std_hourly * (Decimal(total_night_min) / 60) * Decimal("0.5")
+            ).quantize(Decimal("1"), ROUND_HALF_UP)
 
-        # ── 심야수당: 시급 × h × 0.5 (추가분만) ───────────────────
-        night_pay = (
-            std_hourly * Decimal(total_night_hrs) * Decimal("0.5")
-            + std_hourly * (Decimal(total_night_min) / 60) * Decimal("0.5")
-        ).quantize(Decimal("1"), ROUND_HALF_UP)
+            holiday_pay = (
+                std_hourly * Decimal(total_hol_hrs) * Decimal("1.5")
+                + std_hourly * (Decimal(total_hol_min) / 60) * Decimal("1.5")
+            ).quantize(Decimal("1"), ROUND_HALF_UP)
 
-        # ── 휴일수당: 시급 × h × 1.5 + 시급 × 분/60 × 1.5 ─────────
-        holiday_pay = (
-            std_hourly * Decimal(total_hol_hrs) * Decimal("1.5")
-            + std_hourly * (Decimal(total_hol_min) / 60) * Decimal("1.5")
-        ).quantize(Decimal("1"), ROUND_HALF_UP)
+            meal_allow    = Decimal(str(emp.meal_allow_fixed))
+            vehicle_allow = Decimal(str(emp.vehicle_allow_fixed))
 
-        # ── 고정 비과세 수당 ───────────────────────────────────────
-        meal_allow    = Decimal(str(emp.meal_allow_fixed))
-        vehicle_allow = Decimal(str(emp.vehicle_allow_fixed))
+            gross   = base_pay + ot_pay + night_pay + holiday_pay + meal_allow + vehicle_allow
+            taxable = gross - min(meal_allow, NON_TAX_MEAL) - min(vehicle_allow, NON_TAX_VEH)
 
-        gross = base_pay + ot_pay + night_pay + holiday_pay + meal_allow + vehicle_allow
+            pen  = _round10(taxable * RATE_PENSION)
+            hlt  = _round10(taxable * RATE_HEALTH)
+            lc   = _round10(hlt * RATE_LCARE)
+            emp_ = _round10(taxable * RATE_EMPLOY)
+            it   = _income_tax(taxable)
+            lt   = _round10(it * Decimal("0.1"))
 
-        # ── 과세표준 (비과세 제외) ──────────────────────────────────
-        taxable = gross - min(meal_allow, NON_TAX_MEAL) - min(vehicle_allow, NON_TAX_VEH)
+            total_deduct = pen + hlt + lc + emp_ + it + lt
+            net_pay = gross - total_deduct
 
-        # ── 4대보험 ────────────────────────────────────────────────
-        pen  = _round10(taxable * RATE_PENSION)
-        hlt  = _round10(taxable * RATE_HEALTH)
-        lc   = _round10(hlt * RATE_LCARE)
-        emp_ = _round10(taxable * RATE_EMPLOY)
-        it   = _income_tax(taxable)
-        lt   = _round10(it * Decimal("0.1"))
+            pr = db.query(Payroll).filter(
+                Payroll.emp_id == emp.emp_id,
+                Payroll.year == year,
+                Payroll.month == month,
+            ).first()
+            if not pr:
+                pr = Payroll(emp_id=emp.emp_id, year=year, month=month)
+                db.add(pr)
 
-        total_deduct = pen + hlt + lc + emp_ + it + lt
-        net_pay = gross - total_deduct
+            pr.std_hrs           = std_m_hrs
+            pr.std_hourly        = std_hourly
+            pr.pay_ot_hrs        = total_ot_hrs
+            pr.pay_ot_min        = total_ot_min
+            pr.pay_night_hrs     = total_night_hrs
+            pr.pay_holiday_hrs   = total_hol_hrs
+            pr.pay_holiday_min   = total_hol_min
+            pr.base_pay          = base_pay
+            pr.ot_pay            = ot_pay
+            pr.night_pay         = night_pay
+            pr.holiday_pay       = holiday_pay
+            pr.meal_allow        = meal_allow
+            pr.vehicle_allow     = vehicle_allow
+            pr.gross_pay         = gross
+            pr.deduct_pension    = pen
+            pr.deduct_health     = hlt
+            pr.deduct_lcare      = lc
+            pr.deduct_employ     = emp_
+            pr.deduct_income_tax = it
+            pr.deduct_local_tax  = lt
+            pr.total_deduct      = total_deduct
+            pr.net_pay           = net_pay
+            pr.status            = "계산중"
+            pr.calculated_at     = datetime.now()
 
-        # ── upsert ─────────────────────────────────────────────────
-        pr = db.query(Payroll).filter(
-            Payroll.emp_id == emp.emp_id,
-            Payroll.year == year,
-            Payroll.month == month,
-        ).first()
-        if not pr:
-            pr = Payroll(emp_id=emp.emp_id, year=year, month=month)
-            db.add(pr)
+            results.append({
+                "emp_id": emp.emp_id, "name": emp.name,
+                "std_hourly": float(std_hourly),
+                "ot_hrs": total_ot_hrs, "ot_min": total_ot_min,
+                "absents": absents,
+                "gross_pay": float(gross),
+                "total_deduct": float(total_deduct),
+                "net_pay": float(net_pay),
+            })
 
-        pr.std_hrs       = std_m_hrs
-        pr.std_hourly    = std_hourly
-        pr.pay_ot_hrs    = total_ot_hrs
-        pr.pay_ot_min    = total_ot_min
-        pr.pay_night_hrs = total_night_hrs
-        pr.pay_holiday_hrs = total_hol_hrs
-        pr.pay_holiday_min = total_hol_min
-        pr.base_pay      = base_pay
-        pr.ot_pay        = ot_pay
-        pr.night_pay     = night_pay
-        pr.holiday_pay   = holiday_pay
-        pr.meal_allow    = meal_allow
-        pr.vehicle_allow = vehicle_allow
-        pr.gross_pay     = gross
-        pr.deduct_pension     = pen
-        pr.deduct_health      = hlt
-        pr.deduct_lcare       = lc
-        pr.deduct_employ      = emp_
-        pr.deduct_income_tax  = it
-        pr.deduct_local_tax   = lt
-        pr.total_deduct  = total_deduct
-        pr.net_pay       = net_pay
-        pr.status        = "계산중"
-        pr.calculated_at = datetime.now()
-
-        results.append({
-            "emp_id": emp.emp_id, "name": emp.name,
-            "std_hourly": float(std_hourly),
-            "ot_hrs": total_ot_hrs, "ot_min": total_ot_min,
-            "absents": absents,
-            "gross_pay": float(gross),
-            "total_deduct": float(total_deduct),
-            "net_pay": float(net_pay),
-        })
-
-    db.commit()
-    return results
+        db.commit()
+        return results
+    except Exception as ex:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"{type(ex).__name__}: {ex}\n{traceback.format_exc()}")
 
 
 @router.get("/payroll")
