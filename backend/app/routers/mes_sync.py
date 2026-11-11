@@ -491,6 +491,16 @@ async def upload_excel(file: UploadFile = File(...), db: Session = Depends(get_d
     필수 컬럼: 날짜(생산일), 품번, 계획수량, 실적수량
     선택 컬럼: 품명, 설비번호, 교대, 불량수량, 불량원인, 가동시간, 비가동시간, 비가동원인, 작업자, 작업지시번호
     """
+    import traceback as _tb
+    try:
+        return await _do_upload_excel(file, db)
+    except HTTPException:
+        raise
+    except Exception as ex:
+        raise HTTPException(status_code=500, detail=f"{type(ex).__name__}: {ex}\n{_tb.format_exc()}")
+
+
+async def _do_upload_excel(file: UploadFile, db: Session):
     try:
         import openpyxl
     except ImportError:
