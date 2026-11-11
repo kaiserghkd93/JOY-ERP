@@ -38,7 +38,17 @@ export default function HrPayroll() {
       document.body.removeChild(a)
       URL.revokeObjectURL(url)
     } catch(e) {
-      alert('다운로드 실패: ' + (e.response?.data?.detail || e.message))
+      let msg = e.message
+      if (e.response?.data instanceof Blob) {
+        try {
+          const text = await e.response.data.text()
+          const json = JSON.parse(text)
+          msg = json.detail || text
+        } catch { msg = await e.response.data.text().catch(() => e.message) }
+      } else if (e.response?.data?.detail) {
+        msg = e.response.data.detail
+      }
+      alert('다운로드 실패:\n' + msg)
     } finally {
       setExcelLoading(false)
     }

@@ -871,12 +871,14 @@ def export_payroll_excel(
         buf = io.BytesIO()
         wb.save(buf)
         buf.seek(0)
+        import urllib.parse
         co_suffix = f"_{company}" if company else ""
-        fname = f"{year}{mm}_급여정산표{co_suffix}.xlsx"
+        fname_raw = f"{year}{mm}_급여정산표{co_suffix}.xlsx"
+        fname_enc = urllib.parse.quote(fname_raw.encode("utf-8"))
         return StreamingResponse(
             buf,
             media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            headers={"Content-Disposition": f"attachment; filename*=UTF-8''{fname}"},
+            headers={"Content-Disposition": f"attachment; filename=\"{year}{mm}_payroll{co_suffix}.xlsx\"; filename*=UTF-8''{fname_enc}"},
         )
     except Exception as ex:
         raise HTTPException(status_code=500, detail=f"{type(ex).__name__}: {ex}\n{_tb.format_exc()}")
