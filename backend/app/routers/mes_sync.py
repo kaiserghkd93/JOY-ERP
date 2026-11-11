@@ -626,41 +626,49 @@ async def _do_upload_excel(file: UploadFile, db: Session):
             worker = str(cell_val(row, "작업자", "") or "").strip() or None
             mes_order_no = str(cell_val(row, "작업지시번호", "") or "").strip() or None
 
-            existing = db.query(MesProductionLog).filter(
-                MesProductionLog.prod_date == prod_date,
-                MesProductionLog.part_no == part_no,
-                MesProductionLog.machine_no == machine_no,
-                MesProductionLog.shift == shift,
-            ).first()
+            # savepoint: 한 행 실패 시 트랜잭션 전체가 aborted되지 않도록
+            sp = db.begin_nested()
+            try:
+                existing = db.query(MesProductionLog).filter(
+                    MesProductionLog.prod_date == prod_date,
+                    MesProductionLog.part_no == part_no,
+                    MesProductionLog.machine_no == machine_no,
+                    MesProductionLog.shift == shift,
+                ).first()
 
-            if existing:
-                log = existing
-            else:
-                log = MesProductionLog(prod_date=prod_date, part_no=part_no)
-                db.add(log)
+                if existing:
+                    log = existing
+                else:
+                    log = MesProductionLog(prod_date=prod_date, part_no=part_no)
+                    db.add(log)
 
-            log.part_name     = str(cell_val(row, "품명", "") or "").strip() or None
-            log.machine_no    = machine_no
-            log.shift         = shift
-            log.plan_qty      = plan_qty
-            log.actual_qty    = actual_qty
-            log.defect_qty    = defect_qty
-            log.defect_reason = defect_reason
-            log.run_time_min  = float(run_time) if run_time is not None else None
-            log.down_time_min = float(down_time) if down_time is not None else None
-            log.down_reason   = down_reason
-            log.worker        = worker
-            log.mes_order_no  = mes_order_no
-            log.sync_at       = datetime.now()
+                log.part_name     = str(cell_val(row, "품명", "") or "").strip() or None
+                log.machine_no    = machine_no
+                log.shift         = shift
+                log.plan_qty      = plan_qty
+                log.actual_qty    = actual_qty
+                log.defect_qty    = defect_qty
+                log.defect_reason = defect_reason
+                log.run_time_min  = float(run_time) if run_time is not None else None
+                log.down_time_min = float(down_time) if down_time is not None else None
+                log.down_reason   = down_reason
+                log.worker        = worker
+                log.mes_order_no  = mes_order_no
+                log.sync_at       = datetime.now()
 
-            db.flush()
-            _link_to_erp(db, log)
-            db.flush()
-            _calc_and_deduct(db, log)
-            unit_cost = _get_unit_cost(db, part_no)
-            _save_defect_detail(db, log, unit_cost)
-            dates_seen.add(str(prod_date))
-            rows_ok += 1
+                db.flush()
+                _link_to_erp(db, log)
+                db.flush()
+                _calc_and_deduct(db, log)
+                unit_cost = _get_unit_cost(db, part_no)
+                _save_defect_detail(db, log, unit_cost)
+                sp.commit()
+                dates_seen.add(str(prod_date))
+                rows_ok += 1
+            except Exception as e:
+                sp.rollback()
+                rows_err += 1
+                err_messages.append(f"{mes_part_no}→{part_no} ({prod_date}): {e}")
 
         except Exception as e:
             rows_err += 1
