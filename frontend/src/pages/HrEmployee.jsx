@@ -141,7 +141,7 @@ function EmployeeModal({ employee, onClose, onSaved }) {
     emp_type: 'hourly', company: '조이산업', base_salary: '', hourly_rate: '', weekly_hours: 40,
     fixed_ot_hrs: 0, fixed_holiday_hrs: 0,
     fixed_income_tax: 0, fixed_local_tax: 0,
-    birth_date: '', vehicle_allow_fixed: 200000,
+    birth_date: '', foreman_allow_fixed: 0, vehicle_allow_fixed: 200000,
     resident_no: '', phone: '', bank: '', bank_account: '', email: '', note: '',
   })
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
@@ -169,6 +169,7 @@ function EmployeeModal({ employee, onClose, onSaved }) {
       fixed_income_tax: +form.fixed_income_tax || 0,
       fixed_local_tax: +form.fixed_local_tax || 0,
       birth_date: form.birth_date || null,
+      foreman_allow_fixed: +form.foreman_allow_fixed || 0,
       vehicle_allow_fixed: +form.vehicle_allow_fixed ?? 200000,
       meal_allow_fixed: 0,
       hire_date: form.hire_date || null,
@@ -271,9 +272,15 @@ function EmployeeModal({ employee, onClose, onSaved }) {
           </div>
         </div>
 
-        <div className="form-group">
-          <label>차량유지비 (원/월, 비과세)</label>
-          <input className="form-control" type="number" min="0" value={form.vehicle_allow_fixed ?? 200000} onChange={e => set('vehicle_allow_fixed', +e.target.value)} placeholder="200000" />
+        <div className="grid-2">
+          <div className="form-group">
+            <label>반장수당 (원/월, 과세)</label>
+            <input className="form-control" type="number" min="0" value={form.foreman_allow_fixed ?? 0} onChange={e => set('foreman_allow_fixed', +e.target.value)} placeholder="0" />
+          </div>
+          <div className="form-group">
+            <label>차량유지비 (원/월, 비과세)</label>
+            <input className="form-control" type="number" min="0" value={form.vehicle_allow_fixed ?? 200000} onChange={e => set('vehicle_allow_fixed', +e.target.value)} placeholder="200000" />
+          </div>
         </div>
 
         <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: 12, marginTop: 8, marginBottom: 8, fontSize: 11, color: '#64748b', fontWeight: 600 }}>

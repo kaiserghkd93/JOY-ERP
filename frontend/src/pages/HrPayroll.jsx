@@ -201,6 +201,7 @@ function PayslipModal({ payroll: initialP, onClose, onSaved }) {
     { label: '연장근로수당', sub: `${fmtTime(p.pay_ot_hrs, p.pay_ot_min)} × 1.5`, val: p.ot_pay },
     { label: '심야수당',    sub: `${p.pay_night_hrs||0}h × 0.5`, val: p.night_pay },
     { label: '휴일근로수당', sub: `${fmtTime(p.pay_holiday_hrs, p.pay_holiday_min)} × 1.5`, val: p.holiday_pay },
+    { label: '반장수당',    sub: '과세', val: p.foreman_allow },
     { label: '차량유지비',  sub: '비과세', val: p.vehicle_allow },
     { label: '식대',        sub: '비과세', val: p.meal_allow },
     { label: '상여',        sub: '', val: p.bonus },

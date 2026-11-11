@@ -76,6 +76,7 @@ class EmployeeIn(BaseModel):
     fixed_income_tax: int = 0            # 소득세 고정 (0이면 자동계산)
     fixed_local_tax: int = 0             # 지방소득세 고정 (0이면 자동계산)
     birth_date: Optional[date] = None    # 생년월일 (만 60세 이상 국민연금 면제)
+    foreman_allow_fixed: float = 0        # 반장수당 (과세)
     meal_allow_fixed: float = 0           # 사내식당 운영시 0
     vehicle_allow_fixed: float = 200000
     resident_no: Optional[str] = None
@@ -99,6 +100,7 @@ def _emp_dict(e: Employee) -> dict:
         "fixed_income_tax": e.fixed_income_tax or 0,
         "fixed_local_tax": e.fixed_local_tax or 0,
         "birth_date": str(e.birth_date) if e.birth_date else None,
+        "foreman_allow_fixed": float(e.foreman_allow_fixed or 0),
         "meal_allow_fixed": float(e.meal_allow_fixed),
         "vehicle_allow_fixed": float(e.vehicle_allow_fixed),
         "resident_no": e.resident_no, "phone": e.phone,
@@ -495,11 +497,13 @@ def calculate_payroll(
                 + std_hourly * (Decimal(total_hol_min) / 60) * Decimal("1.5")
             ).quantize(Decimal("1"), ROUND_HALF_UP)
 
-            meal_allow    = Decimal("0")  # 사내식당 운영으로 식대 비과세 없음
-            vehicle_allow = Decimal(str(emp.vehicle_allow_fixed))
+            meal_allow     = Decimal("0")  # 사내식당 운영으로 식대 비과세 없음
+            vehicle_allow  = Decimal(str(emp.vehicle_allow_fixed))
+            foreman_allow  = Decimal(str(emp.foreman_allow_fixed or 0))
 
-            gross   = base_pay + ot_pay + night_pay + holiday_pay + meal_allow + vehicle_allow
+            gross   = base_pay + ot_pay + night_pay + holiday_pay + meal_allow + vehicle_allow + foreman_allow
             taxable = gross - min(meal_allow, NON_TAX_MEAL) - min(vehicle_allow, NON_TAX_VEH)
+            # 반장수당은 과세 항목 — taxable에 포함됨 (별도 차감 없음)
 
             # 나이 계산 (만 나이 기준)
             age = 0
@@ -551,6 +555,7 @@ def calculate_payroll(
             pr.ot_pay            = ot_pay
             pr.night_pay         = night_pay
             pr.holiday_pay       = holiday_pay
+            pr.foreman_allow     = foreman_allow
             pr.meal_allow        = meal_allow
             pr.vehicle_allow     = vehicle_allow
             pr.gross_pay         = gross
@@ -634,7 +639,7 @@ def update_payroll_deductions(
         pr.deduct_pension + pr.deduct_health + pr.deduct_lcare + pr.deduct_employ
         + pr.deduct_income_tax + pr.deduct_local_tax
     )
-    pr.gross_pay = pr.base_pay + pr.ot_pay + pr.night_pay + pr.holiday_pay + pr.meal_allow + pr.vehicle_allow + pr.bonus
+    pr.gross_pay = pr.base_pay + pr.ot_pay + pr.night_pay + pr.holiday_pay + pr.foreman_allow + pr.meal_allow + pr.vehicle_allow + pr.bonus
     pr.net_pay   = pr.gross_pay - pr.total_deduct
     db.commit()
     return {"ok": True, "net_pay": float(pr.net_pay)}
