@@ -132,6 +132,8 @@ with engine.connect() as _conn:
         "CREATE INDEX IF NOT EXISTS ix_purchase_request_need_date ON purchase_request(need_date)",
         # HR — 소속 법인 컬럼
         "ALTER TABLE hr_employee ADD COLUMN IF NOT EXISTS company VARCHAR(50) DEFAULT '조이산업'",
+        # HR — ot_rate NOT NULL 제약 완화 (모델에서 제거된 컬럼이지만 DB에 잔존)
+        "ALTER TABLE hr_employee ALTER COLUMN ot_rate SET DEFAULT 0",
         # HR — 추후 추가된 컬럼들
         "ALTER TABLE hr_employee ADD COLUMN IF NOT EXISTS weekly_hours INTEGER DEFAULT 40",
         "ALTER TABLE hr_employee ADD COLUMN IF NOT EXISTS std_monthly_hours INTEGER DEFAULT 209",
