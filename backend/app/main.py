@@ -183,6 +183,12 @@ with engine.connect() as _conn:
         "ALTER TABLE hr_employee ADD COLUMN IF NOT EXISTS email VARCHAR(100)",
         "ALTER TABLE hr_employee ADD COLUMN IF NOT EXISTS note TEXT",
         "ALTER TABLE hr_employee ADD COLUMN IF NOT EXISTS retire_date DATE",
+        # HR — 정보 미입력 사원 기본값 일괄 세팅 (부서=생산, 직급=사원, 호봉=CL5)
+        """UPDATE hr_employee SET
+             dept     = CASE WHEN dept     IS NULL OR dept     = '' THEN '생산' ELSE dept     END,
+             position = CASE WHEN position IS NULL OR position = '' THEN '사원' ELSE position END,
+             job_grade= CASE WHEN job_grade IS NULL OR job_grade= '' THEN 'CL5'  ELSE job_grade END
+           WHERE (dept IS NULL OR dept = '' OR position IS NULL OR position = '' OR job_grade IS NULL OR job_grade = '')""",
         # 품목 — 캐비티 수 (BOM/MES 이론생산량 계산)
         "ALTER TABLE item ADD COLUMN IF NOT EXISTS cavity_count INTEGER DEFAULT 1",
         # 작업지시 — 담당 작업자 지정
