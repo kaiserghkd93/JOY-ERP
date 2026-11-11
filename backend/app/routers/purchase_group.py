@@ -476,6 +476,16 @@ def print_group(group_no: str, db: Session = Depends(get_db)):
 @router.get("/{group_no}/pdf")
 def download_pdf(group_no: str, db: Session = Depends(get_db)):
     """발주서 PDF 파일 다운로드"""
+    import traceback as _tb
+    try:
+        return _build_pdf(group_no, db)
+    except HTTPException:
+        raise
+    except Exception as ex:
+        raise HTTPException(status_code=500, detail=f"{type(ex).__name__}: {ex}\n{_tb.format_exc()}")
+
+
+def _build_pdf(group_no: str, db):
     g = db.get(PurchaseOrderGroup, group_no)
     if not g:
         raise HTTPException(404)
