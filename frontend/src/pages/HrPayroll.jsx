@@ -240,11 +240,32 @@ function PayslipModal({ payroll: initialP, onClose, onSaved }) {
     <div className="modal-overlay" onClick={onClose}>
       <style>{`
         @media print {
-          body > *:not(.ps-root) { display: none !important; }
-          .ps-root { position: static !important; background: none !important; display: block !important; padding: 0 !important; }
-          .ps-box  { box-shadow: none !important; border: none !important; max-width: 100% !important; margin: 0; }
+          /* React root 하위에서 모달 외 모든 것 숨기기 */
+          #root > *:not(.modal-overlay) { display: none !important; }
+          /* 모달 오버레이를 일반 블록으로 */
+          .modal-overlay {
+            position: static !important;
+            background: none !important;
+            overflow: visible !important;
+            padding: 0 !important;
+            display: block !important;
+          }
+          /* 모달 박스 인쇄용 */
+          .ps-box {
+            box-shadow: none !important;
+            border: none !important;
+            max-width: 100% !important;
+            margin: 0 !important;
+            padding: 8mm 10mm !important;
+          }
+          /* 인쇄 시 숨길 항목 (버튼, 입력) */
           .ps-hide { display: none !important; }
-          @page { margin: 10mm 14mm; size: A4 portrait; }
+          /* 인쇄 시만 보이는 항목 */
+          .ps-print-only { display: inline !important; }
+          @page { margin: 8mm 12mm; size: A4 portrait; }
+        }
+        @media screen {
+          .ps-print-only { display: none !important; }
         }
         .ps-root { z-index: 9999; }
       `}</style>
@@ -353,14 +374,17 @@ function PayslipModal({ payroll: initialP, onClose, onSaved }) {
               {deductItems.map((item, i) => (
                 <td key={i} style={{ ...cellAmt, padding: item.editable ? '2px 4px' : undefined }}>
                   {item.editable ? (
-                    <input
-                      type="number"
-                      value={item.val}
-                      onChange={e => handleTax(item.key, e.target.value)}
-                      className="ps-hide"
-                      style={{ width: '100%', border: '1px solid #3b82f6', borderRadius: 3,
-                        padding: '2px 6px', fontSize: 12, textAlign: 'right', background: '#eff6ff' }}
-                    />
+                    <>
+                      <input
+                        type="number"
+                        value={item.val}
+                        onChange={e => handleTax(item.key, e.target.value)}
+                        className="ps-hide"
+                        style={{ width: '100%', border: '1px solid #3b82f6', borderRadius: 3,
+                          padding: '2px 6px', fontSize: 12, textAlign: 'right', background: '#eff6ff' }}
+                      />
+                      <span className="ps-print-only">{W(item.val)}</span>
+                    </>
                   ) : W(item.val)}
                 </td>
               ))}
