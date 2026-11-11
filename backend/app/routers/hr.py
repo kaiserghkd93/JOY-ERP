@@ -31,6 +31,8 @@ from app.models.hr import Employee, Attendance, Payroll
 
 router = APIRouter(prefix="/hr", tags=["인사"])
 
+COMPANY_LIST = ["조이산업", "넥스젬"]
+
 # ── 2026 법정 보험요율 (근로자 부담) ──────────────────────────────────
 RATE_PENSION  = Decimal("0.045")     # 국민연금 4.5%
 RATE_HEALTH   = Decimal("0.03545")   # 건강보험 3.545%
@@ -875,10 +877,12 @@ def export_payroll_excel(
         co_suffix = f"_{company}" if company else ""
         fname_raw = f"{year}{mm}_급여정산표{co_suffix}.xlsx"
         fname_enc = urllib.parse.quote(fname_raw.encode("utf-8"))
+        # ASCII fallback에는 한글 미포함 (latin-1 인코딩 불가)
+        fname_ascii = f"{year}{mm}_payroll{'_' + str(COMPANY_LIST.index(company)+1) if company and company in COMPANY_LIST else ''}.xlsx"
         return StreamingResponse(
             buf,
             media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            headers={"Content-Disposition": f"attachment; filename=\"{year}{mm}_payroll{co_suffix}.xlsx\"; filename*=UTF-8''{fname_enc}"},
+            headers={"Content-Disposition": f"attachment; filename=\"{fname_ascii}\"; filename*=UTF-8''{fname_enc}"},
         )
     except Exception as ex:
         raise HTTPException(status_code=500, detail=f"{type(ex).__name__}: {ex}\n{_tb.format_exc()}")
