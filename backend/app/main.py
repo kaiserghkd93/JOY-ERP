@@ -132,6 +132,18 @@ with engine.connect() as _conn:
         "CREATE INDEX IF NOT EXISTS ix_purchase_request_need_date ON purchase_request(need_date)",
         # HR — 소속 법인 컬럼
         "ALTER TABLE hr_employee ADD COLUMN IF NOT EXISTS company VARCHAR(50) DEFAULT '조이산업'",
+        # HR — 추후 추가된 컬럼들
+        "ALTER TABLE hr_employee ADD COLUMN IF NOT EXISTS weekly_hours INTEGER DEFAULT 40",
+        "ALTER TABLE hr_employee ADD COLUMN IF NOT EXISTS std_monthly_hours INTEGER DEFAULT 209",
+        "ALTER TABLE hr_employee ADD COLUMN IF NOT EXISTS meal_allow_fixed NUMERIC(15,2) DEFAULT 0",
+        "ALTER TABLE hr_employee ADD COLUMN IF NOT EXISTS vehicle_allow_fixed NUMERIC(15,2) DEFAULT 200000",
+        "ALTER TABLE hr_employee ADD COLUMN IF NOT EXISTS resident_no VARCHAR(14)",
+        "ALTER TABLE hr_employee ADD COLUMN IF NOT EXISTS phone VARCHAR(20)",
+        "ALTER TABLE hr_employee ADD COLUMN IF NOT EXISTS bank VARCHAR(30)",
+        "ALTER TABLE hr_employee ADD COLUMN IF NOT EXISTS bank_account VARCHAR(30)",
+        "ALTER TABLE hr_employee ADD COLUMN IF NOT EXISTS email VARCHAR(100)",
+        "ALTER TABLE hr_employee ADD COLUMN IF NOT EXISTS note TEXT",
+        "ALTER TABLE hr_employee ADD COLUMN IF NOT EXISTS retire_date DATE",
         # 품목 — 캐비티 수 (BOM/MES 이론생산량 계산)
         "ALTER TABLE item ADD COLUMN IF NOT EXISTS cavity_count INTEGER DEFAULT 1",
         # 작업지시 — 담당 작업자 지정
