@@ -243,7 +243,9 @@ export default function App() {
         }>
           <Routes>
             <Route path="/" element={
-              getRole() === 'executive' ? <Navigate to="/management" replace /> : <Dashboard />
+              (getRole() === 'executive' || getRole() === 'accounting')
+                ? <Navigate to="/management" replace />
+                : <Dashboard />
             } />
             <Route path="/inventory" element={<Inventory />} />
             <Route path="/receipt" element={<Receipt />} />

@@ -4,9 +4,10 @@ const API = import.meta.env.VITE_API_URL || ''
 // null = 전체 접근 (admin)
 const ROLE_PERMISSIONS = {
   admin:      null,  // 나만 (외주구매·계정관리 포함 전체)
-  executive:  ['/', '/dashboard', '/monthly-sales', '/monthly-purchase', '/sales-target', '/inventory', '/cost', '/cost-actual', '/mrp', '/management', '/exceptions'],
+  executive:  ['/', '/dashboard', '/monthly-sales', '/monthly-purchase', '/sales-target', '/inventory', '/cost', '/cost-actual', '/mrp', '/management', '/exceptions',
+               '/hr-employee', '/hr-attendance', '/hr-payroll'],
   manager:    ['/', '/sales-target', '/cost-actual', '/exceptions'],
-  accounting: ['/', '/invoice', '/monthly-sales', '/monthly-purchase', '/sales-target', '/inventory', '/cost-actual'],
+  accounting: ['/management', '/hr-employee', '/hr-attendance', '/hr-payroll'],
   sales:      ['/', '/sales', '/invoice', '/monthly-sales', '/sales-target', '/inventory'],
   purchase:   ['/', '/purchase', '/receipt', '/mrp', '/monthly-purchase',
                '/inventory', '/master', '/bom',
@@ -20,7 +21,8 @@ const ROLE_PERMISSIONS = {
   owner:      ['/', '/inventory', '/inv-adjust', '/invoice', '/sales', '/monthly-sales', '/sales-target',
                 '/quality', '/production', '/production-plan', '/production-mrp', '/production-gantt',
                 '/cost', '/cost-actual', '/mold', '/master', '/bom',
-                '/purchase', '/mrp', '/monthly-purchase', '/management', '/exceptions', '/lot-trace'],
+                '/purchase', '/mrp', '/monthly-purchase', '/management', '/exceptions', '/lot-trace',
+                '/hr-employee', '/hr-attendance', '/hr-payroll'],
   supplier:   ['/'],
 }
 
