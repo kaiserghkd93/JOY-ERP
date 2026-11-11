@@ -144,14 +144,55 @@ export default function HrPayroll() {
         </table>
       </div>
 
-      {selected && <PayslipModal payroll={selected} onClose={() => setSelected(null)} />}
+      {selected && (
+        <PayslipModal
+          payroll={selected}
+          onClose={() => setSelected(null)}
+          onSaved={() => { load(); setSelected(null) }}
+        />
+      )}
     </div>
   )
 }
 
 /* ── 급상여명세서 (사진 형식) ────────────────────────────────────────── */
-function PayslipModal({ payroll: p, onClose }) {
-  const W  = (n) => Number(n || 0).toLocaleString()
+function PayslipModal({ payroll: initialP, onClose, onSaved }) {
+  const [p, setP] = useState(initialP)
+  const [taxEdit, setTaxEdit] = useState({
+    deduct_income_tax: Math.round(Number(initialP.deduct_income_tax || 0)),
+    deduct_local_tax:  Math.round(Number(initialP.deduct_local_tax  || 0)),
+  })
+  const [dirty, setDirty] = useState(false)
+  const [saving, setSaving] = useState(false)
+
+  const handleTax = (key, val) => {
+    setTaxEdit(prev => ({ ...prev, [key]: Math.round(Number(val) || 0) }))
+    setDirty(true)
+  }
+
+  const saveTax = async () => {
+    setSaving(true)
+    try {
+      const r = await api.patch(`/hr/payroll/${p.id}/update`, taxEdit)
+      setP(prev => ({
+        ...prev,
+        deduct_income_tax: taxEdit.deduct_income_tax,
+        deduct_local_tax:  taxEdit.deduct_local_tax,
+        total_deduct: Number(prev.deduct_pension) + Number(prev.deduct_health) +
+                      Number(prev.deduct_lcare) + Number(prev.deduct_employ) +
+                      taxEdit.deduct_income_tax + taxEdit.deduct_local_tax,
+        net_pay: r.data.net_pay,
+      }))
+      setDirty(false)
+      onSaved?.()
+    } catch(e) {
+      alert('저장 실패: ' + (e.response?.data?.detail || e.message))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const W  = (n) => Math.round(Number(n || 0)).toLocaleString()
   const fmtTime = (h, m) => (h || m) ? (m ? `${h}h ${m}m` : `${h}h`) : '—'
   const mm = String(p.month).padStart(2, '0')
 
@@ -166,13 +207,13 @@ function PayslipModal({ payroll: p, onClose }) {
   ].filter(r => Number(r.val) > 0)
 
   const deductItems = [
-    { label: '국민연금',    val: p.deduct_pension },
-    { label: '건강보험',    val: p.deduct_health },
-    { label: '고용보험',    val: p.deduct_employ },
-    { label: '장기요양보험료', val: p.deduct_lcare },
-    { label: '소득세',      val: p.deduct_income_tax },
-    { label: '지방소득세',  val: p.deduct_local_tax },
-  ].filter(r => Number(r.val) > 0)
+    { label: '국민연금',    val: p.deduct_pension,     editable: false },
+    { label: '건강보험',    val: p.deduct_health,      editable: false },
+    { label: '고용보험',    val: p.deduct_employ,      editable: false },
+    { label: '장기요양보험료', val: p.deduct_lcare,    editable: false },
+    { label: '소득세',      val: taxEdit.deduct_income_tax, editable: true, key: 'deduct_income_tax' },
+    { label: '지방소득세',  val: taxEdit.deduct_local_tax,  editable: true, key: 'deduct_local_tax' },
+  ].filter(r => Number(r.val) > 0 || r.editable)
 
   const calcRows = [
     { label: '기본급',      formula: `통상시급(${W(p.std_hourly)}원) × 소정근로시간(${p.std_hrs||209}h)`, val: p.base_pay },
@@ -310,7 +351,18 @@ function PayslipModal({ payroll: p, onClose }) {
             </tr>
             <tr>
               {deductItems.map((item, i) => (
-                <td key={i} style={cellAmt}>{W(item.val)}</td>
+                <td key={i} style={{ ...cellAmt, padding: item.editable ? '2px 4px' : undefined }}>
+                  {item.editable ? (
+                    <input
+                      type="number"
+                      value={item.val}
+                      onChange={e => handleTax(item.key, e.target.value)}
+                      className="ps-hide"
+                      style={{ width: '100%', border: '1px solid #3b82f6', borderRadius: 3,
+                        padding: '2px 6px', fontSize: 12, textAlign: 'right', background: '#eff6ff' }}
+                    />
+                  ) : W(item.val)}
+                </td>
               ))}
               {Array(Math.max(0, 6 - deductItems.length)).fill(null).map((_, i) => (
                 <td key={'da'+i} style={{ border: BL }} />
@@ -379,9 +431,42 @@ function PayslipModal({ payroll: p, onClose }) {
           본 명세서는 소득세법 시행규칙 제100조에 의거 발행한 급여명세서입니다.
         </div>
 
-        <div className="modal-footer ps-hide" style={{ marginTop: 10 }}>
+        <div className="modal-footer ps-hide" style={{ marginTop: 10, flexWrap: 'wrap', gap: 8 }}>
           <button className="btn btn-outline" onClick={onClose}>닫기</button>
           <button className="btn btn-primary" onClick={() => window.print()}>인쇄</button>
+          {dirty && (
+            <button
+              className="btn"
+              style={{ background: '#3b82f6', color: '#fff', border: 'none', marginLeft: 'auto' }}
+              onClick={saveTax}
+              disabled={saving}
+            >
+              {saving ? '저장중...' : '이번달 소득세 저장'}
+            </button>
+          )}
+          {dirty && (
+            <button
+              className="btn"
+              style={{ background: '#7c3aed', color: '#fff', border: 'none' }}
+              onClick={async () => {
+                setSaving(true)
+                try {
+                  await api.patch(`/hr/employees/${p.emp_id}/tax`, {
+                    fixed_income_tax: taxEdit.deduct_income_tax,
+                    fixed_local_tax: taxEdit.deduct_local_tax,
+                  })
+                  await saveTax()
+                  alert(`${p.name} 직원 소득세 고정값이 저장되었습니다.\n다음 달부터 자동 계산 시 고정값이 적용됩니다.`)
+                } catch(e) {
+                  setSaving(false)
+                  alert('저장 실패: ' + (e.response?.data?.detail || e.message))
+                }
+              }}
+              disabled={saving}
+            >
+              직원 고정값으로 저장 (매달 자동 적용)
+            </button>
+          )}
         </div>
       </div>
     </div>

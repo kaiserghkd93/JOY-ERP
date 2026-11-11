@@ -73,6 +73,8 @@ class EmployeeIn(BaseModel):
     std_monthly_hours: int = 209
     fixed_ot_hrs: int = 0                # 월 고정 연장시간 (과장급 이상 50h)
     fixed_holiday_hrs: int = 0           # 월 고정 특근시간 (과장급 이상 16h)
+    fixed_income_tax: int = 0            # 소득세 고정 (0이면 자동계산)
+    fixed_local_tax: int = 0             # 지방소득세 고정 (0이면 자동계산)
     meal_allow_fixed: float = 0           # 사내식당 운영시 0
     vehicle_allow_fixed: float = 200000
     resident_no: Optional[str] = None
@@ -93,6 +95,8 @@ def _emp_dict(e: Employee) -> dict:
         "weekly_hours": e.weekly_hours, "std_monthly_hours": e.std_monthly_hours,
         "fixed_ot_hrs": e.fixed_ot_hrs or 0,
         "fixed_holiday_hrs": e.fixed_holiday_hrs or 0,
+        "fixed_income_tax": e.fixed_income_tax or 0,
+        "fixed_local_tax": e.fixed_local_tax or 0,
         "meal_allow_fixed": float(e.meal_allow_fixed),
         "vehicle_allow_fixed": float(e.vehicle_allow_fixed),
         "resident_no": e.resident_no, "phone": e.phone,
@@ -167,6 +171,20 @@ def update_employee(emp_id: str, body: EmployeeIn, db: Session = Depends(get_db)
         setattr(e, k, v)
     db.commit()
     return _emp_dict(e)
+
+
+@router.patch("/employees/{emp_id}/tax")
+def update_employee_tax(emp_id: str, body: dict, db: Session = Depends(get_db), _=Depends(get_current_user)):
+    """직원별 소득세/지방소득세 고정값 설정"""
+    e = db.get(Employee, emp_id)
+    if not e:
+        raise HTTPException(404)
+    if "fixed_income_tax" in body:
+        e.fixed_income_tax = int(body["fixed_income_tax"] or 0)
+    if "fixed_local_tax" in body:
+        e.fixed_local_tax = int(body["fixed_local_tax"] or 0)
+    db.commit()
+    return {"ok": True, "fixed_income_tax": e.fixed_income_tax, "fixed_local_tax": e.fixed_local_tax}
 
 
 @router.delete("/employees/{emp_id}")
@@ -485,8 +503,16 @@ def calculate_payroll(
             hlt  = _round10(taxable * RATE_HEALTH)
             lc   = _round10(hlt * RATE_LCARE)
             emp_ = _round10(taxable * RATE_EMPLOY)
-            it   = _income_tax(taxable)
-            lt   = _round10(it * Decimal("0.1"))
+            # 소득세: 직원별 고정값이 있으면 사용, 없으면 간이세액표 자동계산
+            if emp.fixed_income_tax and emp.fixed_income_tax > 0:
+                it = Decimal(str(emp.fixed_income_tax))
+            else:
+                it = _income_tax(taxable)
+            # 지방소득세: 직원별 고정값이 있으면 사용, 없으면 소득세×10%
+            if emp.fixed_local_tax and emp.fixed_local_tax > 0:
+                lt = Decimal(str(emp.fixed_local_tax))
+            else:
+                lt = _round10(it * Decimal("0.1"))
 
             total_deduct = pen + hlt + lc + emp_ + it + lt
             net_pay = gross - total_deduct

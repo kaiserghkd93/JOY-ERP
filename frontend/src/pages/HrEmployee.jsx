@@ -140,6 +140,7 @@ function EmployeeModal({ employee, onClose, onSaved }) {
     emp_id: '', name: '', dept: '', position: '', hire_date: '', retire_date: '',
     emp_type: 'hourly', company: '조이산업', base_salary: '', hourly_rate: '', weekly_hours: 40,
     fixed_ot_hrs: 0, fixed_holiday_hrs: 0,
+    fixed_income_tax: 0, fixed_local_tax: 0,
     vehicle_allow_fixed: 200000,
     resident_no: '', phone: '', bank: '', bank_account: '', email: '', note: '',
   })
@@ -165,6 +166,8 @@ function EmployeeModal({ employee, onClose, onSaved }) {
       weekly_hours: +form.weekly_hours || 40,
       fixed_ot_hrs: +form.fixed_ot_hrs || 0,
       fixed_holiday_hrs: +form.fixed_holiday_hrs || 0,
+      fixed_income_tax: +form.fixed_income_tax || 0,
+      fixed_local_tax: +form.fixed_local_tax || 0,
       vehicle_allow_fixed: +form.vehicle_allow_fixed ?? 200000,
       meal_allow_fixed: 0,
       hire_date: form.hire_date || null,
@@ -270,6 +273,22 @@ function EmployeeModal({ employee, onClose, onSaved }) {
         <div className="form-group">
           <label>차량유지비 (원/월, 비과세)</label>
           <input className="form-control" type="number" min="0" value={form.vehicle_allow_fixed ?? 200000} onChange={e => set('vehicle_allow_fixed', +e.target.value)} placeholder="200000" />
+        </div>
+
+        <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: 12, marginTop: 8, marginBottom: 8, fontSize: 11, color: '#64748b', fontWeight: 600 }}>
+          소득세 고정 설정
+          <span style={{ marginLeft: 8, fontWeight: 400, color: '#94a3b8' }}>※ 0이면 간이세액표 자동계산</span>
+        </div>
+
+        <div className="grid-2">
+          <div className="form-group">
+            <label>소득세 고정 (원)</label>
+            <input className="form-control" type="number" min="0" value={form.fixed_income_tax ?? 0} onChange={e => set('fixed_income_tax', +e.target.value)} placeholder="0 (자동계산)" />
+          </div>
+          <div className="form-group">
+            <label>지방소득세 고정 (원)</label>
+            <input className="form-control" type="number" min="0" value={form.fixed_local_tax ?? 0} onChange={e => set('fixed_local_tax', +e.target.value)} placeholder="0 (자동계산)" />
+          </div>
         </div>
 
         <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: 12, marginTop: 4, marginBottom: 8, fontSize: 11, color: '#64748b', fontWeight: 600 }}>개인정보</div>
