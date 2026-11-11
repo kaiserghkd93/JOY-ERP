@@ -592,16 +592,18 @@ def calculate_payroll(
 
 @router.get("/payroll")
 def list_payroll(
-    year: int = Query(...), month: int = Query(...),
+    year: int = Query(...), month: Optional[int] = Query(None),
     emp_id: Optional[str] = None,
     db: Session = Depends(get_db), _=Depends(get_current_user),
 ):
     q = db.query(Payroll, Employee).join(Employee, Payroll.emp_id == Employee.emp_id).filter(
-        Payroll.year == year, Payroll.month == month
+        Payroll.year == year
     )
+    if month is not None:
+        q = q.filter(Payroll.month == month)
     if emp_id:
         q = q.filter(Payroll.emp_id == emp_id)
-    rows = q.all()
+    rows = q.order_by(Payroll.month).all()
     result = []
     for pr, emp in rows:
         d = {c.name: getattr(pr, c.name) for c in Payroll.__table__.columns}
@@ -933,6 +935,38 @@ def attendance_summary(
             "holidays": int(r.holidays or 0),
         }
         for r in rows
+    ]
+
+
+@router.get("/attendance/year-summary")
+def attendance_year_summary(
+    year: int = Query(...),
+    emp_id: str = Query(...),
+    db: Session = Depends(get_db), _=Depends(get_current_user),
+):
+    """사원 1인의 연간 월별 출퇴근 집계"""
+    from collections import defaultdict
+    start = date(year, 1, 1)
+    end   = date(year, 12, 31)
+    atts  = db.query(Attendance).filter(
+        Attendance.emp_id == emp_id,
+        Attendance.work_date >= start,
+        Attendance.work_date <= end,
+    ).all()
+    monthly: dict = defaultdict(list)
+    for a in atts:
+        monthly[a.work_date.month].append(a)
+    return [
+        {
+            "month": m,
+            "days":            len(monthly.get(m, [])),
+            "total_ot_hrs":    sum(a.ot_hrs      for a in monthly.get(m, [])),
+            "total_ot_min":    sum(a.ot_min      for a in monthly.get(m, [])),
+            "total_night_hrs": sum(a.night_hrs   for a in monthly.get(m, [])),
+            "total_hol_hrs":   sum(a.holiday_hrs for a in monthly.get(m, [])),
+            "absents":         sum(1 for a in monthly.get(m, []) if a.absent),
+        }
+        for m in range(1, 13)
     ]
 
 
