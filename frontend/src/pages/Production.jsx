@@ -291,11 +291,15 @@ function ExcelUpload({ onDone }) {
     const fd = new FormData()
     fd.append('file', file)
     try {
-      const r = await api.post('/mes/upload-excel', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
+      const r = await api.post('/mes/upload-excel', fd)
       setResult(r.data)
       onDone && onDone()
     } catch (e) {
-      setError(e.response?.data?.detail || '업로드 오류')
+      let msg = '업로드 오류'
+      if (e.response?.data?.detail) msg = e.response.data.detail
+      else if (e.response?.data) msg = JSON.stringify(e.response.data)
+      else if (e.message) msg = e.message
+      setError(msg)
     } finally { setLoading(false) }
   }
 
