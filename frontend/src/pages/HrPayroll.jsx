@@ -240,29 +240,30 @@ function PayslipModal({ payroll: initialP, onClose, onSaved }) {
     <div className="modal-overlay" onClick={onClose}>
       <style>{`
         @media print {
-          /* React root 하위에서 모달 외 모든 것 숨기기 */
-          #root > *:not(.modal-overlay) { display: none !important; }
-          /* 모달 오버레이를 일반 블록으로 */
-          .modal-overlay {
-            position: static !important;
-            background: none !important;
-            overflow: visible !important;
-            padding: 0 !important;
-            display: block !important;
-          }
-          /* 모달 박스 인쇄용 */
+          /* 모든 요소 숨기기 (DOM 구조와 무관) */
+          body * { visibility: hidden !important; }
+          /* 명세서 박스와 그 하위 요소만 표시 */
+          .ps-box, .ps-box * { visibility: visible !important; }
+          /* 명세서 박스를 인쇄 영역 최상단에 고정 */
           .ps-box {
+            position: fixed !important;
+            top: 0 !important;
+            left: 0 !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            max-height: none !important;
+            overflow: visible !important;
+            margin: 0 !important;
+            padding: 8mm 12mm !important;
             box-shadow: none !important;
             border: none !important;
-            max-width: 100% !important;
-            margin: 0 !important;
-            padding: 8mm 10mm !important;
+            border-radius: 0 !important;
           }
-          /* 인쇄 시 숨길 항목 (버튼, 입력) */
-          .ps-hide { display: none !important; }
-          /* 인쇄 시만 보이는 항목 */
-          .ps-print-only { display: inline !important; }
-          @page { margin: 8mm 12mm; size: A4 portrait; }
+          /* 버튼, 인풋 숨기기 */
+          .ps-hide, .ps-hide * { visibility: hidden !important; display: none !important; }
+          /* 인쇄 전용 텍스트 표시 */
+          .ps-print-only { visibility: visible !important; display: inline !important; }
+          @page { margin: 0; size: A4 portrait; }
         }
         @media screen {
           .ps-print-only { display: none !important; }
