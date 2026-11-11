@@ -132,7 +132,7 @@ export default function HrEmployee() {
   )
 }
 
-const SENIOR_POS = new Set(['과장', '차장', '부장', '실장', '이사', '상무이사', '전무이사', '대표'])
+const SENIOR_POS = new Set(['과장', '차장', '부장', '이사', '상무이사', '전무이사', '대표'])
 
 function EmployeeModal({ employee, onClose, onSaved }) {
   const editing = !!employee
