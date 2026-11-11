@@ -668,6 +668,336 @@ def mark_paid(payroll_id: int, db: Session = Depends(get_db), _=Depends(get_curr
     return {"ok": True}
 
 
+# ── 급여 엑셀 내보내기 ────────────────────────────────────────────────
+
+@router.get("/payroll/export-excel")
+def export_payroll_excel(
+    year: int = Query(...), month: int = Query(...),
+    company: Optional[str] = Query(None),   # 법인 필터 (None=전체)
+    db: Session = Depends(get_db), _=Depends(get_current_user),
+):
+    """
+    급여정산표 + 급여명세표 엑셀 내보내기 (2 시트)
+    Sheet1: 급여정산표 (근태 + 지급내역 + 공제내역)
+    Sheet2: 급여명세표 (직원별 가로 배치)
+    """
+    import calendar, io
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side, numbers
+    from openpyxl.utils import get_column_letter
+    from fastapi.responses import StreamingResponse
+
+    # 데이터 조회
+    start = date(year, month, 1)
+    end   = date(year, month, calendar.monthrange(year, month)[1])
+
+    q = (
+        db.query(Payroll, Employee)
+        .join(Employee, Payroll.emp_id == Employee.emp_id)
+        .filter(Payroll.year == year, Payroll.month == month)
+    )
+    if company:
+        q = q.filter(Employee.company == company)
+    rows = q.order_by(Employee.emp_id).all()
+
+    company_label = company or "전체"
+
+    # 출퇴근 집계 (결근수)
+    att_map: dict[str, dict] = {}
+    for emp_row in db.query(Employee).filter(Employee.is_active == True).all():
+        atts = db.query(Attendance).filter(
+            Attendance.emp_id == emp_row.emp_id,
+            Attendance.work_date >= start,
+            Attendance.work_date <= end,
+        ).all()
+        att_map[emp_row.emp_id] = {
+            "absent": sum(1 for a in atts if a.absent),
+        }
+
+    # ── 스타일 정의 ─────────────────────────────────────
+    def _side(): return Side(style="thin", color="000000")
+    def _border(): return Border(left=_side(), right=_side(), top=_side(), bottom=_side())
+
+    HDR_FILLS = {
+        "basic":   PatternFill("solid", fgColor="1F4E79"),  # 진파랑 — 기본정보
+        "attend":  PatternFill("solid", fgColor="2E75B6"),  # 파랑 — 근태
+        "pay":     PatternFill("solid", fgColor="375623"),  # 녹색 — 지급
+        "deduct":  PatternFill("solid", fgColor="843C0C"),  # 갈색 — 공제
+        "result":  PatternFill("solid", fgColor="4A235A"),  # 보라 — 실수령
+    }
+    WHITE_FONT  = Font(name="맑은 고딕", bold=True, color="FFFFFF", size=9)
+    DATA_FONT   = Font(name="맑은 고딕", size=9)
+    TOTAL_FONT  = Font(name="맑은 고딕", bold=True, size=9)
+    NUM_FMT     = '#,##0'
+    CENTER      = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    RIGHT       = Alignment(horizontal="right",  vertical="center")
+    LEFT        = Alignment(horizontal="left",   vertical="center")
+
+    def _hdr_cell(ws, row, col, val, fill_key, span_rows=1, span_cols=1):
+        c = ws.cell(row=row, column=col, value=val)
+        c.fill   = HDR_FILLS[fill_key]
+        c.font   = WHITE_FONT
+        c.alignment = CENTER
+        c.border = _border()
+        if span_rows > 1 or span_cols > 1:
+            ws.merge_cells(
+                start_row=row, start_column=col,
+                end_row=row+span_rows-1, end_column=col+span_cols-1
+            )
+        return c
+
+    def _data_cell(ws, row, col, val, num=False, bold=False):
+        c = ws.cell(row=row, column=col, value=val)
+        c.font   = TOTAL_FONT if bold else DATA_FONT
+        c.border = _border()
+        if num and val is not None:
+            c.number_format = NUM_FMT
+            c.alignment = RIGHT
+        elif num:
+            c.value = 0
+            c.number_format = NUM_FMT
+            c.alignment = RIGHT
+        else:
+            c.alignment = LEFT
+        return c
+
+    mm = str(month).zfill(2)
+    wb = Workbook()
+
+    # ══════════════════════════════════════════════════
+    # Sheet 1: 급여정산표
+    # ══════════════════════════════════════════════════
+    ws1 = wb.active
+    ws1.title = f"{year}.{mm} 급여정산표"
+    ws1.freeze_panes = "E3"
+
+    # ── 제목 ──
+    ws1.merge_cells("A1:AH1")
+    title_c = ws1.cell(row=1, column=1, value=f"{year}년 {month}월 급여정산표  [{company_label}]")
+    title_c.font      = Font(name="맑은 고딕", bold=True, size=13)
+    title_c.alignment = CENTER
+    title_c.fill      = PatternFill("solid", fgColor="DEEAF1")
+
+    # ── 헤더 행1 (그룹) ──
+    # 기본정보 (A~D = 4cols), 근태 (E~M = 9cols), 지급내역 (N~U = 8cols), 공제 (V~AB = 7cols), 실수령 (AC)
+    COL = {
+        "no":1, "name":2, "hire":3, "rate":4,
+        "ot":5, "night":6, "hol":7, "annual":8, "off":9, "absent":10, "late":11, "early":12, "week":13,
+        "base":14, "ot_pay":15, "night_pay":16, "hol_pay":17, "foreman":18, "vehicle":19, "bonus":20, "meal":21, "gross":22,
+        "pension":23, "health":24, "employ":25, "lcare":26, "income_tax":27, "local_tax":28, "total_deduct":29,
+        "net":30,
+    }
+
+    _hdr_cell(ws1, 2, COL["no"],    "기본정보",   "basic", span_rows=1, span_cols=4)
+    _hdr_cell(ws1, 2, COL["ot"],    "근  태",      "attend", span_rows=1, span_cols=9)
+    _hdr_cell(ws1, 2, COL["base"],  "지  급  내  역", "pay", span_rows=1, span_cols=9)
+    _hdr_cell(ws1, 2, COL["pension"],"공  제  내  역","deduct", span_rows=1, span_cols=7)
+    _hdr_cell(ws1, 2, COL["net"],   "실수령",      "result", span_rows=1, span_cols=1)
+
+    # ── 헤더 행2 (세부) ──
+    headers2 = [
+        (COL["no"],    "순번",    "basic"),
+        (COL["name"],  "이름",    "basic"),
+        (COL["hire"],  "입사일",  "basic"),
+        (COL["rate"],  f"{year}\n시급",  "basic"),
+        (COL["ot"],    "연장",    "attend"),
+        (COL["night"], "심야",    "attend"),
+        (COL["hol"],   "특근",    "attend"),
+        (COL["annual"],"연차",    "attend"),
+        (COL["off"],   "휴무",    "attend"),
+        (COL["absent"],"결근",    "attend"),
+        (COL["late"],  "지각",    "attend"),
+        (COL["early"], "조퇴/\n외출","attend"),
+        (COL["week"],  "주차",    "attend"),
+        (COL["base"],  "기본급",  "pay"),
+        (COL["ot_pay"],"연장\n수당","pay"),
+        (COL["night_pay"],"심야\n수당","pay"),
+        (COL["hol_pay"],"특근\n수당","pay"),
+        (COL["foreman"],"반장\n수당","pay"),
+        (COL["vehicle"],"차량\n유지비","pay"),
+        (COL["meal"],  "식대",    "pay"),
+        (COL["bonus"], "상여",    "pay"),
+        (COL["gross"], "총지급",  "pay"),
+        (COL["pension"],"국민\n연금","deduct"),
+        (COL["health"],"건강\n보험","deduct"),
+        (COL["employ"],"고용\n보험","deduct"),
+        (COL["lcare"], "장기\n요양","deduct"),
+        (COL["income_tax"],"소득세","deduct"),
+        (COL["local_tax"],"지방\n소득세","deduct"),
+        (COL["total_deduct"],"총공제","deduct"),
+        (COL["net"],   "실수령",  "result"),
+    ]
+    for col, label, fkey in headers2:
+        _hdr_cell(ws1, 3, col, label, fkey)
+
+    # ── 데이터 행 ──
+    for i, (pr, emp) in enumerate(rows, 1):
+        r = i + 3
+        att = att_map.get(emp.emp_id, {})
+        _data_cell(ws1, r, COL["no"],    i)
+        _data_cell(ws1, r, COL["name"],  emp.name)
+        _data_cell(ws1, r, COL["hire"],  str(emp.hire_date) if emp.hire_date else "")
+        _data_cell(ws1, r, COL["rate"],  float(pr.std_hourly or 0), num=True)
+        # 근태
+        ot_h = (pr.pay_ot_hrs or 0)
+        ot_m = (pr.pay_ot_min or 0)
+        ot_fixed = emp.fixed_ot_hrs or 0
+        ot_actual = max(0, ot_h - ot_fixed)
+        _data_cell(ws1, r, COL["ot"],    f"{ot_h}h" + (f" {ot_m}m" if ot_m else ""))
+        _data_cell(ws1, r, COL["night"], f"{pr.pay_night_hrs or 0}h")
+        hol_h = (pr.pay_holiday_hrs or 0)
+        hol_fixed = emp.fixed_holiday_hrs or 0
+        hol_actual = max(0, hol_h - hol_fixed)
+        _data_cell(ws1, r, COL["hol"],   f"{hol_h}h")
+        _data_cell(ws1, r, COL["annual"], "")       # 연차 (미구현)
+        _data_cell(ws1, r, COL["off"],    "")       # 휴무
+        _data_cell(ws1, r, COL["absent"], att.get("absent", 0))
+        _data_cell(ws1, r, COL["late"],   "")       # 지각
+        _data_cell(ws1, r, COL["early"],  "")       # 조퇴외출
+        _data_cell(ws1, r, COL["week"],   "")       # 주차
+        # 지급
+        _data_cell(ws1, r, COL["base"],       float(pr.base_pay or 0),       num=True)
+        _data_cell(ws1, r, COL["ot_pay"],     float(pr.ot_pay or 0),         num=True)
+        _data_cell(ws1, r, COL["night_pay"],  float(pr.night_pay or 0),      num=True)
+        _data_cell(ws1, r, COL["hol_pay"],    float(pr.holiday_pay or 0),    num=True)
+        _data_cell(ws1, r, COL["foreman"],    float(pr.foreman_allow or 0),  num=True)
+        _data_cell(ws1, r, COL["vehicle"],    float(pr.vehicle_allow or 0),  num=True)
+        _data_cell(ws1, r, COL["meal"],       float(pr.meal_allow or 0),     num=True)
+        _data_cell(ws1, r, COL["bonus"],      float(pr.bonus or 0),          num=True)
+        _data_cell(ws1, r, COL["gross"],      float(pr.gross_pay or 0),      num=True, bold=True)
+        # 공제
+        _data_cell(ws1, r, COL["pension"],    float(pr.deduct_pension or 0),    num=True)
+        _data_cell(ws1, r, COL["health"],     float(pr.deduct_health or 0),     num=True)
+        _data_cell(ws1, r, COL["employ"],     float(pr.deduct_employ or 0),     num=True)
+        _data_cell(ws1, r, COL["lcare"],      float(pr.deduct_lcare or 0),      num=True)
+        _data_cell(ws1, r, COL["income_tax"], float(pr.deduct_income_tax or 0), num=True)
+        _data_cell(ws1, r, COL["local_tax"],  float(pr.deduct_local_tax or 0),  num=True)
+        _data_cell(ws1, r, COL["total_deduct"],float(pr.total_deduct or 0),     num=True, bold=True)
+        _data_cell(ws1, r, COL["net"],        float(pr.net_pay or 0),           num=True, bold=True)
+
+    # 합계 행
+    if rows:
+        tr = len(rows) + 4
+        ws1.cell(row=tr, column=1, value="합 계").font = TOTAL_FONT
+        ws1.cell(row=tr, column=1).alignment = CENTER
+        ws1.merge_cells(start_row=tr, start_column=1, end_row=tr, end_column=4)
+        num_cols = [COL["rate"], COL["base"], COL["ot_pay"], COL["night_pay"], COL["hol_pay"],
+                    COL["foreman"], COL["vehicle"], COL["meal"], COL["bonus"], COL["gross"],
+                    COL["pension"], COL["health"], COL["employ"], COL["lcare"],
+                    COL["income_tax"], COL["local_tax"], COL["total_deduct"], COL["net"]]
+        for col in num_cols:
+            cl = get_column_letter(col)
+            start_r = 4
+            end_r   = len(rows) + 3
+            c = ws1.cell(row=tr, column=col, value=f"=SUM({cl}{start_r}:{cl}{end_r})")
+            c.font   = TOTAL_FONT
+            c.number_format = NUM_FMT
+            c.alignment = RIGHT
+            c.border = _border()
+            c.fill   = PatternFill("solid", fgColor="FFF2CC")
+
+    # 열 너비
+    col_widths = {1:5, 2:9, 3:12, 4:11, 5:7, 6:7, 7:7, 8:6, 9:6, 10:6, 11:6, 12:7, 13:6,
+                  14:13, 15:10, 16:10, 17:10, 18:10, 19:10, 20:8, 21:8, 22:13,
+                  23:10, 24:10, 25:10, 26:10, 27:10, 28:10, 29:11, 30:13}
+    for col, w in col_widths.items():
+        ws1.column_dimensions[get_column_letter(col)].width = w
+    ws1.row_dimensions[1].height = 22
+    ws1.row_dimensions[2].height = 18
+    ws1.row_dimensions[3].height = 32
+
+    # ══════════════════════════════════════════════════
+    # Sheet 2: 급여명세표 (직원별 가로 배치)
+    # ══════════════════════════════════════════════════
+    ws2 = wb.create_sheet(f"{year}.{mm} 급여명세표")
+    ws2.freeze_panes = "B1"
+
+    PAY_LABELS = ["기본급", "연장수당", "심야수당", "특근수당", "반장수당", "차량유지비", "식대", "상여", "총지급액"]
+    DED_LABELS = ["국민연금", "건강보험", "고용보험", "장기요양보험", "소득세", "지방소득세", "총공제액"]
+    INFO_LABELS = ["사번", "이름", "부서", "직급", "입사일", "통상시급", "소정근로(h)",
+                   "연장(h)", "심야(h)", "특근(h)"]
+    ALL_LABELS = INFO_LABELS + PAY_LABELS + DED_LABELS + ["실수령액"]
+
+    # 헤더 열
+    for ri, label in enumerate(ALL_LABELS, 1):
+        if label in INFO_LABELS:
+            fkey = "basic"
+        elif label in PAY_LABELS:
+            fkey = "pay"
+        elif label in DED_LABELS:
+            fkey = "deduct"
+        else:
+            fkey = "result"
+        c = ws2.cell(row=ri, column=1, value=label)
+        c.fill      = HDR_FILLS[fkey]
+        c.font      = WHITE_FONT
+        c.alignment = CENTER
+        c.border    = _border()
+    ws2.column_dimensions["A"].width = 16
+
+    for ci, (pr, emp) in enumerate(rows, 2):
+        col_ltr = get_column_letter(ci)
+        values = [
+            emp.emp_id,
+            emp.name,
+            emp.dept or "",
+            emp.position or "",
+            str(emp.hire_date) if emp.hire_date else "",
+            float(pr.std_hourly or 0),
+            pr.std_hrs or 209,
+            pr.pay_ot_hrs or 0,
+            pr.pay_night_hrs or 0,
+            pr.pay_holiday_hrs or 0,
+            # 지급
+            float(pr.base_pay or 0),
+            float(pr.ot_pay or 0),
+            float(pr.night_pay or 0),
+            float(pr.holiday_pay or 0),
+            float(pr.foreman_allow or 0),
+            float(pr.vehicle_allow or 0),
+            float(pr.meal_allow or 0),
+            float(pr.bonus or 0),
+            float(pr.gross_pay or 0),
+            # 공제
+            float(pr.deduct_pension or 0),
+            float(pr.deduct_health or 0),
+            float(pr.deduct_employ or 0),
+            float(pr.deduct_lcare or 0),
+            float(pr.deduct_income_tax or 0),
+            float(pr.deduct_local_tax or 0),
+            float(pr.total_deduct or 0),
+            float(pr.net_pay or 0),
+        ]
+        num_start = len(INFO_LABELS) + 1  # 숫자 항목 시작 행 인덱스
+        for ri, val in enumerate(values, 1):
+            c = ws2.cell(row=ri, column=ci, value=val)
+            c.font   = DATA_FONT
+            c.border = _border()
+            is_num = ri >= num_start
+            if is_num:
+                c.number_format = NUM_FMT
+                c.alignment = RIGHT
+                # 총지급/총공제/실수령 굵게
+                if ALL_LABELS[ri-1] in ("총지급액", "총공제액", "실수령액"):
+                    c.font = TOTAL_FONT
+            else:
+                c.alignment = LEFT
+        ws2.column_dimensions[col_ltr].width = 13
+
+    # ── 출력 ──
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+
+    co_suffix = f"_{company}" if company else ""
+    fname = f"{year}{mm}_급여정산표{co_suffix}.xlsx"
+    return StreamingResponse(
+        buf,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{fname}"},
+    )
+
+
 # ── 월간 근무 요약 ─────────────────────────────────────────────────────
 
 @router.get("/attendance/summary")

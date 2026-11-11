@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react'
 import api from '../api'
 
 const now = new Date()
+const COMPANY_LIST = ['조이산업', '넥스젬']
 const STATUS_STYLE = {
   '계산중':   { bg: '#fef9c3', color: '#a16207' },
   '확정':     { bg: '#dbeafe', color: '#1d4ed8' },
@@ -16,6 +17,16 @@ export default function HrPayroll() {
   const [payrolls, setPayrolls] = useState([])
   const [calcLoading, setCalcLoading] = useState(false)
   const [selected, setSelected] = useState(null)
+  const [excelCompany, setExcelCompany] = useState('')
+
+  const downloadExcel = () => {
+    const params = new URLSearchParams({ year, month })
+    if (excelCompany) params.set('company', excelCompany)
+    const url = `/api/hr/payroll/export-excel?${params}`
+    const a = document.createElement('a')
+    a.href = url
+    a.click()
+  }
 
   const load = useCallback(() => {
     api.get(`/hr/payroll?year=${year}&month=${month}`).then(r => setPayrolls(r.data)).catch(() => setPayrolls([]))
@@ -67,6 +78,16 @@ export default function HrPayroll() {
           <button className="btn btn-primary" onClick={calculate} disabled={calcLoading}>
             {calcLoading ? '계산중...' : '자동 계산'}
           </button>
+          <div style={{ display: 'flex', gap: 4, alignItems: 'center', marginLeft: 8, borderLeft: '1px solid #e2e8f0', paddingLeft: 12 }}>
+            <select className="form-control" value={excelCompany} onChange={e => setExcelCompany(e.target.value)} style={{ width: 100, fontSize: 12 }}>
+              <option value="">전체 법인</option>
+              {COMPANY_LIST.map(c => <option key={c}>{c}</option>)}
+            </select>
+            <button className="btn" style={{ background: '#16a34a', color: '#fff', border: 'none', fontSize: 12, whiteSpace: 'nowrap' }}
+              onClick={downloadExcel} disabled={payrolls.length === 0}>
+              📥 엑셀 다운로드
+            </button>
+          </div>
         </div>
       </div>
 
