@@ -17,6 +17,7 @@ class Employee(Base):
     hire_date: Mapped[date | None] = mapped_column(Date)
     retire_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     emp_type: Mapped[str] = mapped_column(String(20), default="annual")  # annual / hourly
+    job_grade: Mapped[str | None] = mapped_column(String(10))             # 호봉: CL1~CL6
     company: Mapped[str] = mapped_column(String(50), default="조이산업")  # 소속 법인
     # 급여 기준
     base_salary: Mapped[Decimal] = mapped_column(Numeric(15, 2), default=0)   # 연봉제: 월 기본급 / 시급제: 사용안함

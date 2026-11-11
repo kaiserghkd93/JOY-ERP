@@ -299,7 +299,7 @@ function PayslipModal({ payroll: initialP, onClose, onSaved }) {
             </tr>
             <tr>
               {[
-                ['부서', p.dept || '—'], ['직급', p.position || '—'], ['호봉', p.emp_type === 'annual' ? '연봉제' : '시급제']
+                ['부서', p.dept || '—'], ['직급', p.position || '—'], ['호봉', p.job_grade || '—']
               ].map(([k, v]) => (
                 <><td key={k+'k'} style={{ ...cellLabel, fontSize: 10 }}>{k}</td>
                   <td key={k+'v'} style={{ border: BL, padding: '4px 10px' }}>{v}</td></>

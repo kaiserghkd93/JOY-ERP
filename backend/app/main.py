@@ -173,6 +173,7 @@ with engine.connect() as _conn:
         "ALTER TABLE hr_employee ADD COLUMN IF NOT EXISTS fixed_income_tax INTEGER DEFAULT 0",
         "ALTER TABLE hr_employee ADD COLUMN IF NOT EXISTS fixed_local_tax INTEGER DEFAULT 0",
         "ALTER TABLE hr_employee ADD COLUMN IF NOT EXISTS birth_date DATE",
+        "ALTER TABLE hr_employee ADD COLUMN IF NOT EXISTS job_grade VARCHAR(10)",
         "ALTER TABLE hr_employee ADD COLUMN IF NOT EXISTS foreman_allow_fixed NUMERIC(15,2) DEFAULT 0",
         "ALTER TABLE hr_payroll ADD COLUMN IF NOT EXISTS foreman_allow NUMERIC(15,2) DEFAULT 0",
         "ALTER TABLE hr_employee ADD COLUMN IF NOT EXISTS resident_no VARCHAR(14)",

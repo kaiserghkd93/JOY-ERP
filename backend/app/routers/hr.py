@@ -66,6 +66,7 @@ class EmployeeIn(BaseModel):
     hire_date: Optional[date] = None
     retire_date: Optional[date] = None
     emp_type: str = "annual"              # annual / hourly
+    job_grade: Optional[str] = None      # 호봉: CL1~CL6
     company: str = "조이산업"             # 소속 법인
     base_salary: float = 0               # 연봉제: 월 기본급
     hourly_rate: float = 0               # 시급제: 시급
@@ -92,7 +93,7 @@ def _emp_dict(e: Employee) -> dict:
         "emp_id": e.emp_id, "name": e.name, "dept": e.dept,
         "position": e.position, "hire_date": str(e.hire_date) if e.hire_date else None,
         "retire_date": str(e.retire_date) if e.retire_date else None,
-        "emp_type": e.emp_type, "company": e.company,
+        "emp_type": e.emp_type, "job_grade": e.job_grade, "company": e.company,
         "base_salary": float(e.base_salary), "hourly_rate": float(e.hourly_rate),
         "weekly_hours": e.weekly_hours, "std_monthly_hours": e.std_monthly_hours,
         "fixed_ot_hrs": e.fixed_ot_hrs or 0,
@@ -606,6 +607,7 @@ def list_payroll(
         d["dept"] = emp.dept
         d["position"] = emp.position
         d["emp_type"] = emp.emp_type
+        d["job_grade"] = emp.job_grade
         d["company"] = emp.company or "조이산업"
         d["birth_date"] = str(emp.birth_date) if emp.birth_date else None
         d["resident_no"] = emp.resident_no

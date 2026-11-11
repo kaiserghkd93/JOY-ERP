@@ -138,7 +138,7 @@ function EmployeeModal({ employee, onClose, onSaved }) {
   const editing = !!employee
   const [form, setForm] = useState(employee || {
     emp_id: '', name: '', dept: '', position: '', hire_date: '', retire_date: '',
-    emp_type: 'hourly', company: '조이산업', base_salary: '', hourly_rate: '', weekly_hours: 40,
+    emp_type: 'hourly', job_grade: '', company: '조이산업', base_salary: '', hourly_rate: '', weekly_hours: 40,
     fixed_ot_hrs: 0, fixed_holiday_hrs: 0,
     fixed_income_tax: 0, fixed_local_tax: 0,
     birth_date: '', foreman_allow_fixed: 0, vehicle_allow_fixed: 200000,
@@ -229,6 +229,19 @@ function EmployeeModal({ employee, onClose, onSaved }) {
               <option value="hourly">시급제</option>
             </select>
           </div>
+        </div>
+
+        <div className="form-group">
+          <label>호봉 (CL)</label>
+          <select className="form-control" value={form.job_grade || ''} onChange={e => set('job_grade', e.target.value)}>
+            <option value="">선택</option>
+            <option value="CL1">CL1</option>
+            <option value="CL2">CL2</option>
+            <option value="CL3">CL3</option>
+            <option value="CL4">CL4</option>
+            <option value="CL5">CL5</option>
+            <option value="CL6">CL6</option>
+          </select>
         </div>
 
         <div className="form-group">
