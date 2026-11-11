@@ -377,6 +377,17 @@ export default function Invoice() {
     window.open(`${api.defaults.baseURL}/invoices/${inv_no}/print`, '_blank')
   }
 
+  const saveInvToNetwork = async (inv_no) => {
+    try {
+      const r = await fetch(`http://localhost:9091/save/invoice/${inv_no}`)
+      const d = await r.json()
+      if (r.ok) alert(`저장 완료\n${d.saved}`)
+      else alert(`저장 실패: ${d.error || '에이전트 오류'}`)
+    } catch {
+      alert('PDF 에이전트가 실행 중이지 않습니다.\nmiddleware/start_pdf_agent.bat 를 먼저 실행해주세요.')
+    }
+  }
+
   const setClosing = async (inv_no, currentType) => {
     const next = currentType == null ? '금월' : currentType === '금월' ? '이월' : null
     const params = next ? `?closing_type=${next}` : ''
@@ -526,7 +537,10 @@ export default function Invoice() {
                       </td>
                       <td>
                         {inv.status === '발행완료' && (
-                          <button className="btn btn-sm btn-outline" onClick={() => printInv(inv.inv_no)}>PDF</button>
+                          <div style={{display:'flex',gap:4}}>
+                            <button className="btn btn-sm btn-outline" onClick={() => printInv(inv.inv_no)}>PDF</button>
+                            <button className="btn btn-sm" style={{background:'#0f766e',color:'#fff',fontSize:11}} onClick={() => saveInvToNetwork(inv.inv_no)} title="\\192.168.0.124 명세서 집계에 저장">💾</button>
+                          </div>
                         )}
                       </td>
                       <td>

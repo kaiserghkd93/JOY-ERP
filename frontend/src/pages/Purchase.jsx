@@ -1729,6 +1729,17 @@ export default function Purchase() {
     a.click()
   }
 
+  const savePoToNetwork = async (group_no) => {
+    try {
+      const r = await fetch(`http://localhost:9091/save/purchase/${group_no}`)
+      const d = await r.json()
+      if (r.ok) alert(`저장 완료\n${d.saved}`)
+      else alert(`저장 실패: ${d.error || '에이전트 오류'}`)
+    } catch {
+      alert('PDF 에이전트가 실행 중이지 않습니다.\nmiddleware/start_pdf_agent.bat 를 먼저 실행해주세요.')
+    }
+  }
+
   const downloadTemplate = async () => {
     const XLSX = await import('xlsx')
     const data = [
@@ -2035,9 +2046,12 @@ export default function Purchase() {
                       </button>
                     </td>
                     <td>
-                      <button className="btn btn-sm btn-primary" onClick={() => openPrint(g.group_no)}>
-                        발주서 출력
-                      </button>
+                      <div style={{display:'flex',gap:4}}>
+                        <button className="btn btn-sm btn-primary" onClick={() => openPrint(g.group_no)}>
+                          발주서 출력
+                        </button>
+                        <button className="btn btn-sm" style={{background:'#0f766e',color:'#fff',fontSize:11}} onClick={() => savePoToNetwork(g.group_no)} title="\\192.168.0.124 발주서 집계에 저장">💾</button>
+                      </div>
                     </td>
                     <td>
                       <button className="btn btn-sm btn-outline"

@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, StreamingResponse
 from sqlalchemy.orm import Session, selectinload, joinedload
+from io import BytesIO
 from datetime import date as date_type
 
 from app.database import get_db
@@ -452,3 +453,111 @@ def print_invoice(inv_no: str, db: Session = Depends(get_db)):
 </body>
 </html>"""
     return HTMLResponse(content=html)
+
+
+@router.get("/{inv_no}/pdf")
+def download_invoice_pdf(inv_no: str, db: Session = Depends(get_db)):
+    """명세서 PDF 다운로드 (로컬 에이전트용)"""
+    inv = db.get(Invoice, inv_no)
+    if not inv:
+        raise HTTPException(404)
+
+    partner = db.get(Partner, inv.partner_id)
+
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib import colors
+    from reportlab.lib.units import mm
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+    from reportlab.lib.styles import ParagraphStyle
+    from reportlab.pdfbase import pdfmetrics
+    from reportlab.pdfbase.ttfonts import TTFont
+    from urllib.parse import quote
+    import os
+
+    font_path = r"C:\Windows\Fonts\malgun.ttf"
+    if os.path.exists(font_path):
+        pdfmetrics.registerFont(TTFont('Korean', font_path))
+        font = 'Korean'
+    else:
+        font = 'Helvetica'
+
+    buf = BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=A4,
+                            leftMargin=15*mm, rightMargin=15*mm,
+                            topMargin=15*mm, bottomMargin=15*mm)
+
+    normal = ParagraphStyle('n', fontName=font, fontSize=9)
+    title_s = ParagraphStyle('t', fontName=font, fontSize=18, alignment=1, spaceAfter=4)
+    sub_s = ParagraphStyle('s', fontName=font, fontSize=8, textColor=colors.grey, alignment=1, spaceAfter=10)
+    small = ParagraphStyle('sm', fontName=font, fontSize=8, textColor=colors.grey)
+
+    story = []
+    story.append(Paragraph('거 래 명 세 서', title_s))
+    story.append(Paragraph(f'문서번호: {inv_no}  |  발행일: {inv.issue_date}', sub_s))
+
+    p_name = partner.name if partner else inv.partner_id
+    p_biz  = getattr(partner, 'biz_no', '') or ''
+    info_data = [
+        ['공급받는자', p_name, '공급자', '㈜넥스젬'],
+        ['사업자번호', p_biz,  '사업자번호', '301-81-62024'],
+        ['대표자',    getattr(partner,'ceo','') or '', '대표자', '이광규'],
+    ]
+    info_tbl = Table(info_data, colWidths=[28*mm, 65*mm, 28*mm, 55*mm])
+    info_tbl.setStyle(TableStyle([
+        ('FONTNAME', (0,0), (-1,-1), font), ('FONTSIZE', (0,0), (-1,-1), 9),
+        ('BACKGROUND', (0,0), (0,-1), colors.HexColor('#f0f0f0')),
+        ('BACKGROUND', (2,0), (2,-1), colors.HexColor('#f0f0f0')),
+        ('GRID', (0,0), (-1,-1), 0.5, colors.grey),
+        ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+        ('PADDING', (0,0), (-1,-1), 5),
+    ]))
+    story.append(info_tbl)
+    story.append(Spacer(1, 6*mm))
+
+    headers = ['No', '품번', '품명', '단위', '수량', '단가', '공급가액', '세액']
+    col_w = [9*mm, 28*mm, 55*mm, 10*mm, 15*mm, 20*mm, 22*mm, 18*mm]
+    rows = [headers]
+    total_supply = 0.0
+    for i, ln in enumerate(inv.lines, 1):
+        item = db.get(Item, ln.part_no)
+        up = float(ln.unit_price)
+        sup = int(ln.qty * up)
+        vat = round(sup * 0.1, 0)
+        total_supply += sup
+        rows.append([
+            str(i), ln.part_no,
+            item.name if item else ln.part_no,
+            item.unit if item else 'EA',
+            f'{ln.qty:,}', f'₩{up:,.0f}',
+            f'₩{sup:,}', f'₩{int(vat):,}',
+        ])
+    total_vat = round(total_supply * 0.1, 0)
+    rows.append(['','','','','','합계',f'₩{int(total_supply):,}',f'₩{int(total_vat):,}'])
+
+    item_tbl = Table(rows, colWidths=col_w, repeatRows=1)
+    item_tbl.setStyle(TableStyle([
+        ('FONTNAME', (0,0), (-1,-1), font), ('FONTSIZE', (0,0), (-1,-1), 9),
+        ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#1d4ed8')),
+        ('TEXTCOLOR', (0,0), (-1,0), colors.white),
+        ('ALIGN', (0,0), (-1,-1), 'CENTER'),
+        ('ALIGN', (1,1), (2,-1), 'LEFT'),
+        ('ALIGN', (4,1), (-1,-1), 'RIGHT'),
+        ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#dddddd')),
+        ('ROWBACKGROUNDS', (0,1), (-1,-2), [colors.white, colors.HexColor('#f9f9f9')]),
+        ('BACKGROUND', (0,-1), (-1,-1), colors.HexColor('#eef2ff')),
+        ('PADDING', (0,0), (-1,-1), 4),
+    ]))
+    story.append(item_tbl)
+    story.append(Spacer(1, 4*mm))
+    story.append(Paragraph(f'합계금액: ₩{int(total_supply + total_vat):,}  (공급가액 ₩{int(total_supply):,} + 부가세 ₩{int(total_vat):,})', normal))
+
+    doc.build(story)
+    buf.seek(0)
+
+    filename = f'명세서_{inv_no}.pdf'
+    encoded = quote(filename, safe='')
+    return StreamingResponse(
+        buf,
+        media_type='application/pdf',
+        headers={'Content-Disposition': f"attachment; filename*=UTF-8''{encoded}"}
+    )

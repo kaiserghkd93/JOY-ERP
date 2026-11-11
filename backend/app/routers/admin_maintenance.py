@@ -8,10 +8,27 @@ from datetime import date
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import text
-from app.database import get_db, engine
+from app.database import get_db, engine, Base
 from app.models.master import Item, ItemType
+from app.models import hr as _hr_models  # noqa
 
 router = APIRouter(prefix="/admin", tags=["admin-maintenance"])
+
+
+@router.post("/init-hr-tables")
+def init_hr_tables():
+    """HR 테이블(hr_employee, hr_attendance, hr_payroll) 없으면 생성"""
+    created = []
+    with engine.connect() as conn:
+        for tbl in ["hr_employee", "hr_attendance", "hr_payroll"]:
+            exists = conn.execute(text(
+                "SELECT EXISTS (SELECT 1 FROM information_schema.tables "
+                "WHERE table_name=:t)"
+            ), {"t": tbl}).scalar()
+            created.append({"table": tbl, "existed": bool(exists)})
+    # create_all은 존재하는 테이블은 건드리지 않으므로 안전
+    Base.metadata.create_all(bind=engine)
+    return {"ok": True, "tables": created}
 
 CUTOFF = date(2026, 11, 1)   # 2026-10-31 이전 모두 삭제 (= < 2026-11-01)
 
