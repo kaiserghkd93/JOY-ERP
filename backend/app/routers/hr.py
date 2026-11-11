@@ -133,13 +133,20 @@ def list_employees(active_only: bool = True, db: Session = Depends(get_db), _=De
 
 @router.post("/employees")
 def create_employee(body: EmployeeIn, db: Session = Depends(get_db), _=Depends(get_current_user)):
-    if db.get(Employee, body.emp_id):
-        raise HTTPException(400, f"이미 존재하는 사번: {body.emp_id}")
-    e = Employee(**body.model_dump())
-    db.add(e)
-    db.commit()
-    db.refresh(e)
-    return _emp_dict(e)
+    import traceback
+    try:
+        if db.get(Employee, body.emp_id):
+            raise HTTPException(400, f"이미 존재하는 사번: {body.emp_id}")
+        e = Employee(**body.model_dump())
+        db.add(e)
+        db.commit()
+        db.refresh(e)
+        return _emp_dict(e)
+    except HTTPException:
+        raise
+    except Exception as ex:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"{type(ex).__name__}: {ex}\n{traceback.format_exc()}")
 
 
 @router.patch("/employees/{emp_id}")
