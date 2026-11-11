@@ -19,13 +19,29 @@ export default function HrPayroll() {
   const [selected, setSelected] = useState(null)
   const [excelCompany, setExcelCompany] = useState('')
 
-  const downloadExcel = () => {
+  const [excelLoading, setExcelLoading] = useState(false)
+
+  const downloadExcel = async () => {
     const params = new URLSearchParams({ year, month })
     if (excelCompany) params.set('company', excelCompany)
-    const url = `/api/hr/payroll/export-excel?${params}`
-    const a = document.createElement('a')
-    a.href = url
-    a.click()
+    setExcelLoading(true)
+    try {
+      const res = await api.get(`/hr/payroll/export-excel?${params}`, { responseType: 'blob' })
+      const blob = new Blob([res.data], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      const co = excelCompany ? `_${excelCompany}` : ''
+      a.download = `${year}${String(month).padStart(2,'0')}_급여정산표${co}.xlsx`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+    } catch(e) {
+      alert('다운로드 실패: ' + (e.response?.data?.detail || e.message))
+    } finally {
+      setExcelLoading(false)
+    }
   }
 
   const load = useCallback(() => {
@@ -84,8 +100,8 @@ export default function HrPayroll() {
               {COMPANY_LIST.map(c => <option key={c}>{c}</option>)}
             </select>
             <button className="btn" style={{ background: '#16a34a', color: '#fff', border: 'none', fontSize: 12, whiteSpace: 'nowrap' }}
-              onClick={downloadExcel} disabled={payrolls.length === 0}>
-              📥 엑셀 다운로드
+              onClick={downloadExcel} disabled={payrolls.length === 0 || excelLoading}>
+              {excelLoading ? '생성중...' : '📥 엑셀 다운로드'}
             </button>
           </div>
         </div>
