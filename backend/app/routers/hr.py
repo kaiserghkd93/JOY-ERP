@@ -26,7 +26,7 @@ from sqlalchemy import func, Integer, cast
 from pydantic import BaseModel
 
 from app.database import get_db
-from app.routers.auth import get_current_user, require_admin
+from app.routers.auth import get_current_user, require_admin, require_admin_or_accounting
 from app.models.hr import Employee, Attendance, Payroll, EmployeeKpi, EmployeeHrHistory
 
 router = APIRouter(prefix="/hr", tags=["인사"])
@@ -1160,7 +1160,7 @@ def create_hr_history(
     emp_id: str,
     body: HrHistoryBody,
     db: Session = Depends(get_db),
-    user=Depends(require_admin),
+    user=Depends(require_admin_or_accounting),
 ):
     emp = db.get(Employee, emp_id)
     if not emp:
@@ -1179,11 +1179,35 @@ def create_hr_history(
     return _hist_dict(h)
 
 
+@router.put("/employees/history/{history_id}")
+def update_hr_history(
+    history_id: int,
+    body: HrHistoryBody,
+    db: Session = Depends(get_db),
+    user=Depends(require_admin_or_accounting),
+):
+    from app.models.auth import UserRole
+    h = db.get(EmployeeHrHistory, history_id)
+    if not h:
+        raise HTTPException(404)
+    h.event_date = date.fromisoformat(body.event_date)
+    h.event_type = body.event_type
+    h.title = body.title
+    h.detail = body.detail
+    # admin이 수정할 때는 recorded_by 유지 (경리 이름 보존)
+    # accounting이 수정할 때만 recorded_by 갱신
+    if user.role == UserRole.accounting:
+        h.recorded_by = user.name or user.id
+    db.commit()
+    db.refresh(h)
+    return _hist_dict(h)
+
+
 @router.delete("/employees/history/{history_id}")
 def delete_hr_history(
     history_id: int,
     db: Session = Depends(get_db),
-    _=Depends(require_admin),
+    _=Depends(require_admin_or_accounting),
 ):
     h = db.get(EmployeeHrHistory, history_id)
     if not h:

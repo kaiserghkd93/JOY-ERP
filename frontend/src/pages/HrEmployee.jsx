@@ -22,6 +22,7 @@ export default function HrEmployee() {
   const [typeFilter, setTypeFilter] = useState('')
   const [companyFilter, setCompanyFilter] = useState('')
   const isAdmin = getRole() === 'admin'
+  const canEditHr = isAdmin || getRole() === 'accounting'
 
   const load = useCallback(() => {
     api.get('/hr/employees?active_only=false').then(r => setEmployees(r.data)).catch(() => {})
@@ -171,6 +172,7 @@ export default function HrEmployee() {
           emp={detailModal.emp}
           initialTab={detailModal.tab}
           isAdmin={isAdmin}
+          canEditHr={canEditHr}
           onClose={() => setDetailModal(null)}
           onEdit={(emp) => { setDetailModal(null); setModal(emp) }}
           onKpiSaved={() => loadKpi()}
@@ -437,7 +439,7 @@ const HR_EVENT_COLOR = {
 }
 
 // ── 사원 상세 모달 ─────────────────────────────────────────────────────
-function EmployeeDetailModal({ emp: initialEmp, initialTab = 'info', isAdmin, onClose, onEdit, onKpiSaved }) {
+function EmployeeDetailModal({ emp: initialEmp, initialTab = 'info', isAdmin, canEditHr, onClose, onEdit, onKpiSaved }) {
   const [emp] = useState(initialEmp)
   const [tab, setTab] = useState(initialTab)
   const [year, setYear] = useState(now.getFullYear())
@@ -453,6 +455,8 @@ function EmployeeDetailModal({ emp: initialEmp, initialTab = 'info', isAdmin, on
   const [cardForm, setCardForm] = useState({ event_date: '', event_type: '입사', title: '', detail: '' })
   const [cardSaving, setCardSaving] = useState(false)
   const [showCardForm, setShowCardForm] = useState(false)
+  const [editingCardId, setEditingCardId] = useState(null)   // 수정 중인 항목 id
+  const [editCardForm, setEditCardForm] = useState({})       // 수정 폼 데이터
 
   // 출퇴근 연간 집계
   const loadAtt = useCallback(() => {
@@ -538,6 +542,22 @@ function EmployeeDetailModal({ emp: initialEmp, initialTab = 'info', isAdmin, on
       await api.post(`/hr/employees/${emp.emp_id}/history`, cardForm)
       setCardForm({ event_date: '', event_type: '입사', title: '', detail: '' })
       setShowCardForm(false)
+      loadCard()
+    } catch (e) { alert(e.response?.data?.detail || e.message) }
+    finally { setCardSaving(false) }
+  }
+
+  const startEditCard = (h) => {
+    setEditingCardId(h.id)
+    setEditCardForm({ event_date: h.event_date, event_type: h.event_type, title: h.title, detail: h.detail || '' })
+  }
+
+  const submitEditCard = async () => {
+    if (!editCardForm.event_date || !editCardForm.title.trim()) return alert('날짜와 제목을 입력하세요')
+    setCardSaving(true)
+    try {
+      await api.put(`/hr/employees/history/${editingCardId}`, editCardForm)
+      setEditingCardId(null)
       loadCard()
     } catch (e) { alert(e.response?.data?.detail || e.message) }
     finally { setCardSaving(false) }
@@ -634,7 +654,7 @@ function EmployeeDetailModal({ emp: initialEmp, initialTab = 'info', isAdmin, on
           {tab === 'card' && (
             <div>
               {/* 추가 버튼 */}
-              {isAdmin && (
+              {canEditHr && (
                 <div style={{ marginBottom: 14, textAlign: 'right' }}>
                   <button className="btn btn-primary btn-sm" onClick={() => setShowCardForm(v => !v)}>
                     {showCardForm ? '취소' : '＋ 기록 추가'}
@@ -691,46 +711,83 @@ function EmployeeDetailModal({ emp: initialEmp, initialTab = 'info', isAdmin, on
 
                   {cardData.map((h, idx) => {
                     const [bg, color] = HR_EVENT_COLOR[h.event_type] || ['#f8fafc', '#64748b']
-                    const isFirst = idx === 0
                     const isLast = idx === cardData.length - 1
+                    const isEditing = editingCardId === h.id
                     return (
                       <div key={h.id} style={{ position: 'relative', marginBottom: isLast ? 0 : 20 }}>
-                        {/* 점 */}
+                        {/* 타임라인 점 */}
                         <div style={{
-                          position: 'absolute', left: -24, top: 10,
+                          position: 'absolute', left: -24, top: 12,
                           width: 12, height: 12, borderRadius: '50%',
                           background: color, border: '2px solid white',
                           boxShadow: `0 0 0 2px ${color}`,
                         }} />
 
-                        <div style={{
-                          background: bg, border: `1px solid ${color}30`,
-                          borderRadius: 8, padding: '10px 14px',
-                          position: 'relative',
-                        }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                              <span style={{
-                                padding: '2px 8px', borderRadius: 20, fontSize: 10, fontWeight: 700,
-                                background: color, color: '#fff',
-                              }}>{h.event_type}</span>
-                              <span style={{ fontSize: 13, fontWeight: 700, color: '#1e293b' }}>{h.title}</span>
+                        {isEditing ? (
+                          /* ── 인라인 수정 폼 ── */
+                          <div style={{ background: '#fffbeb', border: '1px solid #fcd34d', borderRadius: 8, padding: 12 }}>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
+                              <div className="form-group" style={{ margin: 0 }}>
+                                <label style={{ fontSize: 11 }}>날짜</label>
+                                <input className="form-control" type="date" value={editCardForm.event_date}
+                                  onChange={e => setEditCardForm(f => ({ ...f, event_date: e.target.value }))} />
+                              </div>
+                              <div className="form-group" style={{ margin: 0 }}>
+                                <label style={{ fontSize: 11 }}>구분</label>
+                                <select className="form-control" value={editCardForm.event_type}
+                                  onChange={e => setEditCardForm(f => ({ ...f, event_type: e.target.value }))}>
+                                  {HR_EVENT_TYPES.map(t => <option key={t}>{t}</option>)}
+                                </select>
+                              </div>
                             </div>
-                            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexShrink: 0, marginLeft: 8 }}>
-                              <span style={{ fontSize: 11, color: '#94a3b8' }}>{h.event_date}</span>
-                              {isAdmin && (
-                                <button onClick={() => delCard(h.id)}
-                                  style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', fontSize: 12, padding: '0 2px' }}>✕</button>
-                              )}
+                            <div className="form-group" style={{ margin: '0 0 8px' }}>
+                              <label style={{ fontSize: 11 }}>제목</label>
+                              <input className="form-control" value={editCardForm.title}
+                                onChange={e => setEditCardForm(f => ({ ...f, title: e.target.value }))} />
+                            </div>
+                            <div className="form-group" style={{ margin: '0 0 10px' }}>
+                              <label style={{ fontSize: 11 }}>상세내용</label>
+                              <textarea className="form-control" value={editCardForm.detail} rows={2}
+                                onChange={e => setEditCardForm(f => ({ ...f, detail: e.target.value }))} />
+                            </div>
+                            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                              <button className="btn btn-sm btn-outline" onClick={() => setEditingCardId(null)}>취소</button>
+                              <button className="btn btn-sm btn-primary" onClick={submitEditCard} disabled={cardSaving}>
+                                {cardSaving ? '저장중...' : '수정 저장'}
+                              </button>
                             </div>
                           </div>
-                          {h.detail && (
-                            <div style={{ marginTop: 6, fontSize: 12, color: '#475569', whiteSpace: 'pre-wrap' }}>{h.detail}</div>
-                          )}
-                          {h.recorded_by && (
-                            <div style={{ marginTop: 4, fontSize: 10, color: '#94a3b8' }}>기록: {h.recorded_by}</div>
-                          )}
-                        </div>
+                        ) : (
+                          /* ── 일반 카드 ── */
+                          <div style={{ background: bg, border: `1px solid ${color}30`, borderRadius: 8, padding: '10px 14px' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                              <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                                <span style={{
+                                  padding: '2px 8px', borderRadius: 20, fontSize: 10, fontWeight: 700,
+                                  background: color, color: '#fff',
+                                }}>{h.event_type}</span>
+                                <span style={{ fontSize: 13, fontWeight: 700, color: '#1e293b' }}>{h.title}</span>
+                              </div>
+                              <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexShrink: 0, marginLeft: 8 }}>
+                                <span style={{ fontSize: 11, color: '#94a3b8' }}>{h.event_date}</span>
+                                {canEditHr && (
+                                  <>
+                                    <button onClick={() => startEditCard(h)}
+                                      style={{ background: 'none', border: 'none', color: '#3b82f6', cursor: 'pointer', fontSize: 11, padding: '0 2px' }}>✏</button>
+                                    <button onClick={() => delCard(h.id)}
+                                      style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', fontSize: 12, padding: '0 2px' }}>✕</button>
+                                  </>
+                                )}
+                              </div>
+                            </div>
+                            {h.detail && (
+                              <div style={{ marginTop: 6, fontSize: 12, color: '#475569', whiteSpace: 'pre-wrap' }}>{h.detail}</div>
+                            )}
+                            {h.recorded_by && (
+                              <div style={{ marginTop: 4, fontSize: 10, color: '#94a3b8' }}>기록: {h.recorded_by}</div>
+                            )}
+                          </div>
+                        )}
                       </div>
                     )
                   })}

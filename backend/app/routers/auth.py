@@ -104,6 +104,11 @@ def require_supplier(user: User = Depends(get_current_user)) -> User:
         raise HTTPException(status_code=403, detail="업체 계정이 아닙니다")
     return user
 
+def require_admin_or_accounting(user: User = Depends(get_current_user)) -> User:
+    if user.role not in (UserRole.admin, UserRole.accounting):
+        raise HTTPException(status_code=403, detail="관리자 또는 경리 권한이 필요합니다")
+    return user
+
 
 # ── 스키마 ──────────────────────────────────────────────────────
 class LoginReq(BaseModel):
