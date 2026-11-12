@@ -667,8 +667,6 @@ async def upload_caps_excel(
                 db.add(Attendance(emp_id=emp.emp_id, work_date=work_date, **fields))
                 created += 1
 
-            processed_days.add(day)
-
             # 주 52h 경고 (생산룰 주간조)
             if schedule == 'production' and not is_night and not calc['absent']:
                 week_no = work_date.isocalendar()[1]
