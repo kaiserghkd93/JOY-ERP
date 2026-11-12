@@ -3,7 +3,7 @@ import api from '../api'
 import { getRole } from '../auth'
 
 const EMP_TYPE    = { annual: '연봉제', hourly: '시급제' }
-const DEPT_LIST   = ['생산', '품질', '영업', '구매', '관리', '경영', '금형']
+const DEPT_LIST   = ['생산', '품질', '영업', '구매', '관리', '경영', '금형', '출하']
 const POS_LIST    = ['사원', '주임', '대리', '과장', '차장', '부장', '실장', '이사', '상무이사', '전무이사', '대표']
 const COMPANY_LIST = ['조이산업', '넥스젬']
 const GRADE_COLOR = { S: ['#fef9c3','#a16207'], A: ['#dcfce7','#15803d'], B: ['#dbeafe','#1d4ed8'], C: ['#fed7aa','#c2410c'], D: ['#fee2e2','#dc2626'] }
