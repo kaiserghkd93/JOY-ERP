@@ -845,15 +845,12 @@ def _do_payroll(year: int, month: int, db, emp_ids: Optional[list] = None, skip_
             if (start.month, start.day) < (emp.birth_date.month, emp.birth_date.day):
                 age -= 1
 
-        # 임원(대표·상무이사·전무이사) 여부
-        is_exec = (emp.position or '') in _EXEMPT_POSITIONS or _get_schedule(emp) == 'exempt'
-
         # 국민연금: 만 60세 이상 면제
         pen  = Decimal(0) if (age >= 60) else _round10(taxable * RATE_PENSION)
         hlt  = _round10(taxable * RATE_HEALTH)
         lc   = _round10(hlt * RATE_LCARE)
-        # 고용보험: 임원(대표·상무이사·전무이사) 면제
-        emp_ = Decimal(0) if is_exec else _round10(taxable * RATE_EMPLOY)
+        # 고용보험: CL1(호봉) 면제
+        emp_ = Decimal(0) if (emp.job_grade or '') == 'CL1' else _round10(taxable * RATE_EMPLOY)
 
         it = Decimal(str(emp.fixed_income_tax)) if emp.fixed_income_tax and emp.fixed_income_tax > 0 else _income_tax(taxable)
         lt = Decimal(str(emp.fixed_local_tax))  if emp.fixed_local_tax  and emp.fixed_local_tax  > 0 else _round10(it * Decimal("0.1"))
