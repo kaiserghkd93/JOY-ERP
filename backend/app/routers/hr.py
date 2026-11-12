@@ -31,7 +31,7 @@ from app.models.hr import Employee, Attendance, Payroll, EmployeeKpi, EmployeeHr
 
 router = APIRouter(prefix="/hr", tags=["인사"])
 
-COMPANY_LIST = ["조이산업", "넥스젬"]
+COMPANY_LIST = ["조이산업", "넥스젬", "수아정밀"]
 
 # ── 2026 법정 보험요율 (근로자 부담) ──────────────────────────────────
 RATE_PENSION  = Decimal("0.045")     # 국민연금 4.5%
