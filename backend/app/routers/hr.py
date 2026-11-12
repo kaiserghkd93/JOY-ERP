@@ -428,146 +428,185 @@ def _week52_total_ot(emp_id: str, year: int, week: int, db) -> int:
 @router.post("/attendance/upload-caps")
 async def upload_caps_excel(
     file: UploadFile = File(...),
+    year: int = Query(...),
+    month: int = Query(...),
     db: Session = Depends(get_db), _=Depends(get_current_user),
 ):
     """
-    캡스(CAPS) 출퇴근 Excel 업로드.
-    - 제외(대표·상무·전무): 스킵
-    - 고정(과장급·사무직·주용하·김영일): 08:30/17:30 고정
-    - 반장(이상혁·김의진·신종오·김진택): 08:30/17:30 고정 + 휴일수당
-    - 생산룰(생산·금형·출하 나머지): 08:30 고정, CAPS퇴근, 18:10~잔업 10분단위
-    - 퇴근 미기록 / 출근 없음 → 결근
-    - 지각(생산룰만), 주52h 초과 경고
+    캡스(CAPS) 출퇴근 Excel 업로드 — 가로형(1~31열=일자) 월간 집계표 형식.
+    헤더: 부서 | 직급 | 이름 | 사원번호 | 구분 | 1 | 2 | ... | 31 | 총합
+    각 직원당 출근행 + 퇴근행 2개 쌍.
     """
-    try:
-        import openpyxl
-    except ImportError:
-        raise HTTPException(500, "openpyxl 미설치")
+    import xlrd as _xlrd
 
     content = await file.read()
-    try:
-        wb = openpyxl.load_workbook(BytesIO(content), data_only=True)
-    except Exception:
-        # .xls 형식이면 xlrd로 시도
+
+    # 파일 읽기: .xls → xlrd, .xlsx → openpyxl
+    rows: list[list] = []
+    fname = (file.filename or "").lower()
+    if fname.endswith(".xls"):
         try:
-            import xlrd
-            xbook = xlrd.open_workbook(file_contents=content)
+            xbook = _xlrd.open_workbook(file_contents=content)
             xsheet = xbook.sheet_by_index(0)
-            rows_raw = [tuple(xsheet.row_values(i)) for i in range(xsheet.nrows)]
+            rows = [list(xsheet.row_values(i)) for i in range(xsheet.nrows)]
         except Exception as e:
-            raise HTTPException(400, f"파일 읽기 실패: {e}")
-        else:
-            rows = rows_raw
-            wb = None
+            raise HTTPException(400, f"xls 읽기 실패: {e}")
     else:
-        rows = list(wb.active.iter_rows(values_only=True))
+        try:
+            import openpyxl
+            wb = openpyxl.load_workbook(BytesIO(content), data_only=True)
+            rows = [list(r) for r in wb.active.iter_rows(values_only=True)]
+        except Exception as e:
+            raise HTTPException(400, f"xlsx 읽기 실패: {e}")
 
     if len(rows) < 2:
         raise HTTPException(400, "데이터가 없습니다")
 
     headers = [str(h).strip() if h is not None else "" for h in rows[0]]
 
-    def find_col(candidates):
+    def find_col(candidates: list[str]) -> Optional[int]:
         for c in candidates:
             for i, h in enumerate(headers):
                 if c in h:
                     return i
         return None
 
-    col_name = find_col(['이름', '성명', '직원명', 'name'])
-    col_date = find_col(['날짜', '일자', '근무일', 'date'])
-    col_in   = find_col(['출근', '출근시간', 'check_in', '입실'])
-    col_out  = find_col(['퇴근', '퇴근시간', 'check_out', '퇴실'])
+    col_name  = find_col(['이름', '성명', '직원명'])
+    col_gubun = find_col(['구분'])
+    # 일(1~31) 컬럼 인덱스 맵
+    day_cols: dict[int, int] = {}
+    for i, h in enumerate(headers):
+        h = h.strip()
+        try:
+            d = int(float(h))
+            if 1 <= d <= 31:
+                day_cols[d] = i
+        except (ValueError, TypeError):
+            pass
 
-    if col_date is None:
-        raise HTTPException(400, f"날짜 컬럼을 찾을 수 없습니다. 헤더: {headers}")
+    if col_name is None or col_gubun is None or not day_cols:
+        raise HTTPException(400, f"필수 컬럼(이름/구분/날짜1~31) 미발견. 헤더: {headers}")
 
-    # 사원 맵 (이름 → Employee 객체)
-    all_emps = {e.name: e for e in db.query(Employee).all()}
-    created = updated = skipped = 0
-    errors: list = []
-    warnings: list = []   # 주52h 초과
-
-    def parse_cell_time(val) -> Optional[str]:
-        if val is None:
+    def parse_time_cell(val) -> Optional[str]:
+        """셀값 → 'HH:MM' 문자열 (없으면 None)"""
+        if val is None or val == "":
             return None
-        if isinstance(val, dtime):
-            return f"{val.hour:02d}:{val.minute:02d}"
-        if isinstance(val, float):
-            # xlrd: 시간은 0~1 소수
+        if isinstance(val, float) and 0 < val < 1:
+            # xlrd 시간 소수
             total_min = round(val * 24 * 60)
             return f"{total_min // 60:02d}:{total_min % 60:02d}"
         s = str(val).strip()
-        if not s or s in ("None", "nan", ""):
+        if not s or s in ("None", "nan"):
             return None
         if ":" in s:
             return s[:5]
         if len(s) == 4 and s.isdigit():
             return f"{s[:2]}:{s[2:]}"
-        return s or None
+        return None
 
-    for row_idx, row in enumerate(rows[1:], start=2):
-        try:
-            raw_name = str(row[col_name]).strip() if col_name is not None and row[col_name] is not None else ""
-            if not raw_name or raw_name in ("None", "nan"):
+    # 사원 맵 (이름 → Employee)
+    all_emps = {e.name: e for e in db.query(Employee).all()}
+
+    # 행 파싱: 출근행/퇴근행 쌍 수집
+    # {이름: {day: {'in': 'HH:MM', 'out': 'HH:MM'}}}
+    emp_days: dict[str, dict[int, dict]] = {}
+    cur_name: str | None = None
+
+    for row in rows[1:]:
+        raw_name = str(row[col_name]).strip() if row[col_name] else ""
+        if raw_name and raw_name not in ("None", "nan"):
+            cur_name = raw_name
+        if cur_name is None:
+            continue
+
+        gubun = str(row[col_gubun]).strip() if row[col_gubun] else ""
+        if gubun not in ("출근", "퇴근"):
+            continue
+
+        if cur_name not in emp_days:
+            emp_days[cur_name] = {}
+
+        for day, ci in day_cols.items():
+            t = parse_time_cell(row[ci])
+            if t:
+                if day not in emp_days[cur_name]:
+                    emp_days[cur_name][day] = {}
+                key = "in" if gubun == "출근" else "out"
+                emp_days[cur_name][day][key] = t
+
+    # 출근 기록이 하나도 없는 날(결근)도 Attendance에 기록
+    # → 해당 월 전체 평일을 순회하고 기록 없으면 absent
+    import calendar
+    _, days_in_month = calendar.monthrange(year, month)
+
+    created = updated = skipped = 0
+    errors: list = []
+    warnings: list = []
+    unmatched: set = set()
+
+    for name, day_map in emp_days.items():
+        emp = all_emps.get(name)
+        if not emp:
+            unmatched.add(name)
+            continue
+
+        schedule = _get_schedule(emp)
+        if schedule == 'exempt':
+            skipped += 1
+            continue
+
+        # CAPS에 기록 있는 날 처리
+        processed_days: set[int] = set()
+
+        for day in sorted(day_map.keys()):
+            if day > days_in_month:
+                continue
+            try:
+                work_date = date(year, month, day)
+            except ValueError:
                 continue
 
-            emp = all_emps.get(raw_name)
-            if not emp:
-                errors.append({"row": row_idx, "msg": f"사원 미매칭: {raw_name}"})
-                continue
-
-            schedule = _get_schedule(emp)
-            if schedule == 'exempt':
-                skipped += 1
-                continue
-
-            raw_date = row[col_date]
-            if raw_date is None:
-                continue
-            if isinstance(raw_date, float):
-                import xlrd as _xlrd
-                y, mo, d, *_ = _xlrd.xldate_as_tuple(raw_date, 0)
-                work_date = date(int(y), int(mo), int(d))
-            elif isinstance(raw_date, (date, datetime)):
-                work_date = raw_date.date() if isinstance(raw_date, datetime) else raw_date
-            else:
-                s = str(raw_date).strip().replace("/", "-").replace(".", "-")
-                work_date = date.fromisoformat(s[:10])
-
-            is_holiday = work_date.weekday() >= 5   # 토(5)/일(6)
-
-            ci_str = parse_cell_time(row[col_in])  if col_in  is not None else None
-            co_str = parse_cell_time(row[col_out]) if col_out is not None else None
+            is_weekend = work_date.weekday() >= 5
+            times = day_map[day]
+            ci_str = times.get("in")
+            co_str = times.get("out")
             ci = _parse_time(ci_str)
             co = _parse_time(co_str)
 
-            if schedule == 'production':
-                calc = _calc_production(ci, co, is_holiday)
-            else:
-                # fixed / foreman 모두 _calc_fixed 사용
-                # foreman은 휴일에 holiday_hrs 계산, fixed는 is_holiday여도 무시
-                calc = _calc_fixed(ci, co, is_holiday if schedule == 'foreman' else False)
+            # 야간조 감지: 출근시간 18:00 이상이면 CAPS 원본 사용
+            is_night = ci is not None and _to_minutes(ci) >= 18 * 60
+
+            if schedule == 'production' and not is_night:
+                calc = _calc_production(ci, co, is_weekend)
+            elif schedule == 'foreman':
+                calc = _calc_fixed(ci, co, is_weekend)
+            elif schedule == 'production' and is_night:
+                # 야간조: CAPS 원본 그대로, 잔업 없음(별도 야간수당)
+                calc = dict(
+                    check_in=ci, check_out=co,
+                    work_hrs=round((_to_minutes(co) - _to_minutes(ci) + 480) % (24*60) / 60, 2) if ci and co else 0,
+                    ot_hrs=0, ot_min=0,
+                    holiday_hrs=0, holiday_min=0,
+                    absent=ci is None,
+                    late=False,
+                )
+            else:  # fixed
+                calc = _calc_fixed(ci, co, False)
+
+            fields = dict(
+                check_in=calc['check_in'], check_out=calc['check_out'],
+                work_hrs=calc['work_hrs'],
+                ot_hrs=calc['ot_hrs'], ot_min=calc['ot_min'],
+                holiday_hrs=calc['holiday_hrs'], holiday_min=calc['holiday_min'],
+                holiday=is_weekend and (calc['holiday_hrs'] > 0 or calc['holiday_min'] > 0),
+                absent=calc['absent'], late=calc['late'],
+                source="caps_excel",
+            )
 
             existing = db.query(Attendance).filter(
                 Attendance.emp_id == emp.emp_id,
                 Attendance.work_date == work_date,
             ).first()
-
-            fields = dict(
-                check_in=calc['check_in'],
-                check_out=calc['check_out'],
-                work_hrs=calc['work_hrs'],
-                ot_hrs=calc['ot_hrs'],
-                ot_min=calc['ot_min'],
-                holiday_hrs=calc['holiday_hrs'],
-                holiday_min=calc['holiday_min'],
-                holiday=is_holiday and (calc['holiday_hrs'] > 0 or calc['holiday_min'] > 0),
-                absent=calc['absent'],
-                late=calc['late'],
-                source="caps_excel",
-            )
-
             if existing:
                 for k, v in fields.items():
                     setattr(existing, k, v)
@@ -576,22 +615,20 @@ async def upload_caps_excel(
                 db.add(Attendance(emp_id=emp.emp_id, work_date=work_date, **fields))
                 created += 1
 
-            # 주 52h 초과 경고 (생산룰만)
-            if schedule == 'production' and not calc['absent']:
-                import datetime as _dt
+            processed_days.add(day)
+
+            # 주 52h 경고 (생산룰 주간조)
+            if schedule == 'production' and not is_night and not calc['absent']:
                 week_no = work_date.isocalendar()[1]
                 week_ot = _week52_total_ot(emp.emp_id, work_date.year, week_no, db)
                 week_ot += calc['ot_hrs'] * 60 + calc['ot_min']
-                if week_ot > 720:   # 12h = 720min 초과 → 주52h 위반
+                if week_ot > 720:
                     warnings.append({
-                        "emp": raw_name,
-                        "week": f"{work_date.year}-W{week_no:02d}",
+                        "emp": name,
+                        "week": f"{year}-W{week_no:02d}",
                         "ot_min": week_ot,
                         "msg": f"주 52h 초과 ({week_ot//60}h {week_ot%60}m)",
                     })
-
-        except Exception as ex:
-            errors.append({"row": row_idx, "msg": str(ex)})
 
     db.commit()
     return {
@@ -600,6 +637,7 @@ async def upload_caps_excel(
         "skipped_exempt": skipped,
         "errors": errors,
         "warnings_52h": warnings,
+        "unmatched": sorted(unmatched),
     }
 
 

@@ -43,7 +43,7 @@ export default function HrAttendance() {
     const fd = new FormData()
     fd.append('file', file)
     try {
-      const r = await api.post('/hr/attendance/upload-caps', fd)
+      const r = await api.post(`/hr/attendance/upload-caps?year=${year}&month=${month}`, fd)
       setUploadResult(r.data)
       loadSummary()
       loadDetail()
@@ -84,7 +84,7 @@ export default function HrAttendance() {
         <div style={{ color: '#fff' }}>
           <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 2 }}>캡스(CAPS) 출퇴근 Excel 업로드</div>
           <div style={{ fontSize: 12, color: '#94a3b8' }}>
-            컬럼 자동 감지: 사번(사번/직원번호) · 이름(이름/성명) · 날짜(날짜/일자) · 출근시간 · 퇴근시간
+            가로형 월간표 (부서|직급|이름|사원번호|구분|1~31) — 현재 선택된 연/월로 처리됩니다
           </div>
         </div>
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
@@ -104,8 +104,21 @@ export default function HrAttendance() {
         <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, padding: '12px 16px', marginBottom: 12 }}>
           <span style={{ color: '#16a34a', fontWeight: 700 }}>업로드 완료 </span>
           신규 {uploadResult.created}건 / 수정 {uploadResult.updated}건
+          {uploadResult.skipped_exempt > 0 && (
+            <span style={{ color: '#64748b', marginLeft: 10 }}>제외(대표급) {uploadResult.skipped_exempt}명</span>
+          )}
+          {uploadResult.unmatched?.length > 0 && (
+            <span style={{ color: '#f59e0b', marginLeft: 10 }}>
+              미매칭 {uploadResult.unmatched.length}명: {uploadResult.unmatched.slice(0, 3).join(', ')}
+            </span>
+          )}
+          {uploadResult.warnings_52h?.length > 0 && (
+            <span style={{ color: '#ea580c', marginLeft: 10 }}>
+              ⚠ 주52h초과 {uploadResult.warnings_52h.length}건: {uploadResult.warnings_52h.slice(0, 2).map(w => w.emp).join(', ')}
+            </span>
+          )}
           {uploadResult.errors?.length > 0 && (
-            <span style={{ color: '#dc2626', marginLeft: 12 }}>
+            <span style={{ color: '#dc2626', marginLeft: 10 }}>
               오류 {uploadResult.errors.length}건: {uploadResult.errors.slice(0, 2).map(e => e.msg).join(' / ')}
             </span>
           )}
