@@ -681,10 +681,25 @@ async def upload_caps_excel(
                     })
 
     db.commit()
+
+    # 출근 데이터 저장 후 급여 자동 재계산 (확정 상태 제외)
+    payroll_recalc_count = 0
+    try:
+        processed_emp_ids = [
+            all_emps[n].emp_id for n in emp_days
+            if n in all_emps and _get_schedule(all_emps[n]) != 'exempt'
+        ]
+        if processed_emp_ids:
+            pr_results = _do_payroll(year, month, db, emp_ids=processed_emp_ids, skip_confirmed=True)
+            payroll_recalc_count = len(pr_results)
+    except Exception as e:
+        errors.append({"row": 0, "msg": f"급여 자동재계산 실패: {e}"})
+
     return {
         "created": created,
         "updated": updated,
         "skipped_exempt": skipped,
+        "payroll_recalculated": payroll_recalc_count,
         "errors": errors,
         "warnings_52h": warnings,
         "unmatched": sorted(unmatched),
@@ -693,179 +708,147 @@ async def upload_caps_excel(
 
 # ── 급여 계산 ─────────────────────────────────────────────────────────
 
+def _do_payroll(year: int, month: int, db, emp_ids: Optional[list] = None, skip_confirmed: bool = False):
+    """급여 계산 핵심 로직. CAPS 업로드 자동 재계산 및 수동 계산 엔드포인트 공용."""
+    import calendar
+    start = date(year, month, 1)
+    end   = date(year, month, calendar.monthrange(year, month)[1])
+
+    emps = db.query(Employee).filter(Employee.is_active == True)
+    if emp_ids:
+        emps = emps.filter(Employee.emp_id.in_(emp_ids))
+    emps = emps.all()
+
+    results = []
+    for emp in emps:
+        # 확정 상태 급여는 재계산 건너뜀 (skip_confirmed=True일 때만)
+        if skip_confirmed:
+            pr_check = db.query(Payroll).filter(
+                Payroll.emp_id == emp.emp_id, Payroll.year == year, Payroll.month == month
+            ).first()
+            if pr_check and pr_check.status == '확정':
+                continue
+
+        atts = db.query(Attendance).filter(
+            Attendance.emp_id == emp.emp_id,
+            Attendance.work_date >= start,
+            Attendance.work_date <= end,
+        ).all()
+
+        total_ot_hrs  = sum(a.ot_hrs for a in atts)
+        total_ot_min  = sum(a.ot_min for a in atts)
+        total_ot_hrs  += total_ot_min // 60
+        total_ot_min   = total_ot_min % 60
+        total_ot_hrs  += emp.fixed_ot_hrs or 0
+
+        total_night_hrs = sum(a.night_hrs for a in atts)
+        total_night_min = sum(a.night_min for a in atts)
+        total_night_hrs += total_night_min // 60
+        total_night_min  = total_night_min % 60
+
+        total_hol_hrs = sum(a.holiday_hrs for a in atts)
+        total_hol_min = sum(a.holiday_min for a in atts)
+        total_hol_hrs += total_hol_min // 60
+        total_hol_min  = total_hol_min % 60
+        total_hol_hrs += emp.fixed_holiday_hrs or 0
+
+        absents   = sum(1 for a in atts if a.absent)
+        std_m_hrs = emp.std_monthly_hours or 209
+
+        if emp.emp_type == "hourly":
+            std_hourly = Decimal(str(emp.hourly_rate))
+            base_pay   = (std_hourly * std_m_hrs).quantize(Decimal("1"), ROUND_HALF_UP)
+        else:
+            base_pay   = Decimal(str(emp.base_salary)).quantize(Decimal("1"), ROUND_HALF_UP)
+            std_hourly = (base_pay / Decimal(std_m_hrs)).quantize(Decimal("0.01"), ROUND_HALF_UP)
+
+        ot_pay = (
+            std_hourly * Decimal(total_ot_hrs) * Decimal("1.5")
+            + std_hourly * (Decimal(total_ot_min) / 60) * Decimal("1.5")
+        ).quantize(Decimal("1"), ROUND_HALF_UP)
+
+        night_pay = (
+            std_hourly * Decimal(total_night_hrs) * Decimal("0.5")
+            + std_hourly * (Decimal(total_night_min) / 60) * Decimal("0.5")
+        ).quantize(Decimal("1"), ROUND_HALF_UP)
+
+        holiday_pay = (
+            std_hourly * Decimal(total_hol_hrs) * Decimal("1.5")
+            + std_hourly * (Decimal(total_hol_min) / 60) * Decimal("1.5")
+        ).quantize(Decimal("1"), ROUND_HALF_UP)
+
+        meal_allow     = Decimal("0")
+        vehicle_allow  = Decimal(str(emp.vehicle_allow_fixed))
+        foreman_allow  = Decimal(str(emp.foreman_allow_fixed or 0))
+
+        gross   = base_pay + ot_pay + night_pay + holiday_pay + meal_allow + vehicle_allow + foreman_allow
+        taxable = gross - min(meal_allow, NON_TAX_MEAL) - min(vehicle_allow, NON_TAX_VEH)
+
+        age = 0
+        if emp.birth_date:
+            age = start.year - emp.birth_date.year
+            if (start.month, start.day) < (emp.birth_date.month, emp.birth_date.day):
+                age -= 1
+
+        pen  = Decimal(0) if age >= 60 else _round10(taxable * RATE_PENSION)
+        hlt  = _round10(taxable * RATE_HEALTH)
+        lc   = _round10(hlt * RATE_LCARE)
+        emp_ = Decimal(0) if (emp.position or '') == '대표' else _round10(taxable * RATE_EMPLOY)
+
+        it = Decimal(str(emp.fixed_income_tax)) if emp.fixed_income_tax and emp.fixed_income_tax > 0 else _income_tax(taxable)
+        lt = Decimal(str(emp.fixed_local_tax))  if emp.fixed_local_tax  and emp.fixed_local_tax  > 0 else _round10(it * Decimal("0.1"))
+
+        total_deduct = pen + hlt + lc + emp_ + it + lt
+        net_pay = gross - total_deduct
+
+        pr = db.query(Payroll).filter(
+            Payroll.emp_id == emp.emp_id, Payroll.year == year, Payroll.month == month,
+        ).first()
+        if not pr:
+            pr = Payroll(emp_id=emp.emp_id, year=year, month=month)
+            db.add(pr)
+
+        pr.std_hrs = std_m_hrs; pr.std_hourly = std_hourly
+        pr.pay_ot_hrs = total_ot_hrs; pr.pay_ot_min = total_ot_min
+        pr.pay_night_hrs = total_night_hrs
+        pr.pay_holiday_hrs = total_hol_hrs; pr.pay_holiday_min = total_hol_min
+        pr.base_pay = base_pay; pr.ot_pay = ot_pay
+        pr.night_pay = night_pay; pr.holiday_pay = holiday_pay
+        pr.foreman_allow = foreman_allow; pr.meal_allow = meal_allow; pr.vehicle_allow = vehicle_allow
+        pr.gross_pay = gross
+        pr.deduct_pension = pen; pr.deduct_health = hlt; pr.deduct_lcare = lc
+        pr.deduct_employ = emp_; pr.deduct_income_tax = it; pr.deduct_local_tax = lt
+        pr.total_deduct = total_deduct; pr.net_pay = net_pay
+        pr.status = "계산중"; pr.calculated_at = datetime.now()
+
+        results.append({
+            "emp_id": emp.emp_id, "name": emp.name,
+            "std_hourly": float(std_hourly),
+            "ot_hrs": total_ot_hrs, "ot_min": total_ot_min,
+            "night_hrs": total_night_hrs,
+            "absents": absents,
+            "gross_pay": float(gross), "total_deduct": float(total_deduct), "net_pay": float(net_pay),
+        })
+
+    db.commit()
+    return results
+
+
 @router.post("/payroll/calculate")
 def calculate_payroll(
     year: int = Query(...), month: int = Query(...),
     emp_id: Optional[str] = None,
     db: Session = Depends(get_db), _=Depends(get_current_user),
 ):
-    """
-    월 급여 자동계산
-
-    연봉제:
-      통상시급 = 월기본급 / 월소정근로시간(기본 209h)
-      기본급   = 통상시급 × 209h (= 월기본급 그대로)
-    시급제:
-      통상시급 = 등록된 시급
-      기본급   = 통상시급 × 209h
-
-    연장수당 = 통상시급 × 연장h × 1.5 + 통상시급 × 연장분/60 × 1.5
-    심야수당 = 통상시급 × 야간h × 0.5  ← 추가 50%만 (기본은 기본급에 포함)
-    휴일수당 = 통상시급 × 휴일h × 1.5 + 통상시급 × 휴일분/60 × 1.5
-
-    과세표준 = 총지급 - min(식대, 200,000) - min(차량, 200,000)
-    4대보험  = 과세표준 × 요율 (10원 반올림)
-    """
-    import calendar, traceback
+    """월 급여 자동계산 (수동 트리거)"""
+    import traceback
     try:
-        start = date(year, month, 1)
-        end   = date(year, month, calendar.monthrange(year, month)[1])
-
-        emps = db.query(Employee).filter(Employee.is_active == True)
-        if emp_id:
-            emps = emps.filter(Employee.emp_id == emp_id)
-        emps = emps.all()
-
-        results = []
-        for emp in emps:
-            atts = db.query(Attendance).filter(
-                Attendance.emp_id == emp.emp_id,
-                Attendance.work_date >= start,
-                Attendance.work_date <= end,
-            ).all()
-
-            total_ot_hrs  = sum(a.ot_hrs for a in atts)
-            total_ot_min  = sum(a.ot_min for a in atts)
-            total_ot_hrs  += total_ot_min // 60
-            total_ot_min   = total_ot_min % 60
-            # 직급별 고정 연장시간 가산 (과장급 이상 50h)
-            total_ot_hrs  += emp.fixed_ot_hrs or 0
-
-            total_night_hrs = sum(a.night_hrs for a in atts)
-            total_night_min = sum(a.night_min for a in atts)
-            total_night_hrs += total_night_min // 60
-            total_night_min  = total_night_min % 60
-
-            total_hol_hrs = sum(a.holiday_hrs for a in atts)
-            total_hol_min = sum(a.holiday_min for a in atts)
-            total_hol_hrs += total_hol_min // 60
-            total_hol_min  = total_hol_min % 60
-            # 직급별 고정 특근시간 가산 (과장급 이상 16h)
-            total_hol_hrs += emp.fixed_holiday_hrs or 0
-
-            absents   = sum(1 for a in atts if a.absent)
-            std_m_hrs = emp.std_monthly_hours or 209
-
-            if emp.emp_type == "hourly":
-                std_hourly = Decimal(str(emp.hourly_rate))
-                base_pay   = (std_hourly * std_m_hrs).quantize(Decimal("1"), ROUND_HALF_UP)
-            else:
-                base_pay   = Decimal(str(emp.base_salary)).quantize(Decimal("1"), ROUND_HALF_UP)
-                std_hourly = (base_pay / Decimal(std_m_hrs)).quantize(Decimal("0.01"), ROUND_HALF_UP)
-
-            ot_pay = (
-                std_hourly * Decimal(total_ot_hrs) * Decimal("1.5")
-                + std_hourly * (Decimal(total_ot_min) / 60) * Decimal("1.5")
-            ).quantize(Decimal("1"), ROUND_HALF_UP)
-
-            night_pay = (
-                std_hourly * Decimal(total_night_hrs) * Decimal("0.5")
-                + std_hourly * (Decimal(total_night_min) / 60) * Decimal("0.5")
-            ).quantize(Decimal("1"), ROUND_HALF_UP)
-
-            holiday_pay = (
-                std_hourly * Decimal(total_hol_hrs) * Decimal("1.5")
-                + std_hourly * (Decimal(total_hol_min) / 60) * Decimal("1.5")
-            ).quantize(Decimal("1"), ROUND_HALF_UP)
-
-            meal_allow     = Decimal("0")  # 사내식당 운영으로 식대 비과세 없음
-            vehicle_allow  = Decimal(str(emp.vehicle_allow_fixed))
-            foreman_allow  = Decimal(str(emp.foreman_allow_fixed or 0))
-
-            gross   = base_pay + ot_pay + night_pay + holiday_pay + meal_allow + vehicle_allow + foreman_allow
-            taxable = gross - min(meal_allow, NON_TAX_MEAL) - min(vehicle_allow, NON_TAX_VEH)
-            # 반장수당은 과세 항목 — taxable에 포함됨 (별도 차감 없음)
-
-            # 나이 계산 (만 나이 기준)
-            age = 0
-            if emp.birth_date:
-                age = start.year - emp.birth_date.year
-                if (start.month, start.day) < (emp.birth_date.month, emp.birth_date.day):
-                    age -= 1
-
-            # 국민연금: 만 60세 미만만 적용
-            pen = Decimal(0) if age >= 60 else _round10(taxable * RATE_PENSION)
-
-            hlt  = _round10(taxable * RATE_HEALTH)
-            lc   = _round10(hlt * RATE_LCARE)
-
-            # 고용보험: 대표 직급은 면제
-            emp_ = Decimal(0) if (emp.position or '') == '대표' else _round10(taxable * RATE_EMPLOY)
-
-            # 소득세: 직원별 고정값이 있으면 사용, 없으면 간이세액표 자동계산
-            if emp.fixed_income_tax and emp.fixed_income_tax > 0:
-                it = Decimal(str(emp.fixed_income_tax))
-            else:
-                it = _income_tax(taxable)
-            # 지방소득세: 직원별 고정값이 있으면 사용, 없으면 소득세×10%
-            if emp.fixed_local_tax and emp.fixed_local_tax > 0:
-                lt = Decimal(str(emp.fixed_local_tax))
-            else:
-                lt = _round10(it * Decimal("0.1"))
-
-            total_deduct = pen + hlt + lc + emp_ + it + lt
-            net_pay = gross - total_deduct
-
-            pr = db.query(Payroll).filter(
-                Payroll.emp_id == emp.emp_id,
-                Payroll.year == year,
-                Payroll.month == month,
-            ).first()
-            if not pr:
-                pr = Payroll(emp_id=emp.emp_id, year=year, month=month)
-                db.add(pr)
-
-            pr.std_hrs           = std_m_hrs
-            pr.std_hourly        = std_hourly
-            pr.pay_ot_hrs        = total_ot_hrs
-            pr.pay_ot_min        = total_ot_min
-            pr.pay_night_hrs     = total_night_hrs
-            pr.pay_holiday_hrs   = total_hol_hrs
-            pr.pay_holiday_min   = total_hol_min
-            pr.base_pay          = base_pay
-            pr.ot_pay            = ot_pay
-            pr.night_pay         = night_pay
-            pr.holiday_pay       = holiday_pay
-            pr.foreman_allow     = foreman_allow
-            pr.meal_allow        = meal_allow
-            pr.vehicle_allow     = vehicle_allow
-            pr.gross_pay         = gross
-            pr.deduct_pension    = pen
-            pr.deduct_health     = hlt
-            pr.deduct_lcare      = lc
-            pr.deduct_employ     = emp_
-            pr.deduct_income_tax = it
-            pr.deduct_local_tax  = lt
-            pr.total_deduct      = total_deduct
-            pr.net_pay           = net_pay
-            pr.status            = "계산중"
-            pr.calculated_at     = datetime.now()
-
-            results.append({
-                "emp_id": emp.emp_id, "name": emp.name,
-                "std_hourly": float(std_hourly),
-                "ot_hrs": total_ot_hrs, "ot_min": total_ot_min,
-                "absents": absents,
-                "gross_pay": float(gross),
-                "total_deduct": float(total_deduct),
-                "net_pay": float(net_pay),
-            })
-
-        db.commit()
-        return results
+        return _do_payroll(year, month, db, emp_ids=[emp_id] if emp_id else None)
     except Exception as ex:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"{type(ex).__name__}: {ex}\n{traceback.format_exc()}")
+
+
 
 
 @router.get("/payroll")

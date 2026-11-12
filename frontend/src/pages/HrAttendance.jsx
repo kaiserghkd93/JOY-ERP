@@ -104,6 +104,11 @@ export default function HrAttendance() {
         <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, padding: '12px 16px', marginBottom: 12 }}>
           <span style={{ color: '#16a34a', fontWeight: 700 }}>업로드 완료 </span>
           신규 {uploadResult.created}건 / 수정 {uploadResult.updated}건
+          {uploadResult.payroll_recalculated > 0 && (
+            <span style={{ color: '#2563eb', marginLeft: 10, fontWeight: 600 }}>
+              💰 급여 자동재계산 {uploadResult.payroll_recalculated}명
+            </span>
+          )}
           {uploadResult.skipped_exempt > 0 && (
             <span style={{ color: '#64748b', marginLeft: 10 }}>제외(대표급) {uploadResult.skipped_exempt}명</span>
           )}
