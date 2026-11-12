@@ -1272,17 +1272,26 @@ def mark_attendance_present(
         is_night  = night_cnt > len(nearby) / 2
 
     if is_night:
+        # 야간조 20:30~08:30, 야간수당 22:00~06:00=8h, 연장 160분=2h40m
         att.check_in  = dtime(20, 30)
-        att.check_out = dtime(8, 31)
+        att.check_out = dtime(8, 30)
+        att.work_hrs  = round(_NIGHT_WORK_MIN / 60, 2)   # 10.67
+        att.ot_hrs    = _NIGHT_OT_MIN // 60               # 2
+        att.ot_min    = _NIGHT_OT_MIN % 60                # 40
+        att.night_hrs = _NIGHT_HRS_STD                    # 8
+        att.night_min = 0
     else:
+        # 주간조 08:30~17:30, 연장 없음
         att.check_in  = dtime(8, 30)
         att.check_out = dtime(17, 30)
+        att.work_hrs  = 8.0
+        att.ot_hrs    = 0
+        att.ot_min    = 0
+        att.night_hrs = 0
+        att.night_min = 0
 
-    att.work_hrs   = 8.0
-    att.ot_hrs     = 0
-    att.ot_min     = 0
-    att.night_hrs  = 0
-    att.night_min  = 0
+    att.holiday_hrs = 0
+    att.holiday_min = 0
     att.absent     = False
     att.leave_type = None
     att.late       = False
