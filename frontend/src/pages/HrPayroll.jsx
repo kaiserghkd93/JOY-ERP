@@ -95,10 +95,13 @@ export default function HrPayroll() {
   }
 
   const applyLeavesAndCalculate = async () => {
-    // leave_type 세팅 (null이 아닌 것만 patch)
     const patches = Object.entries(leaveChoices).filter(([, v]) => v !== null)
-    for (const [id, leave_type] of patches) {
-      await api.patch(`/hr/attendance/${id}`, { leave_type }).catch(() => {})
+    for (const [id, action] of patches) {
+      if (action === '출근') {
+        await api.post(`/hr/attendance/${id}/mark-present`).catch(() => {})
+      } else {
+        await api.patch(`/hr/attendance/${id}`, { leave_type: action }).catch(() => {})
+      }
     }
     setAbsentModal(false)
     doCalculate()
@@ -250,18 +253,23 @@ export default function HrPayroll() {
                 {emp.dates.map(d => (
                   <div key={d.id} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
                     <span style={{ fontSize: 13, minWidth: 90, color: '#475569' }}>{d.work_date}</span>
-                    {['연차', '반차', '병가', '공가'].map(lt => (
-                      <button
-                        key={lt}
-                        onClick={() => setLeaveChoices(prev => ({ ...prev, [d.id]: prev[d.id] === lt ? null : lt }))}
-                        style={{
-                          padding: '3px 10px', borderRadius: 20, fontSize: 12, cursor: 'pointer', border: '1px solid',
-                          background: leaveChoices[d.id] === lt ? '#3b82f6' : '#fff',
-                          color:      leaveChoices[d.id] === lt ? '#fff'    : '#475569',
-                          borderColor: leaveChoices[d.id] === lt ? '#3b82f6' : '#cbd5e1',
-                        }}
-                      >{lt}</button>
-                    ))}
+                    {['출근', '연차', '반차', '병가', '공가'].map(lt => {
+                      const isOut = lt === '출근'
+                      const sel   = leaveChoices[d.id] === lt
+                      return (
+                        <button
+                          key={lt}
+                          onClick={() => setLeaveChoices(prev => ({ ...prev, [d.id]: prev[d.id] === lt ? null : lt }))}
+                          style={{
+                            padding: '3px 10px', borderRadius: 20, fontSize: 12, cursor: 'pointer', border: '1px solid',
+                            background: sel ? (isOut ? '#16a34a' : '#3b82f6') : '#fff',
+                            color:      sel ? '#fff' : (isOut ? '#16a34a' : '#475569'),
+                            borderColor: sel ? (isOut ? '#16a34a' : '#3b82f6') : (isOut ? '#bbf7d0' : '#cbd5e1'),
+                            fontWeight: isOut ? 700 : 400,
+                          }}
+                        >{lt}</button>
+                      )
+                    })}
                     {leaveChoices[d.id] === null && (
                       <span style={{ fontSize: 11, color: '#dc2626' }}>결근 처리</span>
                     )}

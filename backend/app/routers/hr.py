@@ -1240,6 +1240,57 @@ def attendance_absents(
     return list(grouped.values())
 
 
+# ── 결근 → 출근 처리 (주야간 자동 감지) ───────────────────────────────
+
+@router.post("/attendance/{att_id}/mark-present")
+def mark_attendance_present(
+    att_id: int,
+    db: Session = Depends(get_db), _=Depends(get_current_user),
+):
+    """결근 레코드를 출근으로 전환. 같은 주 기록으로 주야간 자동 감지."""
+    from datetime import timedelta, time as dtime
+
+    att = db.get(Attendance, att_id)
+    if not att:
+        raise HTTPException(status_code=404, detail="레코드 없음")
+
+    # 같은 주의 다른 출근 기록으로 야간 여부 판단
+    week_start = att.work_date - timedelta(days=att.work_date.weekday())
+    week_end   = week_start + timedelta(days=6)
+
+    nearby = db.query(Attendance).filter(
+        Attendance.emp_id  == att.emp_id,
+        Attendance.work_date >= week_start,
+        Attendance.work_date <= week_end,
+        Attendance.absent  == False,
+        Attendance.check_in != None,
+    ).all()
+
+    is_night = False
+    if nearby:
+        night_cnt = sum(1 for a in nearby if a.check_in and a.check_in.hour >= 18)
+        is_night  = night_cnt > len(nearby) / 2
+
+    if is_night:
+        att.check_in  = dtime(20, 30)
+        att.check_out = dtime(8, 31)
+    else:
+        att.check_in  = dtime(8, 30)
+        att.check_out = dtime(17, 30)
+
+    att.work_hrs   = 8.0
+    att.ot_hrs     = 0
+    att.ot_min     = 0
+    att.night_hrs  = 0
+    att.night_min  = 0
+    att.absent     = False
+    att.leave_type = None
+    att.late       = False
+
+    db.commit()
+    return {"shift": "night" if is_night else "day"}
+
+
 # ── 월간 근무 요약 ─────────────────────────────────────────────────────
 
 @router.get("/attendance/summary")
