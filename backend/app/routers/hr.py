@@ -323,6 +323,16 @@ _FIX_IN  = dtime(8, 30)
 _FIX_OUT = dtime(17, 30)
 _FIX_WORK_HRS = 7.0   # (480 - 60점심) / 60
 
+# 야간조: 20:30~08:30 (다음날)
+_NIGHT_IN       = dtime(20, 30)
+_NIGHT_OUT      = dtime(8, 30)   # 다음날 아침
+_NIGHT_TOTAL_MIN = 720            # 20:30~08:30 = 12h
+_NIGHT_BREAK_MIN = 80             # 휴게 80분 (주간과 동일)
+_NIGHT_WORK_MIN  = _NIGHT_TOTAL_MIN - _NIGHT_BREAK_MIN  # 640분
+_NIGHT_STD_MIN   = 480            # 하루 8h 기준
+_NIGHT_HRS_STD   = 8              # 22:00~06:00 = 8h (야간수당 대상 구간)
+_NIGHT_OT_MIN    = _NIGHT_WORK_MIN - _NIGHT_STD_MIN      # 160분 = 2h40m 연장
+
 
 def _get_schedule(emp: Employee) -> str:
     """사원 근무 유형 반환: exempt / fixed / foreman / production"""
@@ -342,10 +352,11 @@ def _to_minutes(t: dtime) -> int:
 
 
 def _calc_production(caps_in: Optional[dtime], caps_out: Optional[dtime], is_holiday: bool):
-    """생산 룰 계산 → dict(check_in, check_out, work_hrs, ot_hrs, ot_min, holiday_hrs, holiday_min, absent, late)"""
+    """생산 룰 계산 — 주간조 전용 (야간조는 _calc_night 사용)"""
     result = dict(
         check_in=None, check_out=None,
         work_hrs=0.0, ot_hrs=0, ot_min=0,
+        night_hrs=0, night_min=0,
         holiday_hrs=0, holiday_min=0,
         absent=False, late=False,
     )
@@ -389,6 +400,7 @@ def _calc_fixed(caps_in: Optional[dtime], caps_out: Optional[dtime], is_holiday:
     result = dict(
         check_in=None, check_out=None,
         work_hrs=0.0, ot_hrs=0, ot_min=0,
+        night_hrs=0, night_min=0,
         holiday_hrs=0, holiday_min=0,
         absent=False, late=False,
     )
@@ -412,6 +424,35 @@ def _calc_fixed(caps_in: Optional[dtime], caps_out: Optional[dtime], is_holiday:
         result['work_hrs'] = _FIX_WORK_HRS
 
     return result
+
+
+def _calc_night(caps_in: Optional[dtime], caps_out: Optional[dtime], is_holiday: bool):
+    """야간조(20:30~08:30) 계산 — 한국 근로기준법 야간근로 기준.
+    야간수당 대상: 22:00~06:00 = 8h (night_hrs)
+    연장수당: 총 640분 - 480분 = 160분 = 2h40m (ot_hrs/ot_min)
+    야간+연장 중복분 가산은 payroll 모듈에서 처리.
+    """
+    if caps_in is None or caps_out is None:
+        return dict(
+            check_in=None, check_out=None,
+            work_hrs=0.0, ot_hrs=0, ot_min=0,
+            night_hrs=0, night_min=0,
+            holiday_hrs=0, holiday_min=0,
+            absent=True, late=False,
+        )
+    return dict(
+        check_in=_NIGHT_IN,
+        check_out=_NIGHT_OUT,
+        work_hrs=round(_NIGHT_WORK_MIN / 60, 2),
+        ot_hrs=_NIGHT_OT_MIN // 60,   # 2
+        ot_min=_NIGHT_OT_MIN % 60,    # 40
+        night_hrs=_NIGHT_HRS_STD,     # 8 (22:00~06:00)
+        night_min=0,
+        holiday_hrs=_NIGHT_WORK_MIN // 60 if is_holiday else 0,   # 10
+        holiday_min=_NIGHT_WORK_MIN % 60  if is_holiday else 0,   # 40
+        absent=False,
+        late=False,
+    )
 
 
 def _week52_total_ot(emp_id: str, year: int, week: int, db) -> int:
@@ -556,40 +597,50 @@ async def upload_caps_excel(
             continue
 
         # CAPS에 기록 있는 날 처리
-        processed_days: set[int] = set()
+        # 야간조 cross-day: 출근 day N (20:30) + 퇴근 day N+1 (08:31) → day N 근무로 묶음
+        processed_as_night_end: set[int] = set()
 
         for day in sorted(day_map.keys()):
             if day > days_in_month:
                 continue
+            if day in processed_as_night_end:
+                continue  # 야간 퇴근행으로 소비된 날 건너뜀
+
+            times = day_map[day]
+            ci_str = times.get("in")
+            co_str = times.get("out")
+
+            # 출근 없이 퇴근만 있는 날(孤立 퇴근행) → skip
+            if ci_str is None:
+                continue
+
+            ci = _parse_time(ci_str)
+            is_night = ci is not None and _to_minutes(ci) >= 18 * 60
+
+            # 야간조이고 같은 날 퇴근 없으면 → 다음날 열에서 퇴근 찾기
+            if is_night and schedule == 'production' and co_str is None:
+                next_day = day + 1
+                if next_day <= days_in_month and next_day in day_map:
+                    nxt = day_map[next_day]
+                    if nxt.get("in") is None and nxt.get("out") is not None:
+                        co_str = nxt["out"]
+                        processed_as_night_end.add(next_day)
+
+            co = _parse_time(co_str)
+
             try:
                 work_date = date(year, month, day)
             except ValueError:
                 continue
 
             is_weekend = work_date.weekday() >= 5
-            times = day_map[day]
-            ci_str = times.get("in")
-            co_str = times.get("out")
-            ci = _parse_time(ci_str)
-            co = _parse_time(co_str)
 
-            # 야간조 감지: 출근시간 18:00 이상이면 CAPS 원본 사용
-            is_night = ci is not None and _to_minutes(ci) >= 18 * 60
-
-            if schedule == 'production' and not is_night:
+            if schedule == 'production' and is_night:
+                calc = _calc_night(ci, co, is_weekend)
+            elif schedule == 'production':
                 calc = _calc_production(ci, co, is_weekend)
             elif schedule == 'foreman':
                 calc = _calc_fixed(ci, co, is_weekend)
-            elif schedule == 'production' and is_night:
-                # 야간조: CAPS 원본 그대로, 잔업 없음(별도 야간수당)
-                calc = dict(
-                    check_in=ci, check_out=co,
-                    work_hrs=round((_to_minutes(co) - _to_minutes(ci) + 480) % (24*60) / 60, 2) if ci and co else 0,
-                    ot_hrs=0, ot_min=0,
-                    holiday_hrs=0, holiday_min=0,
-                    absent=ci is None,
-                    late=False,
-                )
             else:  # fixed
                 calc = _calc_fixed(ci, co, False)
 
@@ -597,6 +648,7 @@ async def upload_caps_excel(
                 check_in=calc['check_in'], check_out=calc['check_out'],
                 work_hrs=calc['work_hrs'],
                 ot_hrs=calc['ot_hrs'], ot_min=calc['ot_min'],
+                night_hrs=calc.get('night_hrs', 0), night_min=calc.get('night_min', 0),
                 holiday_hrs=calc['holiday_hrs'], holiday_min=calc['holiday_min'],
                 holiday=is_weekend and (calc['holiday_hrs'] > 0 or calc['holiday_min'] > 0),
                 absent=calc['absent'], late=calc['late'],
