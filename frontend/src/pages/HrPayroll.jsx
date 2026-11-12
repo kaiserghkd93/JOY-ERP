@@ -81,8 +81,8 @@ export default function HrPayroll() {
     doCalculate()
   }
 
-  const doCalculate = async () => {
-    if (!window.confirm(`${year}년 ${month}월 급여를 자동계산하시겠습니까?\n기존 계산 결과가 덮어씌워집니다.`)) return
+  const doCalculate = async (skipConfirm = false) => {
+    if (!skipConfirm && !window.confirm(`${year}년 ${month}월 급여를 자동계산하시겠습니까?\n기존 계산 결과가 덮어씌워집니다.`)) return
     setCalcLoading(true)
     try {
       await api.post(`/hr/payroll/calculate?year=${year}&month=${month}`)
@@ -104,7 +104,8 @@ export default function HrPayroll() {
       }
     }
     setAbsentModal(false)
-    doCalculate()
+    // 모달에서 이미 확인했으므로 confirm 생략
+    doCalculate(true)
   }
 
   const confirmPay = async (id) => {
