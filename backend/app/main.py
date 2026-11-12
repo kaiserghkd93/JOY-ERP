@@ -210,6 +210,10 @@ with engine.connect() as _conn:
         "ALTER TABLE process_outgoing_defect DROP CONSTRAINT IF EXISTS process_outgoing_defect_registered_by_fkey",
         # admin으로 등록된 불량 → 김의진으로 일괄 변경
         "UPDATE process_outgoing_defect SET registered_by = '김의진' WHERE registered_by = 'admin'",
+        # HR — 근태 처리 유형 (CAPS 업로드 근무룰 구분)
+        "ALTER TABLE hr_employee ADD COLUMN IF NOT EXISTS schedule_type VARCHAR(20)",
+        # HR — 지각 여부 (생산직만 체크)
+        "ALTER TABLE hr_attendance ADD COLUMN IF NOT EXISTS late BOOLEAN DEFAULT FALSE",
     ]:
         try:
             _conn.execute(_text(_sql))

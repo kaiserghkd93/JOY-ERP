@@ -82,6 +82,7 @@ class EmployeeIn(BaseModel):
     foreman_allow_fixed: float = 0        # 반장수당 (과세)
     meal_allow_fixed: float = 0           # 사내식당 운영시 0
     vehicle_allow_fixed: float = 200000
+    schedule_type: Optional[str] = None   # null=자동 / fixed / foreman / exempt
     resident_no: Optional[str] = None
     phone: Optional[str] = None
     bank: Optional[str] = None
@@ -305,6 +306,125 @@ def delete_attendance(att_id: int, db: Session = Depends(get_db), _=Depends(get_
 
 # ── 캡스 Excel 업로드 ──────────────────────────────────────────────────
 
+# 근무 유형 판단 상수
+_EXEMPT_POSITIONS  = {'대표', '상무이사', '전무이사'}
+_MANAGER_POSITIONS = {'과장', '차장', '부장', '실장', '이사'}
+_PROD_RULE_DEPTS   = {'생산', '금형', '출하'}
+_FIXED_EMP_IDS     = {'N011', 'S001'}   # 주용하, 김영일 (금형 고정직)
+
+# 생산룰: 08:30 출근 고정, 17:50 정규종료, 18:10~잔업 10분 단위
+_PROD_IN   = dtime(8, 30)
+_PROD_REG_END = dtime(17, 50)
+_PROD_OT_START= dtime(18, 10)
+_PROD_BREAK_MIN = 80   # 점심60 + 오전10 + 오후10
+
+# 고정룰: 08:30~17:30
+_FIX_IN  = dtime(8, 30)
+_FIX_OUT = dtime(17, 30)
+_FIX_WORK_HRS = 7.0   # (480 - 60점심) / 60
+
+
+def _get_schedule(emp: Employee) -> str:
+    """사원 근무 유형 반환: exempt / fixed / foreman / production"""
+    if emp.schedule_type:
+        return emp.schedule_type
+    if emp.position in _EXEMPT_POSITIONS:
+        return 'exempt'
+    if emp.emp_id in _FIXED_EMP_IDS:
+        return 'fixed'
+    if emp.dept in _PROD_RULE_DEPTS:
+        return 'production'
+    return 'fixed'   # 사무직·관리자 모두 고정
+
+
+def _to_minutes(t: dtime) -> int:
+    return t.hour * 60 + t.minute
+
+
+def _calc_production(caps_in: Optional[dtime], caps_out: Optional[dtime], is_holiday: bool):
+    """생산 룰 계산 → dict(check_in, check_out, work_hrs, ot_hrs, ot_min, holiday_hrs, holiday_min, absent, late)"""
+    result = dict(
+        check_in=None, check_out=None,
+        work_hrs=0.0, ot_hrs=0, ot_min=0,
+        holiday_hrs=0, holiday_min=0,
+        absent=False, late=False,
+    )
+
+    # 퇴근 미기록 또는 출근 기록 없음 → 결근
+    if caps_in is None or caps_out is None:
+        result['absent'] = True
+        return result
+
+    # 출근 08:30 고정, 퇴근은 10분 단위 절사
+    result['check_in'] = _PROD_IN
+    co_min = (_to_minutes(caps_out) // 10) * 10
+    co_h, co_m = divmod(co_min, 60)
+    result['check_out'] = dtime(co_h, co_m)
+
+    # 지각 체크 (CAPS 실제 출근이 08:30 초과)
+    if _to_minutes(caps_in) > _to_minutes(_PROD_IN):
+        result['late'] = True
+
+    if is_holiday:
+        # 휴일 근무: 전체를 holiday_min으로
+        raw = co_min - _to_minutes(_PROD_IN) - _PROD_BREAK_MIN
+        total_hol = max(0, (raw // 10) * 10)
+        result['holiday_hrs'] = total_hol // 60
+        result['holiday_min'] = total_hol % 60
+        result['work_hrs'] = 0.0
+    else:
+        result['work_hrs'] = 8.0  # 정규 480분
+        # 잔업: 18:10 이후, 10분 단위
+        ot_start_min = _to_minutes(_PROD_OT_START)
+        if co_min > ot_start_min:
+            raw_ot = ((co_min - ot_start_min) // 10) * 10
+            result['ot_hrs'] = raw_ot // 60
+            result['ot_min'] = raw_ot % 60
+
+    return result
+
+
+def _calc_fixed(caps_in: Optional[dtime], caps_out: Optional[dtime], is_holiday: bool):
+    """고정·반장 룰 → dict"""
+    result = dict(
+        check_in=None, check_out=None,
+        work_hrs=0.0, ot_hrs=0, ot_min=0,
+        holiday_hrs=0, holiday_min=0,
+        absent=False, late=False,
+    )
+    if caps_in is None:
+        result['absent'] = True
+        return result
+
+    if is_holiday:
+        # 반장·생산직만 휴일수당 (foreman) — fixed는 holiday도 없음
+        result['check_in'] = caps_in
+        result['check_out'] = caps_out
+        if caps_out:
+            co_min = (_to_minutes(caps_out) // 10) * 10
+            raw = co_min - _to_minutes(caps_in) - 60   # 점심 60분 제외
+            total_hol = max(0, (raw // 10) * 10)
+            result['holiday_hrs'] = total_hol // 60
+            result['holiday_min'] = total_hol % 60
+    else:
+        result['check_in'] = _FIX_IN
+        result['check_out'] = _FIX_OUT
+        result['work_hrs'] = _FIX_WORK_HRS
+
+    return result
+
+
+def _week52_total_ot(emp_id: str, year: int, week: int, db) -> int:
+    """해당 주 총 ot_min 합산 (주 52h 체크용, 기준 40h → 연장 최대 12h=720min)"""
+    from sqlalchemy import func as sqlfunc
+    rows = db.query(Attendance).filter(
+        Attendance.emp_id == emp_id,
+        sqlfunc.extract('year', Attendance.work_date) == year,
+        sqlfunc.extract('week', Attendance.work_date) == week,
+    ).all()
+    return sum(r.ot_hrs * 60 + r.ot_min for r in rows)
+
+
 @router.post("/attendance/upload-caps")
 async def upload_caps_excel(
     file: UploadFile = File(...),
@@ -312,8 +432,12 @@ async def upload_caps_excel(
 ):
     """
     캡스(CAPS) 출퇴근 Excel 업로드.
-    컬럼 자동감지: 사번(사번/직원번호), 이름(이름/성명), 날짜(날짜/일자),
-                   출근(출근시간/입실), 퇴근(퇴근시간/퇴실)
+    - 제외(대표·상무·전무): 스킵
+    - 고정(과장급·사무직·주용하·김영일): 08:30/17:30 고정
+    - 반장(이상혁·김의진·신종오·김진택): 08:30/17:30 고정 + 휴일수당
+    - 생산룰(생산·금형·출하 나머지): 08:30 고정, CAPS퇴근, 18:10~잔업 10분단위
+    - 퇴근 미기록 / 출근 없음 → 결근
+    - 지각(생산룰만), 주52h 초과 경고
     """
     try:
         import openpyxl
@@ -321,10 +445,23 @@ async def upload_caps_excel(
         raise HTTPException(500, "openpyxl 미설치")
 
     content = await file.read()
-    wb = openpyxl.load_workbook(BytesIO(content), data_only=True)
-    ws = wb.active
+    try:
+        wb = openpyxl.load_workbook(BytesIO(content), data_only=True)
+    except Exception:
+        # .xls 형식이면 xlrd로 시도
+        try:
+            import xlrd
+            xbook = xlrd.open_workbook(file_contents=content)
+            xsheet = xbook.sheet_by_index(0)
+            rows_raw = [tuple(xsheet.row_values(i)) for i in range(xsheet.nrows)]
+        except Exception as e:
+            raise HTTPException(400, f"파일 읽기 실패: {e}")
+        else:
+            rows = rows_raw
+            wb = None
+    else:
+        rows = list(wb.active.iter_rows(values_only=True))
 
-    rows = list(ws.iter_rows(values_only=True))
     if len(rows) < 2:
         raise HTTPException(400, "데이터가 없습니다")
 
@@ -337,80 +474,133 @@ async def upload_caps_excel(
                     return i
         return None
 
-    col_emp_id = find_col(['사번', '직원번호', 'emp_id', 'EMP'])
-    col_name   = find_col(['이름', '성명', '직원명', 'name'])
-    col_date   = find_col(['날짜', '일자', '근무일', 'date'])
-    col_in     = find_col(['출근', '출근시간', 'check_in', '입실'])
-    col_out    = find_col(['퇴근', '퇴근시간', 'check_out', '퇴실'])
+    col_name = find_col(['이름', '성명', '직원명', 'name'])
+    col_date = find_col(['날짜', '일자', '근무일', 'date'])
+    col_in   = find_col(['출근', '출근시간', 'check_in', '입실'])
+    col_out  = find_col(['퇴근', '퇴근시간', 'check_out', '퇴실'])
 
     if col_date is None:
         raise HTTPException(400, f"날짜 컬럼을 찾을 수 없습니다. 헤더: {headers}")
 
-    name_map = {e.name: e.emp_id for e in db.query(Employee).all()}
-    created = updated = 0
-    errors = []
+    # 사원 맵 (이름 → Employee 객체)
+    all_emps = {e.name: e for e in db.query(Employee).all()}
+    created = updated = skipped = 0
+    errors: list = []
+    warnings: list = []   # 주52h 초과
+
+    def parse_cell_time(val) -> Optional[str]:
+        if val is None:
+            return None
+        if isinstance(val, dtime):
+            return f"{val.hour:02d}:{val.minute:02d}"
+        if isinstance(val, float):
+            # xlrd: 시간은 0~1 소수
+            total_min = round(val * 24 * 60)
+            return f"{total_min // 60:02d}:{total_min % 60:02d}"
+        s = str(val).strip()
+        if not s or s in ("None", "nan", ""):
+            return None
+        if ":" in s:
+            return s[:5]
+        if len(s) == 4 and s.isdigit():
+            return f"{s[:2]}:{s[2:]}"
+        return s or None
 
     for row_idx, row in enumerate(rows[1:], start=2):
         try:
-            raw_emp = str(row[col_emp_id]).strip() if col_emp_id is not None and row[col_emp_id] is not None else ""
-            if not raw_emp or raw_emp in ("None", "nan"):
-                raw_name = str(row[col_name]).strip() if col_name is not None and row[col_name] is not None else ""
-                emp_id = name_map.get(raw_name)
-                if not emp_id:
-                    errors.append({"row": row_idx, "msg": f"사원 미매칭: {raw_name}"})
-                    continue
-            else:
-                emp_id = raw_emp
+            raw_name = str(row[col_name]).strip() if col_name is not None and row[col_name] is not None else ""
+            if not raw_name or raw_name in ("None", "nan"):
+                continue
+
+            emp = all_emps.get(raw_name)
+            if not emp:
+                errors.append({"row": row_idx, "msg": f"사원 미매칭: {raw_name}"})
+                continue
+
+            schedule = _get_schedule(emp)
+            if schedule == 'exempt':
+                skipped += 1
+                continue
 
             raw_date = row[col_date]
             if raw_date is None:
                 continue
-            if isinstance(raw_date, (date, datetime)):
+            if isinstance(raw_date, float):
+                import xlrd as _xlrd
+                y, mo, d, *_ = _xlrd.xldate_as_tuple(raw_date, 0)
+                work_date = date(int(y), int(mo), int(d))
+            elif isinstance(raw_date, (date, datetime)):
                 work_date = raw_date.date() if isinstance(raw_date, datetime) else raw_date
             else:
                 s = str(raw_date).strip().replace("/", "-").replace(".", "-")
                 work_date = date.fromisoformat(s[:10])
 
-            def parse_cell_time(val) -> Optional[str]:
-                if val is None:
-                    return None
-                if isinstance(val, dtime):
-                    return f"{val.hour:02d}:{val.minute:02d}"
-                s = str(val).strip()
-                if ":" in s:
-                    return s[:5]
-                if len(s) == 4 and s.isdigit():
-                    return f"{s[:2]}:{s[2:]}"
-                return s or None
+            is_holiday = work_date.weekday() >= 5   # 토(5)/일(6)
 
             ci_str = parse_cell_time(row[col_in])  if col_in  is not None else None
             co_str = parse_cell_time(row[col_out]) if col_out is not None else None
             ci = _parse_time(ci_str)
             co = _parse_time(co_str)
-            work_hrs = _total_work_hrs(ci, co)
+
+            if schedule == 'production':
+                calc = _calc_production(ci, co, is_holiday)
+            else:
+                # fixed / foreman 모두 _calc_fixed 사용
+                # foreman은 휴일에 holiday_hrs 계산, fixed는 is_holiday여도 무시
+                calc = _calc_fixed(ci, co, is_holiday if schedule == 'foreman' else False)
 
             existing = db.query(Attendance).filter(
-                Attendance.emp_id == emp_id, Attendance.work_date == work_date,
+                Attendance.emp_id == emp.emp_id,
+                Attendance.work_date == work_date,
             ).first()
 
+            fields = dict(
+                check_in=calc['check_in'],
+                check_out=calc['check_out'],
+                work_hrs=calc['work_hrs'],
+                ot_hrs=calc['ot_hrs'],
+                ot_min=calc['ot_min'],
+                holiday_hrs=calc['holiday_hrs'],
+                holiday_min=calc['holiday_min'],
+                holiday=is_holiday and (calc['holiday_hrs'] > 0 or calc['holiday_min'] > 0),
+                absent=calc['absent'],
+                late=calc['late'],
+                source="caps_excel",
+            )
+
             if existing:
-                existing.check_in = ci
-                existing.check_out = co
-                existing.work_hrs = work_hrs
-                existing.source = "caps_excel"
+                for k, v in fields.items():
+                    setattr(existing, k, v)
                 updated += 1
             else:
-                db.add(Attendance(
-                    emp_id=emp_id, work_date=work_date,
-                    check_in=ci, check_out=co, work_hrs=work_hrs,
-                    source="caps_excel",
-                ))
+                db.add(Attendance(emp_id=emp.emp_id, work_date=work_date, **fields))
                 created += 1
+
+            # 주 52h 초과 경고 (생산룰만)
+            if schedule == 'production' and not calc['absent']:
+                import datetime as _dt
+                week_no = work_date.isocalendar()[1]
+                week_ot = _week52_total_ot(emp.emp_id, work_date.year, week_no, db)
+                week_ot += calc['ot_hrs'] * 60 + calc['ot_min']
+                if week_ot > 720:   # 12h = 720min 초과 → 주52h 위반
+                    warnings.append({
+                        "emp": raw_name,
+                        "week": f"{work_date.year}-W{week_no:02d}",
+                        "ot_min": week_ot,
+                        "msg": f"주 52h 초과 ({week_ot//60}h {week_ot%60}m)",
+                    })
+
         except Exception as ex:
             errors.append({"row": row_idx, "msg": str(ex)})
 
     db.commit()
-    return {"created": created, "updated": updated, "errors": errors}
+    return {
+        "created": created,
+        "updated": updated,
+        "skipped_exempt": skipped,
+        "errors": errors,
+        "warnings_52h": warnings,
+    }
 
 
 # ── 급여 계산 ─────────────────────────────────────────────────────────

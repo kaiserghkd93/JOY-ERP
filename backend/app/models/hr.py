@@ -42,6 +42,8 @@ class Employee(Base):
     bank_account: Mapped[str | None] = mapped_column(String(30))
     email: Mapped[str | None] = mapped_column(String(100))
     note: Mapped[str | None] = mapped_column(Text)
+    # 근태 처리 유형 (null=자동판단 / fixed=8:30-17:30고정 / foreman=반장급 / exempt=제외)
+    schedule_type: Mapped[str | None] = mapped_column(String(20))
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
 
@@ -69,6 +71,7 @@ class Attendance(Base):
     holiday_min: Mapped[int] = mapped_column(Integer, default=0)    # 휴일근무 분(m)
     holiday: Mapped[bool] = mapped_column(Boolean, default=False)   # 휴일근무 여부
     absent: Mapped[bool] = mapped_column(Boolean, default=False)    # 결근
+    late: Mapped[bool] = mapped_column(Boolean, default=False)      # 지각 (생산직만)
     half_day: Mapped[bool] = mapped_column(Boolean, default=False)  # 반차
     note: Mapped[str | None] = mapped_column(String(200))
     source: Mapped[str | None] = mapped_column(String(20), default="manual")  # manual / caps_excel
