@@ -261,7 +261,7 @@ function PayslipModal({ payroll: initialP, onClose, onSaved }) {
     { label: '장기요양보험료', val: p.deduct_lcare,    editable: false },
     { label: '소득세',      val: taxEdit.deduct_income_tax, editable: true, key: 'deduct_income_tax' },
     { label: '지방소득세',  val: taxEdit.deduct_local_tax,  editable: true, key: 'deduct_local_tax' },
-  ].filter(r => Number(r.val) > 0 || r.editable)
+  ]
 
   const calcRows = [
     { label: '기본급',      formula: `통상시급(${W(p.std_hourly)}원) × 소정근로시간(${p.std_hrs||209}h)`, val: p.base_pay },
