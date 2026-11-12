@@ -172,7 +172,7 @@ export default function HrAttendance() {
                 <th>고용형태</th>
                 <th style={{ textAlign: 'right' }}>근무일수</th>
                 <th style={{ textAlign: 'right' }}>총근무(h)</th>
-                <th style={{ textAlign: 'right' }}>연장(h)</th>
+                <th style={{ textAlign: 'right' }}>연장</th>
                 <th style={{ textAlign: 'right' }}>야간(h)</th>
                 <th style={{ textAlign: 'right' }}>결근</th>
                 <th style={{ textAlign: 'right' }}>휴일근무</th>
@@ -192,7 +192,9 @@ export default function HrAttendance() {
                   }}>{s.emp_type === 'annual' ? '연봉' : '시급'}</span></td>
                   <td style={{ textAlign: 'right' }}>{s.days}</td>
                   <td style={{ textAlign: 'right', fontWeight: 600 }}>{s.total_work}h</td>
-                  <td style={{ textAlign: 'right', color: s.total_ot_hrs > 0 ? '#d97706' : undefined }}>{s.total_ot_hrs}h</td>
+                  <td style={{ textAlign: 'right', color: (s.total_ot_hrs > 0 || s.total_ot_min > 0) ? '#d97706' : undefined }}>
+                    {s.total_ot_hrs}h{s.total_ot_min > 0 ? ` ${s.total_ot_min}m` : ''}
+                  </td>
                   <td style={{ textAlign: 'right', color: s.total_night_hrs > 0 ? '#7c3aed' : undefined }}>{s.total_night_hrs}h</td>
                   <td style={{ textAlign: 'right', color: s.absents > 0 ? '#dc2626' : undefined }}>{s.absents}</td>
                   <td style={{ textAlign: 'right' }}>{s.holidays}</td>
@@ -215,7 +217,7 @@ export default function HrAttendance() {
                 <th>출근</th>
                 <th>퇴근</th>
                 <th style={{ textAlign: 'right' }}>근무(h)</th>
-                <th style={{ textAlign: 'right' }}>연장(h)</th>
+                <th style={{ textAlign: 'right' }}>연장</th>
                 <th>특기</th>
                 <th>출처</th>
                 <th></th>
@@ -233,7 +235,9 @@ export default function HrAttendance() {
                     <td style={{ color: '#1d4ed8' }}>{a.check_in ? a.check_in.slice(0,5) : '—'}</td>
                     <td style={{ color: '#475569' }}>{a.check_out ? a.check_out.slice(0,5) : '—'}</td>
                     <td style={{ textAlign: 'right', fontWeight: 600 }}>{a.work_hrs}h</td>
-                    <td style={{ textAlign: 'right', color: a.ot_hrs > 0 ? '#d97706' : undefined }}>{a.ot_hrs}h</td>
+                    <td style={{ textAlign: 'right', color: (a.ot_hrs > 0 || a.ot_min > 0) ? '#d97706' : undefined }}>
+                      {a.ot_hrs}h{a.ot_min > 0 ? ` ${a.ot_min}m` : ''}
+                    </td>
                     <td style={{ fontSize: 11 }}>
                       {a.leave_type
                         ? <span style={{

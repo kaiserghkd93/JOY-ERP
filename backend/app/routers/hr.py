@@ -766,7 +766,6 @@ def _do_payroll(year: int, month: int, db, emp_ids: Optional[list] = None, skip_
         total_ot_min  = sum(a.ot_min for a in atts)
         total_ot_hrs  += total_ot_min // 60
         total_ot_min   = total_ot_min % 60
-        total_ot_hrs  += emp.fixed_ot_hrs or 0
 
         total_night_hrs = sum(a.night_hrs for a in atts)
         total_night_min = sum(a.night_min for a in atts)
@@ -777,18 +776,41 @@ def _do_payroll(year: int, month: int, db, emp_ids: Optional[list] = None, skip_
         total_hol_min = sum(a.holiday_min for a in atts)
         total_hol_hrs += total_hol_min // 60
         total_hol_min  = total_hol_min % 60
-        total_hol_hrs += emp.fixed_holiday_hrs or 0
 
         # 연차/병가/공가는 결근으로 집계하지 않음
         absents   = sum(1 for a in atts if a.absent and not a.leave_type)
         std_m_hrs = emp.std_monthly_hours or 209
 
+        # 중도입사/퇴사 일할계산 (입사일 or 퇴사일이 해당 월인 경우)
+        total_days = calendar.monthrange(year, month)[1]
+        prorate = Decimal("1")
+        if emp.hire_date and emp.hire_date.year == year and emp.hire_date.month == month:
+            worked_days = (end - emp.hire_date).days + 1
+            prorate = Decimal(str(worked_days)) / Decimal(str(total_days))
+        elif emp.retire_date and emp.retire_date.year == year and emp.retire_date.month == month:
+            worked_days = (emp.retire_date - start).days + 1
+            prorate = Decimal(str(worked_days)) / Decimal(str(total_days))
+
+        # 고정 연장/특근시간 — 중도입사·퇴사 시 일할 적용
+        fixed_ot_min_total = int((emp.fixed_ot_hrs or 0) * 60 * float(prorate))
+        total_ot_hrs  += fixed_ot_min_total // 60
+        total_ot_min  += fixed_ot_min_total % 60
+        total_ot_hrs  += total_ot_min // 60
+        total_ot_min   = total_ot_min % 60
+
+        fixed_hol_min_total = int((emp.fixed_holiday_hrs or 0) * 60 * float(prorate))
+        total_hol_hrs += fixed_hol_min_total // 60
+        total_hol_min += fixed_hol_min_total % 60
+        total_hol_hrs += total_hol_min // 60
+        total_hol_min  = total_hol_min % 60
+
         if emp.emp_type == "hourly":
             std_hourly = Decimal(str(emp.hourly_rate))
-            base_pay   = (std_hourly * std_m_hrs).quantize(Decimal("1"), ROUND_HALF_UP)
+            base_pay   = _round10(std_hourly * Decimal(str(std_m_hrs)) * prorate)
         else:
-            base_pay   = Decimal(str(emp.base_salary)).quantize(Decimal("1"), ROUND_HALF_UP)
-            std_hourly = (base_pay / Decimal(std_m_hrs)).quantize(Decimal("0.01"), ROUND_HALF_UP)
+            # 연봉제: 통상시급은 풀 기본급 기준, 기본급만 일할 적용
+            std_hourly = (Decimal(str(emp.base_salary)) / Decimal(str(std_m_hrs))).quantize(Decimal("0.01"), ROUND_HALF_UP)
+            base_pay   = _round10(Decimal(str(emp.base_salary)) * prorate)
 
         ot_pay = (
             std_hourly * Decimal(total_ot_hrs) * Decimal("1.5")
@@ -806,7 +828,7 @@ def _do_payroll(year: int, month: int, db, emp_ids: Optional[list] = None, skip_
         ).quantize(Decimal("1"), ROUND_HALF_UP)
 
         meal_allow     = Decimal("0")
-        vehicle_allow  = Decimal(str(emp.vehicle_allow_fixed))
+        vehicle_allow  = _round10(Decimal(str(emp.vehicle_allow_fixed)) * prorate)
         foreman_allow  = Decimal(str(emp.foreman_allow_fixed or 0))
 
         gross   = base_pay + ot_pay + night_pay + holiday_pay + meal_allow + vehicle_allow + foreman_allow
@@ -1182,6 +1204,40 @@ def export_payroll_excel(
         )
     except Exception as ex:
         raise HTTPException(status_code=500, detail=f"{type(ex).__name__}: {ex}\n{_tb.format_exc()}")
+
+
+# ── 결근자 목록 (급여 자동계산 전 확인용) ──────────────────────────────
+
+@router.get("/attendance/absents")
+def attendance_absents(
+    year: int = Query(...), month: int = Query(...),
+    db: Session = Depends(get_db), _=Depends(get_current_user),
+):
+    """leave_type 없는 결근 레코드를 직원별로 그룹핑해서 반환"""
+    import calendar
+    start = date(year, month, 1)
+    end   = date(year, month, calendar.monthrange(year, month)[1])
+
+    rows = (
+        db.query(Attendance, Employee.name, Employee.dept)
+        .join(Employee, Attendance.emp_id == Employee.emp_id)
+        .filter(
+            Attendance.work_date >= start,
+            Attendance.work_date <= end,
+            Attendance.absent == True,
+            Attendance.leave_type == None,
+        )
+        .order_by(Attendance.emp_id, Attendance.work_date)
+        .all()
+    )
+
+    grouped: dict = {}
+    for att, name, dept in rows:
+        if att.emp_id not in grouped:
+            grouped[att.emp_id] = {"emp_id": att.emp_id, "name": name, "dept": dept, "dates": []}
+        grouped[att.emp_id]["dates"].append({"id": att.id, "work_date": str(att.work_date)})
+
+    return list(grouped.values())
 
 
 # ── 월간 근무 요약 ─────────────────────────────────────────────────────

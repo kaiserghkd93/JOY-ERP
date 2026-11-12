@@ -19,6 +19,11 @@ export default function HrPayroll() {
   const [selected, setSelected] = useState(null)
   const [excelCompany, setExcelCompany] = useState('')
 
+  // 결근자 확인 모달
+  const [absentModal, setAbsentModal] = useState(false)
+  const [absents, setAbsents] = useState([])   // [{emp_id, name, dept, dates:[{id, work_date}]}]
+  const [leaveChoices, setLeaveChoices] = useState({})  // {attendanceId: leaveType|null}
+
   const [excelLoading, setExcelLoading] = useState(false)
 
   const downloadExcel = async () => {
@@ -61,6 +66,22 @@ export default function HrPayroll() {
   useEffect(() => { load() }, [load])
 
   const calculate = async () => {
+    // 결근자 먼저 확인
+    try {
+      const { data } = await api.get(`/hr/attendance/absents?year=${year}&month=${month}`)
+      if (data.length > 0) {
+        const init = {}
+        data.forEach(emp => emp.dates.forEach(d => { init[d.id] = null }))
+        setAbsents(data)
+        setLeaveChoices(init)
+        setAbsentModal(true)
+        return
+      }
+    } catch { /* 조회 실패 시 그냥 진행 */ }
+    doCalculate()
+  }
+
+  const doCalculate = async () => {
     if (!window.confirm(`${year}년 ${month}월 급여를 자동계산하시겠습니까?\n기존 계산 결과가 덮어씌워집니다.`)) return
     setCalcLoading(true)
     try {
@@ -71,6 +92,16 @@ export default function HrPayroll() {
     } finally {
       setCalcLoading(false)
     }
+  }
+
+  const applyLeavesAndCalculate = async () => {
+    // leave_type 세팅 (null이 아닌 것만 patch)
+    const patches = Object.entries(leaveChoices).filter(([, v]) => v !== null)
+    for (const [id, leave_type] of patches) {
+      await api.patch(`/hr/attendance/${id}`, { leave_type }).catch(() => {})
+    }
+    setAbsentModal(false)
+    doCalculate()
   }
 
   const confirmPay = async (id) => {
@@ -197,6 +228,55 @@ export default function HrPayroll() {
           onClose={() => setSelected(null)}
           onSaved={() => { load(); setSelected(null) }}
         />
+      )}
+
+      {/* 결근자 확인 모달 */}
+      {absentModal && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000,
+        }}>
+          <div style={{ background: '#fff', borderRadius: 12, padding: 24, width: 560, maxWidth: '95vw', maxHeight: '80vh', overflowY: 'auto', boxShadow: '0 8px 32px rgba(0,0,0,0.2)' }}>
+            <h3 style={{ margin: '0 0 6px', fontSize: 16, fontWeight: 800 }}>결근자 확인</h3>
+            <p style={{ margin: '0 0 16px', fontSize: 13, color: '#64748b' }}>
+              아래 결근 처리된 날짜에 연차/반차 등을 지정하면 급여 계산 시 반영됩니다.<br/>
+              지정하지 않으면 결근으로 처리됩니다.
+            </p>
+            {absents.map(emp => (
+              <div key={emp.emp_id} style={{ marginBottom: 16, padding: 12, background: '#f8fafc', borderRadius: 8, border: '1px solid #e2e8f0' }}>
+                <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 8 }}>
+                  {emp.name} <span style={{ color: '#64748b', fontSize: 12, fontWeight: 400 }}>({emp.dept || '—'})</span>
+                </div>
+                {emp.dates.map(d => (
+                  <div key={d.id} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                    <span style={{ fontSize: 13, minWidth: 90, color: '#475569' }}>{d.work_date}</span>
+                    {['연차', '반차', '병가', '공가'].map(lt => (
+                      <button
+                        key={lt}
+                        onClick={() => setLeaveChoices(prev => ({ ...prev, [d.id]: prev[d.id] === lt ? null : lt }))}
+                        style={{
+                          padding: '3px 10px', borderRadius: 20, fontSize: 12, cursor: 'pointer', border: '1px solid',
+                          background: leaveChoices[d.id] === lt ? '#3b82f6' : '#fff',
+                          color:      leaveChoices[d.id] === lt ? '#fff'    : '#475569',
+                          borderColor: leaveChoices[d.id] === lt ? '#3b82f6' : '#cbd5e1',
+                        }}
+                      >{lt}</button>
+                    ))}
+                    {leaveChoices[d.id] === null && (
+                      <span style={{ fontSize: 11, color: '#dc2626' }}>결근 처리</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ))}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16 }}>
+              <button className="btn btn-outline" onClick={() => setAbsentModal(false)}>취소</button>
+              <button className="btn btn-primary" onClick={applyLeavesAndCalculate}>
+                적용 후 급여 계산
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )
