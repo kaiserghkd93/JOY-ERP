@@ -221,6 +221,7 @@ class AttendanceIn(BaseModel):
     holiday: bool = False
     absent: bool = False
     half_day: bool = False
+    leave_type: Optional[str] = None    # 연차/반차/병가/공가
     note: Optional[str] = None
 
 
@@ -273,7 +274,7 @@ def upsert_attendance(body: AttendanceIn, db: Session = Depends(get_db), _=Depen
         night_hrs=body.night_hrs, night_min=body.night_min,
         holiday_hrs=body.holiday_hrs, holiday_min=body.holiday_min,
         holiday=body.holiday, absent=body.absent, half_day=body.half_day,
-        note=body.note,
+        leave_type=body.leave_type, note=body.note,
     )
 
     existing = db.query(Attendance).filter(
@@ -292,6 +293,36 @@ def upsert_attendance(body: AttendanceIn, db: Session = Depends(get_db), _=Depen
         db.commit()
         db.refresh(a)
         return a
+
+
+@router.patch("/attendance/{att_id}/leave")
+def set_leave_type(
+    att_id: int,
+    body: dict,
+    db: Session = Depends(get_db), _=Depends(get_current_user),
+):
+    """결근 → 연차/반차/병가/공가 전환 (또는 취소).
+    body: {"leave_type": "연차" | "반차" | "병가" | "공가" | null}
+    연차: absent=False, work_hrs=8, ot_hrs=0
+    반차: absent=False, work_hrs=4
+    취소(null): absent=True, work_hrs=0
+    """
+    a = db.get(Attendance, att_id)
+    if not a:
+        raise HTTPException(404)
+
+    lt = body.get("leave_type")  # None = 취소
+    a.leave_type = lt
+    if lt == "연차":
+        a.absent = False; a.work_hrs = 8.0; a.ot_hrs = 0; a.ot_min = 0
+    elif lt == "반차":
+        a.absent = False; a.work_hrs = 4.0; a.ot_hrs = 0; a.ot_min = 0
+    elif lt in ("병가", "공가"):
+        a.absent = False; a.work_hrs = 8.0; a.ot_hrs = 0; a.ot_min = 0
+    else:
+        a.leave_type = None; a.absent = True; a.work_hrs = 0.0
+    db.commit()
+    return {"ok": True, "leave_type": a.leave_type, "absent": a.absent}
 
 
 @router.delete("/attendance/{att_id}")
@@ -682,16 +713,12 @@ async def upload_caps_excel(
 
     db.commit()
 
-    # 출근 데이터 저장 후 급여 자동 재계산 (확정 상태 제외)
+    # 출근 데이터 저장 후 전체 직원 급여 재계산 (확정 상태 제외)
+    # — CAPS에 없는 관리직·고정직도 fixed_ot_hrs/fixed_holiday_hrs 반영
     payroll_recalc_count = 0
     try:
-        processed_emp_ids = [
-            all_emps[n].emp_id for n in emp_days
-            if n in all_emps and _get_schedule(all_emps[n]) != 'exempt'
-        ]
-        if processed_emp_ids:
-            pr_results = _do_payroll(year, month, db, emp_ids=processed_emp_ids, skip_confirmed=True)
-            payroll_recalc_count = len(pr_results)
+        pr_results = _do_payroll(year, month, db, emp_ids=None, skip_confirmed=True)
+        payroll_recalc_count = len(pr_results)
     except Exception as e:
         errors.append({"row": 0, "msg": f"급여 자동재계산 실패: {e}"})
 
@@ -752,7 +779,8 @@ def _do_payroll(year: int, month: int, db, emp_ids: Optional[list] = None, skip_
         total_hol_min  = total_hol_min % 60
         total_hol_hrs += emp.fixed_holiday_hrs or 0
 
-        absents   = sum(1 for a in atts if a.absent)
+        # 연차/병가/공가는 결근으로 집계하지 않음
+        absents   = sum(1 for a in atts if a.absent and not a.leave_type)
         std_m_hrs = emp.std_monthly_hours or 209
 
         if emp.emp_type == "hourly":
@@ -790,10 +818,15 @@ def _do_payroll(year: int, month: int, db, emp_ids: Optional[list] = None, skip_
             if (start.month, start.day) < (emp.birth_date.month, emp.birth_date.day):
                 age -= 1
 
-        pen  = Decimal(0) if age >= 60 else _round10(taxable * RATE_PENSION)
+        # 임원(대표·상무이사·전무이사) 여부
+        is_exec = (emp.position or '') in _EXEMPT_POSITIONS or _get_schedule(emp) == 'exempt'
+
+        # 국민연금: 만 60세 이상 면제
+        pen  = Decimal(0) if (age >= 60) else _round10(taxable * RATE_PENSION)
         hlt  = _round10(taxable * RATE_HEALTH)
         lc   = _round10(hlt * RATE_LCARE)
-        emp_ = Decimal(0) if (emp.position or '') == '대표' else _round10(taxable * RATE_EMPLOY)
+        # 고용보험: 임원(대표·상무이사·전무이사) 면제
+        emp_ = Decimal(0) if is_exec else _round10(taxable * RATE_EMPLOY)
 
         it = Decimal(str(emp.fixed_income_tax)) if emp.fixed_income_tax and emp.fixed_income_tax > 0 else _income_tax(taxable)
         lt = Decimal(str(emp.fixed_local_tax))  if emp.fixed_local_tax  and emp.fixed_local_tax  > 0 else _round10(it * Decimal("0.1"))

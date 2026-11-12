@@ -214,6 +214,7 @@ with engine.connect() as _conn:
         "ALTER TABLE hr_employee ADD COLUMN IF NOT EXISTS schedule_type VARCHAR(20)",
         # HR — 지각 여부 (생산직만 체크)
         "ALTER TABLE hr_attendance ADD COLUMN IF NOT EXISTS late BOOLEAN DEFAULT FALSE",
+        "ALTER TABLE hr_attendance ADD COLUMN IF NOT EXISTS leave_type VARCHAR(10)",
     ]:
         try:
             _conn.execute(_text(_sql))

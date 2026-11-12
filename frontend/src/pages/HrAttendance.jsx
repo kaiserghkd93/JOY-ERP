@@ -15,6 +15,16 @@ export default function HrAttendance() {
   const [uploadResult, setUploadResult] = useState(null)
   const fileRef = useRef()
 
+  const setLeave = async (attId, leaveType) => {
+    try {
+      await api.patch(`/hr/attendance/${attId}/leave`, { leave_type: leaveType })
+      loadDetail()
+      loadSummary()
+    } catch (err) {
+      alert('처리 실패: ' + (err.response?.data?.detail || err.message))
+    }
+  }
+
   const loadEmployees = useCallback(() => {
     api.get('/hr/employees').then(r => setEmployees(r.data)).catch(() => {})
   }, [])
@@ -225,16 +235,39 @@ export default function HrAttendance() {
                     <td style={{ textAlign: 'right', fontWeight: 600 }}>{a.work_hrs}h</td>
                     <td style={{ textAlign: 'right', color: a.ot_hrs > 0 ? '#d97706' : undefined }}>{a.ot_hrs}h</td>
                     <td style={{ fontSize: 11 }}>
-                      {a.absent && <span style={{ color: '#dc2626', marginRight: 4 }}>결근</span>}
-                      {a.holiday && <span style={{ color: '#7c3aed', marginRight: 4 }}>휴일</span>}
-                      {a.half_day && <span style={{ color: '#d97706' }}>반차</span>}
+                      {a.leave_type
+                        ? <span style={{
+                            padding: '1px 7px', borderRadius: 20, fontSize: 11, fontWeight: 600,
+                            background: a.leave_type === '연차' ? '#dcfce7' : a.leave_type === '반차' ? '#fef9c3' : '#f0f9ff',
+                            color:      a.leave_type === '연차' ? '#16a34a' : a.leave_type === '반차' ? '#a16207' : '#0369a1',
+                          }}>{a.leave_type}</span>
+                        : <>
+                          {a.absent && <span style={{ color: '#dc2626', marginRight: 4 }}>결근</span>}
+                          {a.holiday && <span style={{ color: '#7c3aed', marginRight: 4 }}>휴일</span>}
+                          {a.late && <span style={{ color: '#ea580c', marginRight: 4 }}>지각</span>}
+                          {a.half_day && <span style={{ color: '#d97706' }}>반차</span>}
+                        </>}
                     </td>
                     <td>
                       <span style={{ fontSize: 10, color: a.source === 'caps_excel' ? '#16a34a' : '#94a3b8' }}>
                         {a.source === 'caps_excel' ? 'CAPS' : '수기'}
                       </span>
                     </td>
-                    <td>
+                    <td style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                      {/* 결근인 경우: 연차/반차/병가로 전환 가능 */}
+                      {a.absent && !a.leave_type && <>
+                        {['연차','반차','병가','공가'].map(lt => (
+                          <button key={lt} className="btn btn-sm"
+                            style={{ background: '#f0fdf4', color: '#16a34a', border: '1px solid #bbf7d0', fontSize: 10, padding: '2px 6px' }}
+                            onClick={() => setLeave(a.id, lt)}>{lt}</button>
+                        ))}
+                      </>}
+                      {/* 연차 등이 설정된 경우: 취소 버튼 */}
+                      {a.leave_type && (
+                        <button className="btn btn-sm"
+                          style={{ background: '#fff7ed', color: '#ea580c', border: '1px solid #fed7aa', fontSize: 10, padding: '2px 6px' }}
+                          onClick={() => setLeave(a.id, null)}>취소</button>
+                      )}
                       <button className="btn btn-sm" style={{ background: '#fee2e2', color: '#dc2626', border: 'none' }}
                         onClick={() => delAtt(a.id)}>삭제</button>
                     </td>

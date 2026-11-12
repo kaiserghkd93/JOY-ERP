@@ -73,6 +73,7 @@ class Attendance(Base):
     absent: Mapped[bool] = mapped_column(Boolean, default=False)    # 결근
     late: Mapped[bool] = mapped_column(Boolean, default=False)      # 지각 (생산직만)
     half_day: Mapped[bool] = mapped_column(Boolean, default=False)  # 반차
+    leave_type: Mapped[str | None] = mapped_column(String(10))      # 연차/반차/병가/공가
     note: Mapped[str | None] = mapped_column(String(200))
     source: Mapped[str | None] = mapped_column(String(20), default="manual")  # manual / caps_excel
 
