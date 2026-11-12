@@ -338,8 +338,10 @@ def delete_attendance(att_id: int, db: Session = Depends(get_db), _=Depends(get_
 # ── 캡스 Excel 업로드 ──────────────────────────────────────────────────
 
 # 근무 유형 판단 상수
-_EXEMPT_POSITIONS  = {'대표', '상무이사', '전무이사'}
-_MANAGER_POSITIONS = {'과장', '차장', '부장', '실장', '이사'}
+_EXEMPT_POSITIONS     = {'대표', '상무이사', '전무이사'}
+_MANAGER_POSITIONS    = {'과장', '차장', '부장', '실장', '이사'}
+# 포괄임금제: 기본급 고정, OT/야간/휴일 수당 별도 미지급
+_FLAT_SALARY_POSITIONS = {'실장'}
 _PROD_RULE_DEPTS   = {'생산', '금형', '출하'}
 _FIXED_EMP_IDS     = {'N011', 'S001'}   # 주용하, 김영일 (금형 고정직)
 
@@ -812,17 +814,20 @@ def _do_payroll(year: int, month: int, db, emp_ids: Optional[list] = None, skip_
             std_hourly = (Decimal(str(emp.base_salary)) / Decimal(str(std_m_hrs))).quantize(Decimal("0.01"), ROUND_HALF_UP)
             base_pay   = _round10(Decimal(str(emp.base_salary)) * prorate)
 
-        ot_pay = (
+        # 포괄임금제 직급(실장 등): OT/야간/휴일 수당 미지급
+        is_flat = (emp.position or '') in _FLAT_SALARY_POSITIONS
+
+        ot_pay = Decimal("0") if is_flat else (
             std_hourly * Decimal(total_ot_hrs) * Decimal("1.5")
             + std_hourly * (Decimal(total_ot_min) / 60) * Decimal("1.5")
         ).quantize(Decimal("1"), ROUND_HALF_UP)
 
-        night_pay = (
+        night_pay = Decimal("0") if is_flat else (
             std_hourly * Decimal(total_night_hrs) * Decimal("0.5")
             + std_hourly * (Decimal(total_night_min) / 60) * Decimal("0.5")
         ).quantize(Decimal("1"), ROUND_HALF_UP)
 
-        holiday_pay = (
+        holiday_pay = Decimal("0") if is_flat else (
             std_hourly * Decimal(total_hol_hrs) * Decimal("1.5")
             + std_hourly * (Decimal(total_hol_min) / 60) * Decimal("1.5")
         ).quantize(Decimal("1"), ROUND_HALF_UP)
