@@ -27,7 +27,7 @@ from pydantic import BaseModel
 
 from app.database import get_db
 from app.routers.auth import get_current_user, require_admin
-from app.models.hr import Employee, Attendance, Payroll, EmployeeKpi
+from app.models.hr import Employee, Attendance, Payroll, EmployeeKpi, EmployeeHrHistory
 
 router = APIRouter(prefix="/hr", tags=["인사"])
 
@@ -1114,5 +1114,80 @@ def delete_kpi(kpi_id: int, db: Session = Depends(get_db), _=Depends(require_adm
     if not k:
         raise HTTPException(404)
     db.delete(k)
+    db.commit()
+    return {"ok": True}
+
+
+# ── 인사기록 이력 ─────────────────────────────────────────────────────
+
+class HrHistoryBody(BaseModel):
+    event_date: str          # YYYY-MM-DD
+    event_type: str
+    title: str
+    detail: Optional[str] = None
+
+
+def _hist_dict(h: EmployeeHrHistory) -> dict:
+    return {
+        "id": h.id,
+        "emp_id": h.emp_id,
+        "event_date": str(h.event_date),
+        "event_type": h.event_type,
+        "title": h.title,
+        "detail": h.detail,
+        "recorded_by": h.recorded_by,
+        "created_at": str(h.created_at),
+    }
+
+
+@router.get("/employees/{emp_id}/history")
+def list_hr_history(
+    emp_id: str,
+    db: Session = Depends(get_db),
+    _=Depends(get_current_user),
+):
+    rows = (
+        db.query(EmployeeHrHistory)
+        .filter(EmployeeHrHistory.emp_id == emp_id)
+        .order_by(EmployeeHrHistory.event_date)
+        .all()
+    )
+    return [_hist_dict(r) for r in rows]
+
+
+@router.post("/employees/{emp_id}/history")
+def create_hr_history(
+    emp_id: str,
+    body: HrHistoryBody,
+    db: Session = Depends(get_db),
+    user=Depends(require_admin),
+):
+    emp = db.get(Employee, emp_id)
+    if not emp:
+        raise HTTPException(404, "사원 없음")
+    h = EmployeeHrHistory(
+        emp_id=emp_id,
+        event_date=date.fromisoformat(body.event_date),
+        event_type=body.event_type,
+        title=body.title,
+        detail=body.detail,
+        recorded_by=user.name or user.id,
+    )
+    db.add(h)
+    db.commit()
+    db.refresh(h)
+    return _hist_dict(h)
+
+
+@router.delete("/employees/history/{history_id}")
+def delete_hr_history(
+    history_id: int,
+    db: Session = Depends(get_db),
+    _=Depends(require_admin),
+):
+    h = db.get(EmployeeHrHistory, history_id)
+    if not h:
+        raise HTTPException(404)
+    db.delete(h)
     db.commit()
     return {"ok": True}

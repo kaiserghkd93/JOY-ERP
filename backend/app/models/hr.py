@@ -48,6 +48,7 @@ class Employee(Base):
     attendances: Mapped[list["Attendance"]] = relationship(back_populates="employee", cascade="all, delete-orphan")
     payrolls: Mapped[list["Payroll"]] = relationship(back_populates="employee", cascade="all, delete-orphan")
     kpis: Mapped[list["EmployeeKpi"]] = relationship(back_populates="employee", cascade="all, delete-orphan")
+    hr_histories: Mapped[list["EmployeeHrHistory"]] = relationship(back_populates="employee", cascade="all, delete-orphan")
 
 
 class Attendance(Base):
@@ -103,6 +104,22 @@ class EmployeeKpi(Base):
     __table_args__ = (
         __import__('sqlalchemy').UniqueConstraint('emp_id', 'year', 'month', name='uq_kpi_emp_ym'),
     )
+
+
+class EmployeeHrHistory(Base):
+    """인사기록 이력 (입사·승진·부서이동·연봉조정·포상·징계 등)"""
+    __tablename__ = "hr_employee_history"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    emp_id: Mapped[str] = mapped_column(ForeignKey("hr_employee.emp_id"), nullable=False)
+    event_date: Mapped[date] = mapped_column(Date, nullable=False)
+    event_type: Mapped[str] = mapped_column(String(30), nullable=False)   # 입사/퇴사/승진/부서이동/연봉조정/포상/징계/교육/기타
+    title: Mapped[str] = mapped_column(String(100), nullable=False)        # 간략 제목 (예: 사원→주임 승진)
+    detail: Mapped[str | None] = mapped_column(Text)                       # 상세 내용
+    recorded_by: Mapped[str | None] = mapped_column(String(50))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+
+    employee: Mapped["Employee"] = relationship(back_populates="hr_histories")
 
 
 class Payroll(Base):

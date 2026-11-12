@@ -416,10 +416,25 @@ const KPI_LABELS = {
 }
 const TABS = [
   { key: 'info', label: '기본정보' },
+  { key: 'card', label: '인사기록카드' },
   { key: 'att',  label: '출퇴근 이력' },
   { key: 'pay',  label: '급여 이력' },
   { key: 'kpi',  label: 'KPI 평가' },
 ]
+
+const HR_EVENT_TYPES = ['입사', '퇴사', '승진', '부서이동', '연봉조정', '포상', '징계', '교육이수', '자격취득', '기타']
+const HR_EVENT_COLOR = {
+  입사: ['#dcfce7', '#15803d'],
+  퇴사: ['#fee2e2', '#dc2626'],
+  승진: ['#fef9c3', '#a16207'],
+  부서이동: ['#dbeafe', '#1d4ed8'],
+  연봉조정: ['#f0fdf4', '#16a34a'],
+  포상: ['#fdf4ff', '#a21caf'],
+  징계: ['#fff1f2', '#be123c'],
+  교육이수: ['#eff6ff', '#2563eb'],
+  자격취득: ['#fefce8', '#ca8a04'],
+  기타: ['#f8fafc', '#64748b'],
+}
 
 // ── 사원 상세 모달 ─────────────────────────────────────────────────────
 function EmployeeDetailModal({ emp: initialEmp, initialTab = 'info', isAdmin, onClose, onEdit, onKpiSaved }) {
@@ -432,6 +447,12 @@ function EmployeeDetailModal({ emp: initialEmp, initialTab = 'info', isAdmin, on
   const [kpiMonth, setKpiMonth] = useState(now.getMonth() + 1)
   const [kpiForm, setKpiForm] = useState({ score_production: '', score_quality: '', score_attendance: '', score_attitude: '', grade: '', note: '' })
   const [saving, setSaving] = useState(false)
+
+  // 인사기록카드
+  const [cardData, setCardData] = useState([])
+  const [cardForm, setCardForm] = useState({ event_date: '', event_type: '입사', title: '', detail: '' })
+  const [cardSaving, setCardSaving] = useState(false)
+  const [showCardForm, setShowCardForm] = useState(false)
 
   // 출퇴근 연간 집계
   const loadAtt = useCallback(() => {
@@ -451,11 +472,18 @@ function EmployeeDetailModal({ emp: initialEmp, initialTab = 'info', isAdmin, on
       .then(r => setKpiData(r.data)).catch(() => setKpiData([]))
   }, [year, emp.emp_id])
 
+  // 인사기록카드
+  const loadCard = useCallback(() => {
+    api.get(`/hr/employees/${emp.emp_id}/history`)
+      .then(r => setCardData(r.data)).catch(() => setCardData([]))
+  }, [emp.emp_id])
+
   useEffect(() => {
     if (tab === 'att') loadAtt()
     else if (tab === 'pay') loadPay()
     else if (tab === 'kpi') loadKpi()
-  }, [tab, loadAtt, loadPay, loadKpi])
+    else if (tab === 'card') loadCard()
+  }, [tab, loadAtt, loadPay, loadKpi, loadCard])
 
   // KPI 월 변경 시 기존 데이터 채우기
   useEffect(() => {
@@ -502,6 +530,24 @@ function EmployeeDetailModal({ emp: initialEmp, initialTab = 'info', isAdmin, on
 
   const gc = (grade) => GRADE_COLOR[grade] || ['#f1f5f9', '#64748b']
   const W = (n) => n ? Math.round(Number(n)).toLocaleString() : '—'
+
+  const submitCard = async () => {
+    if (!cardForm.event_date || !cardForm.title.trim()) return alert('날짜와 제목을 입력하세요')
+    setCardSaving(true)
+    try {
+      await api.post(`/hr/employees/${emp.emp_id}/history`, cardForm)
+      setCardForm({ event_date: '', event_type: '입사', title: '', detail: '' })
+      setShowCardForm(false)
+      loadCard()
+    } catch (e) { alert(e.response?.data?.detail || e.message) }
+    finally { setCardSaving(false) }
+  }
+
+  const delCard = async (id) => {
+    if (!window.confirm('이 기록을 삭제하시겠습니까?')) return
+    await api.delete(`/hr/employees/history/${id}`).catch(e => alert(e.response?.data?.detail || e.message))
+    loadCard()
+  }
 
   /* ── 기본정보 탭 ── */
   const infoRows = [
@@ -581,6 +627,115 @@ function EmployeeDetailModal({ emp: initialEmp, initialTab = 'info', isAdmin, on
                   <span style={{ fontSize: 13, color: '#1e293b', wordBreak: 'break-all' }}>{value}</span>
                 </div>
               ))}
+            </div>
+          )}
+
+          {/* ── 인사기록카드 ── */}
+          {tab === 'card' && (
+            <div>
+              {/* 추가 버튼 */}
+              {isAdmin && (
+                <div style={{ marginBottom: 14, textAlign: 'right' }}>
+                  <button className="btn btn-primary btn-sm" onClick={() => setShowCardForm(v => !v)}>
+                    {showCardForm ? '취소' : '＋ 기록 추가'}
+                  </button>
+                </div>
+              )}
+
+              {/* 입력 폼 */}
+              {showCardForm && (
+                <div style={{ background: '#f8fafc', borderRadius: 8, padding: 14, marginBottom: 18, border: '1px solid #e2e8f0' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
+                    <div className="form-group" style={{ margin: 0 }}>
+                      <label style={{ fontSize: 12 }}>날짜 *</label>
+                      <input className="form-control" type="date" value={cardForm.event_date}
+                        onChange={e => setCardForm(f => ({ ...f, event_date: e.target.value }))} />
+                    </div>
+                    <div className="form-group" style={{ margin: 0 }}>
+                      <label style={{ fontSize: 12 }}>구분 *</label>
+                      <select className="form-control" value={cardForm.event_type}
+                        onChange={e => setCardForm(f => ({ ...f, event_type: e.target.value }))}>
+                        {HR_EVENT_TYPES.map(t => <option key={t}>{t}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                  <div className="form-group" style={{ margin: '0 0 10px' }}>
+                    <label style={{ fontSize: 12 }}>제목 *</label>
+                    <input className="form-control" value={cardForm.title} placeholder="예: 사원 → 주임 승진"
+                      onChange={e => setCardForm(f => ({ ...f, title: e.target.value }))} />
+                  </div>
+                  <div className="form-group" style={{ margin: '0 0 12px' }}>
+                    <label style={{ fontSize: 12 }}>상세 내용</label>
+                    <textarea className="form-control" value={cardForm.detail} rows={2}
+                      placeholder="상세 내용 (선택)"
+                      onChange={e => setCardForm(f => ({ ...f, detail: e.target.value }))} />
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    <button className="btn btn-primary btn-sm" onClick={submitCard} disabled={cardSaving}>
+                      {cardSaving ? '저장중...' : '저장'}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* 타임라인 */}
+              {cardData.length === 0 ? (
+                <div style={{ textAlign: 'center', color: '#94a3b8', padding: 40, fontSize: 13 }}>
+                  인사기록이 없습니다.<br />
+                  <span style={{ fontSize: 12 }}>입사일, 승진, 부서이동 등을 추가해 보세요.</span>
+                </div>
+              ) : (
+                <div style={{ position: 'relative', paddingLeft: 28 }}>
+                  {/* 타임라인 선 */}
+                  <div style={{ position: 'absolute', left: 10, top: 0, bottom: 0, width: 2, background: '#e2e8f0' }} />
+
+                  {cardData.map((h, idx) => {
+                    const [bg, color] = HR_EVENT_COLOR[h.event_type] || ['#f8fafc', '#64748b']
+                    const isFirst = idx === 0
+                    const isLast = idx === cardData.length - 1
+                    return (
+                      <div key={h.id} style={{ position: 'relative', marginBottom: isLast ? 0 : 20 }}>
+                        {/* 점 */}
+                        <div style={{
+                          position: 'absolute', left: -24, top: 10,
+                          width: 12, height: 12, borderRadius: '50%',
+                          background: color, border: '2px solid white',
+                          boxShadow: `0 0 0 2px ${color}`,
+                        }} />
+
+                        <div style={{
+                          background: bg, border: `1px solid ${color}30`,
+                          borderRadius: 8, padding: '10px 14px',
+                          position: 'relative',
+                        }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                              <span style={{
+                                padding: '2px 8px', borderRadius: 20, fontSize: 10, fontWeight: 700,
+                                background: color, color: '#fff',
+                              }}>{h.event_type}</span>
+                              <span style={{ fontSize: 13, fontWeight: 700, color: '#1e293b' }}>{h.title}</span>
+                            </div>
+                            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexShrink: 0, marginLeft: 8 }}>
+                              <span style={{ fontSize: 11, color: '#94a3b8' }}>{h.event_date}</span>
+                              {isAdmin && (
+                                <button onClick={() => delCard(h.id)}
+                                  style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', fontSize: 12, padding: '0 2px' }}>✕</button>
+                              )}
+                            </div>
+                          </div>
+                          {h.detail && (
+                            <div style={{ marginTop: 6, fontSize: 12, color: '#475569', whiteSpace: 'pre-wrap' }}>{h.detail}</div>
+                          )}
+                          {h.recorded_by && (
+                            <div style={{ marginTop: 4, fontSize: 10, color: '#94a3b8' }}>기록: {h.recorded_by}</div>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
             </div>
           )}
 
