@@ -643,9 +643,19 @@ async def upload_caps_excel(
             ci_str = times.get("in")
             co_str = times.get("out")
 
-            # 출근 없이 퇴근만 있는 날(孤立 퇴근행) → skip
+            # 출근 없이 퇴근만 있는 날
             if ci_str is None:
-                continue
+                if co_str is None:
+                    continue
+                # 생산직 토·일 → 출근 스캔 없이 퇴근만 찍힌 경우 08:30 표준 특근 처리
+                try:
+                    _chk = date(year, month, day)
+                except ValueError:
+                    continue
+                if schedule == 'production' and _chk.weekday() >= 5:
+                    ci_str = '08:30'
+                else:
+                    continue  # 평일 고립 퇴근행은 무시
 
             ci = _parse_time(ci_str)
             is_night = ci is not None and _to_minutes(ci) >= 18 * 60
