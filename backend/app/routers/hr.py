@@ -750,6 +750,7 @@ async def upload_caps_excel(
 def _do_payroll(year: int, month: int, db, emp_ids: Optional[list] = None, skip_confirmed: bool = False):
     """급여 계산 핵심 로직. CAPS 업로드 자동 재계산 및 수동 계산 엔드포인트 공용."""
     import calendar
+    from collections import defaultdict
     start = date(year, month, 1)
     end   = date(year, month, calendar.monthrange(year, month)[1])
 
@@ -758,21 +759,28 @@ def _do_payroll(year: int, month: int, db, emp_ids: Optional[list] = None, skip_
         emps = emps.filter(Employee.emp_id.in_(emp_ids))
     emps = emps.all()
 
+    # 출퇴근 전체 한 번에 조회 (N+1 방지)
+    att_q = db.query(Attendance).filter(
+        Attendance.work_date >= start, Attendance.work_date <= end,
+    )
+    if emp_ids:
+        att_q = att_q.filter(Attendance.emp_id.in_(emp_ids))
+    att_map: dict = defaultdict(list)
+    for a in att_q.all():
+        att_map[a.emp_id].append(a)
+
+    # 기존 급여 전체 한 번에 조회 (skip_confirmed 체크용)
+    pr_map: dict = {}
+    if skip_confirmed:
+        for pr in db.query(Payroll).filter(Payroll.year == year, Payroll.month == month).all():
+            pr_map[pr.emp_id] = pr
+
     results = []
     for emp in emps:
-        # 확정 상태 급여는 재계산 건너뜀 (skip_confirmed=True일 때만)
-        if skip_confirmed:
-            pr_check = db.query(Payroll).filter(
-                Payroll.emp_id == emp.emp_id, Payroll.year == year, Payroll.month == month
-            ).first()
-            if pr_check and pr_check.status == '확정':
-                continue
+        if skip_confirmed and pr_map.get(emp.emp_id) and pr_map[emp.emp_id].status == '확정':
+            continue
 
-        atts = db.query(Attendance).filter(
-            Attendance.emp_id == emp.emp_id,
-            Attendance.work_date >= start,
-            Attendance.work_date <= end,
-        ).all()
+        atts = att_map[emp.emp_id]
 
         total_ot_hrs  = sum(a.ot_hrs for a in atts)
         total_ot_min  = sum(a.ot_min for a in atts)
@@ -868,12 +876,11 @@ def _do_payroll(year: int, month: int, db, emp_ids: Optional[list] = None, skip_
         total_deduct = pen + hlt + lc + emp_ + it + lt
         net_pay = gross - total_deduct
 
-        pr = db.query(Payroll).filter(
-            Payroll.emp_id == emp.emp_id, Payroll.year == year, Payroll.month == month,
-        ).first()
+        pr = pr_map.get(emp.emp_id)
         if not pr:
             pr = Payroll(emp_id=emp.emp_id, year=year, month=month)
             db.add(pr)
+            pr_map[emp.emp_id] = pr
 
         pr.std_hrs = std_m_hrs; pr.std_hourly = std_hourly
         pr.pay_ot_hrs = total_ot_hrs; pr.pay_ot_min = total_ot_min

@@ -96,15 +96,12 @@ export default function HrPayroll() {
 
   const applyLeavesAndCalculate = async () => {
     const patches = Object.entries(leaveChoices).filter(([, v]) => v !== null)
-    for (const [id, action] of patches) {
-      if (action === '출근') {
-        await api.post(`/hr/attendance/${id}/mark-present`).catch(() => {})
-      } else {
-        await api.patch(`/hr/attendance/${id}`, { leave_type: action }).catch(() => {})
-      }
-    }
+    await Promise.all(patches.map(([id, action]) =>
+      action === '출근'
+        ? api.post(`/hr/attendance/${id}/mark-present`).catch(() => {})
+        : api.patch(`/hr/attendance/${id}`, { leave_type: action }).catch(() => {})
+    ))
     setAbsentModal(false)
-    // 모달에서 이미 확인했으므로 confirm 생략
     doCalculate(true)
   }
 

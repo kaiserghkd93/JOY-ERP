@@ -430,7 +430,7 @@ function BulkHolidayModal({ year, month, employees, onClose, onSaved }) {
     return list
   })()
 
-  const prodEmps = employees.filter(e => e.dept && e.dept.includes('생산'))
+  const prodEmps = employees.filter(e => e.is_active !== false)
 
   // { [date]: { [emp_id]: bool } }
   const [sel, setSel] = useState({})
