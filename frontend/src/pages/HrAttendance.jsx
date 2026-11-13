@@ -12,6 +12,7 @@ export default function HrAttendance() {
   const [detail, setDetail] = useState([])
   const [viewMode, setViewMode] = useState('summary')  // summary | detail
   const [modal, setModal] = useState(null)
+  const [bulkHolidayModal, setBulkHolidayModal] = useState(false)
   const [uploadResult, setUploadResult] = useState(null)
   const fileRef = useRef()
 
@@ -98,6 +99,13 @@ export default function HrAttendance() {
           </div>
         </div>
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
+          <button
+            className="btn"
+            style={{ background: '#7c3aed', color: '#fff', border: 'none' }}
+            onClick={() => setBulkHolidayModal(true)}
+          >
+            주말 특근 등록
+          </button>
           <button
             className="btn"
             style={{ background: '#3b82f6', color: '#fff', border: 'none' }}
@@ -291,6 +299,17 @@ export default function HrAttendance() {
           onSaved={() => { setModal(null); loadDetail() }}
         />
       )}
+
+      {/* 주말 특근 일괄 등록 모달 */}
+      {bulkHolidayModal && (
+        <BulkHolidayModal
+          year={year}
+          month={month}
+          employees={employees}
+          onClose={() => setBulkHolidayModal(false)}
+          onSaved={() => { setBulkHolidayModal(false); loadSummary(); loadDetail() }}
+        />
+      )}
     </div>
   )
 }
@@ -387,6 +406,151 @@ function AttendanceModal({ employees, onClose, onSaved }) {
         <div className="modal-footer">
           <button className="btn btn-outline" onClick={onClose}>취소</button>
           <button className="btn btn-primary" onClick={submit}>저장</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function BulkHolidayModal({ year, month, employees, onClose, onSaved }) {
+  // 해당 월의 토·일 목록 자동 계산
+  const weekends = (() => {
+    const list = []
+    const daysInMonth = new Date(year, month, 0).getDate()
+    for (let d = 1; d <= daysInMonth; d++) {
+      const dow = new Date(year, month - 1, d).getDay()
+      if (dow === 0 || dow === 6) {
+        list.push({
+          date: `${year}-${String(month).padStart(2,'0')}-${String(d).padStart(2,'0')}`,
+          day: d,
+          dow: dow === 6 ? '토' : '일',
+        })
+      }
+    }
+    return list
+  })()
+
+  const prodEmps = employees.filter(e => e.dept && e.dept.includes('생산'))
+
+  // { [date]: { [emp_id]: bool } }
+  const [sel, setSel] = useState({})
+  const [checkOut, setCheckOut] = useState('17:30')
+  const [loading, setLoading] = useState(false)
+
+  const toggleEmp = (date, empId) =>
+    setSel(prev => ({ ...prev, [date]: { ...(prev[date] || {}), [empId]: !(prev[date]?.[empId]) } }))
+
+  const toggleAllDate = (date, on) => {
+    const m = {}
+    prodEmps.forEach(e => { m[e.emp_id] = on })
+    setSel(prev => ({ ...prev, [date]: m }))
+  }
+
+  const totalCount = Object.values(sel).reduce(
+    (sum, dm) => sum + Object.values(dm).filter(Boolean).length, 0
+  )
+
+  const submit = async () => {
+    setLoading(true)
+    let created = 0, updated = 0
+    try {
+      for (const [date, dm] of Object.entries(sel)) {
+        const ids = Object.entries(dm).filter(([,v]) => v).map(([k]) => k)
+        if (!ids.length) continue
+        const r = await api.post('/hr/attendance/bulk-holiday', {
+          year, month, work_date: date, emp_ids: ids, check_out: checkOut,
+        })
+        created += r.data.created
+        updated += r.data.updated
+      }
+      alert(`등록 완료: 신규 ${created}건 / 수정 ${updated}건`)
+      onSaved()
+    } catch (e) {
+      alert('저장 실패: ' + (e.response?.data?.detail || e.message))
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="modal-overlay">
+      <div className="modal" style={{ maxWidth: 580, maxHeight: '88vh', display: 'flex', flexDirection: 'column' }}>
+        {/* 헤더 */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+          <h3 style={{ margin: 0, fontSize: 16 }}>{year}년 {month}월 주말 특근 일괄 등록</h3>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontSize: 12, color: '#64748b' }}>퇴근시간</span>
+            <input
+              className="form-control" style={{ width: 80, padding: '4px 8px', fontSize: 13 }}
+              value={checkOut} onChange={e => setCheckOut(e.target.value)} placeholder="17:30"
+            />
+          </div>
+        </div>
+
+        {/* 날짜별 직원 선택 */}
+        <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {weekends.map(({ date, day, dow }) => {
+            const dateSel = sel[date] || {}
+            const checkedCount = Object.values(dateSel).filter(Boolean).length
+            return (
+              <div key={date} style={{ border: '1px solid #e2e8f0', borderRadius: 8, overflow: 'hidden' }}>
+                {/* 날짜 헤더 */}
+                <div style={{
+                  background: dow === '토' ? '#eff6ff' : '#fdf4ff',
+                  padding: '7px 12px',
+                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                }}>
+                  <span style={{ fontWeight: 700, fontSize: 14, color: dow === '토' ? '#1d4ed8' : '#7c3aed' }}>
+                    {month}월 {day}일 ({dow}요일)
+                    {checkedCount > 0 && (
+                      <span style={{ marginLeft: 8, fontSize: 12, fontWeight: 600,
+                        color: '#16a34a', background: '#dcfce7', padding: '1px 7px', borderRadius: 20 }}>
+                        {checkedCount}명
+                      </span>
+                    )}
+                  </span>
+                  <div style={{ display: 'flex', gap: 5 }}>
+                    <button className="btn btn-sm btn-outline" style={{ fontSize: 11, padding: '2px 8px' }}
+                      onClick={() => toggleAllDate(date, true)}>전체</button>
+                    <button className="btn btn-sm btn-outline" style={{ fontSize: 11, padding: '2px 8px' }}
+                      onClick={() => toggleAllDate(date, false)}>해제</button>
+                  </div>
+                </div>
+                {/* 직원 칩 */}
+                <div style={{ padding: '8px 12px', display: 'flex', flexWrap: 'wrap', gap: 6, minHeight: 44 }}>
+                  {prodEmps.length === 0 && (
+                    <span style={{ fontSize: 12, color: '#94a3b8' }}>생산부 직원 없음</span>
+                  )}
+                  {prodEmps.map(e => {
+                    const on = !!dateSel[e.emp_id]
+                    return (
+                      <button key={e.emp_id} onClick={() => toggleEmp(date, e.emp_id)} style={{
+                        padding: '4px 12px', borderRadius: 20, fontSize: 12, cursor: 'pointer',
+                        border: `1px solid ${on ? '#86efac' : '#e2e8f0'}`,
+                        background: on ? '#dcfce7' : '#f8fafc',
+                        fontWeight: on ? 700 : 400,
+                        color: on ? '#16a34a' : '#374151',
+                        transition: 'all .15s',
+                      }}>
+                        {e.name}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+
+        <div style={{ marginTop: 8, fontSize: 11, color: '#94a3b8' }}>
+          출근 08:30 고정 · 클릭으로 직원 선택 · 총 {totalCount}건 등록 예정
+        </div>
+        <div className="modal-footer">
+          <button className="btn btn-outline" onClick={onClose}>취소</button>
+          <button className="btn btn-primary" style={{ background: '#7c3aed', border: 'none' }}
+            onClick={submit} disabled={loading || totalCount === 0}>
+            {loading ? '등록 중...' : `총 ${totalCount}건 특근 등록`}
+          </button>
         </div>
       </div>
     </div>

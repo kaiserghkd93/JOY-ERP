@@ -20,7 +20,7 @@ from decimal import Decimal, ROUND_HALF_UP
 from typing import Optional
 from io import BytesIO
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query
+from fastapi import APIRouter, Body, Depends, HTTPException, UploadFile, File, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import func, Integer, cast
 from pydantic import BaseModel
@@ -1310,6 +1310,57 @@ def mark_attendance_present(
 
     db.commit()
     return {"shift": "night" if is_night else "day"}
+
+
+# ── 주말 특근 일괄 등록 ─────────────────────────────────────────────────
+
+@router.post("/attendance/bulk-holiday")
+def bulk_holiday_entry(
+    year: int = Body(...),
+    month: int = Body(...),
+    work_date: str = Body(...),
+    emp_ids: list[str] = Body(...),
+    check_out: str = Body("17:30"),
+    db: Session = Depends(get_db), _=Depends(get_current_user),
+):
+    """주말 특근 일괄 등록 — 선택한 직원들에게 휴일근로 레코드 생성/갱신."""
+    from datetime import date as _date2
+    try:
+        wd = _date2.fromisoformat(work_date)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="날짜 형식 오류 (YYYY-MM-DD)")
+
+    co = _parse_time(check_out)
+    calc = _calc_production(_PROD_IN, co, is_holiday=True)
+
+    created = updated = 0
+    for emp_id in emp_ids:
+        fields = dict(
+            check_in=calc['check_in'],
+            check_out=calc['check_out'],
+            work_hrs=calc['work_hrs'],
+            ot_hrs=0, ot_min=0,
+            night_hrs=0, night_min=0,
+            holiday_hrs=calc['holiday_hrs'],
+            holiday_min=calc['holiday_min'],
+            holiday=True,
+            absent=False, late=False,
+            source="manual",
+        )
+        existing = db.query(Attendance).filter(
+            Attendance.emp_id   == emp_id,
+            Attendance.work_date == wd,
+        ).first()
+        if existing:
+            for k, v in fields.items():
+                setattr(existing, k, v)
+            updated += 1
+        else:
+            db.add(Attendance(emp_id=emp_id, work_date=wd, **fields))
+            created += 1
+
+    db.commit()
+    return {"created": created, "updated": updated}
 
 
 # ── 월간 근무 요약 ─────────────────────────────────────────────────────
