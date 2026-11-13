@@ -146,7 +146,7 @@ def list_employees(active_only: bool = True, db: Session = Depends(get_db), _=De
     try:
         q = db.query(Employee)
         if active_only:
-            q = q.filter(Employee.is_active == True)
+            q = q.filter(Employee.is_active.isnot(False))  # NULL도 재직으로 간주
         return [_emp_dict(e) for e in q.order_by(Employee.emp_id).all()]
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}\n{traceback.format_exc()}")
@@ -754,7 +754,7 @@ def _do_payroll(year: int, month: int, db, emp_ids: Optional[list] = None, skip_
     start = date(year, month, 1)
     end   = date(year, month, calendar.monthrange(year, month)[1])
 
-    emps = db.query(Employee).filter(Employee.is_active == True)
+    emps = db.query(Employee).filter(Employee.is_active.isnot(False))
     if emp_ids:
         emps = emps.filter(Employee.emp_id.in_(emp_ids))
     emps = emps.all()
