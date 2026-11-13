@@ -769,11 +769,10 @@ def _do_payroll(year: int, month: int, db, emp_ids: Optional[list] = None, skip_
     for a in att_q.all():
         att_map[a.emp_id].append(a)
 
-    # 기존 급여 전체 한 번에 조회 (skip_confirmed 체크용)
+    # 기존 급여 전체 한 번에 조회 (upsert + skip_confirmed 체크 공용)
     pr_map: dict = {}
-    if skip_confirmed:
-        for pr in db.query(Payroll).filter(Payroll.year == year, Payroll.month == month).all():
-            pr_map[pr.emp_id] = pr
+    for pr in db.query(Payroll).filter(Payroll.year == year, Payroll.month == month).all():
+        pr_map[pr.emp_id] = pr
 
     results = []
     for emp in emps:
