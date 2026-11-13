@@ -13,6 +13,7 @@ export default function HrAttendance() {
   const [viewMode, setViewMode] = useState('summary')  // summary | detail
   const [modal, setModal] = useState(null)
   const [bulkHolidayModal, setBulkHolidayModal] = useState(false)
+  const [overtimeAppModal, setOvertimeAppModal] = useState(false)
   const [uploadResult, setUploadResult] = useState(null)
   const fileRef = useRef()
 
@@ -99,6 +100,13 @@ export default function HrAttendance() {
           </div>
         </div>
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
+          <button
+            className="btn"
+            style={{ background: '#059669', color: '#fff', border: 'none' }}
+            onClick={() => setOvertimeAppModal(true)}
+          >
+            특근신청 관리
+          </button>
           <button
             className="btn"
             style={{ background: '#7c3aed', color: '#fff', border: 'none' }}
@@ -300,6 +308,16 @@ export default function HrAttendance() {
         />
       )}
 
+      {/* 특근신청 관리 모달 */}
+      {overtimeAppModal && (
+        <OvertimeAppModal
+          year={year}
+          month={month}
+          employees={employees}
+          onClose={() => setOvertimeAppModal(false)}
+        />
+      )}
+
       {/* 주말 특근 일괄 등록 모달 */}
       {bulkHolidayModal && (
         <BulkHolidayModal
@@ -413,7 +431,6 @@ function AttendanceModal({ employees, onClose, onSaved }) {
 }
 
 function BulkHolidayModal({ year, month, employees, onClose, onSaved }) {
-  // 해당 월의 토·일 목록 자동 계산
   const weekends = (() => {
     const list = []
     const daysInMonth = new Date(year, month, 0).getDate()
@@ -422,27 +439,88 @@ function BulkHolidayModal({ year, month, employees, onClose, onSaved }) {
       if (dow === 0 || dow === 6) {
         list.push({
           date: `${year}-${String(month).padStart(2,'0')}-${String(d).padStart(2,'0')}`,
-          day: d,
-          dow: dow === 6 ? '토' : '일',
+          day: d, dow: dow === 6 ? '토' : '일',
         })
       }
     }
     return list
   })()
 
-  const prodEmps = employees.filter(e => e.is_active !== false)
+  const empMap = Object.fromEntries(employees.map(e => [e.emp_id, e]))
 
   // { [date]: { [emp_id]: bool } }
   const [sel, setSel] = useState({})
+  // { [date]: Set<emp_id> } — 특근신청 등록된 인원
+  const [appByDate, setAppByDate] = useState({})
+  // { [date]: Set<emp_id> } — 이미 출근 기록 있는 인원
+  const [existByDate, setExistByDate] = useState({})
+  // { [date]: Set<emp_id> } — 모든 후보 emp_id (신청 + 기존)
+  const [candidateByDate, setCandidateByDate] = useState({})
+  const [initDone, setInitDone] = useState(false)
   const [checkOut, setCheckOut] = useState('17:30')
   const [loading, setLoading] = useState(false)
+  const [showAll, setShowAll] = useState(false) // 전체 직원 토글
+
+  const weekendDates = new Set(weekends.map(w => w.date))
+
+  useEffect(() => {
+    const pad = n => String(n).padStart(2, '0')
+    Promise.all([
+      api.get(`/hr/overtime-applications?year=${year}&month=${month}`),
+      api.get(`/hr/attendance?year=${year}&month=${month}`),
+    ]).then(([appRes, attRes]) => {
+      // 특근신청 — 날짜별 emp_id set
+      const apps = {}
+      appRes.data.forEach(a => {
+        if (!apps[a.work_date]) apps[a.work_date] = new Set()
+        apps[a.work_date].add(a.emp_id)
+      })
+
+      // 기존 출근 기록 — 주말 날짜만
+      const exist = {}
+      attRes.data.forEach(a => {
+        if (!weekendDates.has(a.work_date)) return
+        if (!exist[a.work_date]) exist[a.work_date] = new Set()
+        exist[a.work_date].add(a.emp_id)
+      })
+
+      // 후보 = 신청 ∪ 기존
+      const cand = {}
+      weekends.forEach(({ date }) => {
+        const s = new Set([...(apps[date] || []), ...(exist[date] || [])])
+        cand[date] = s
+      })
+
+      setAppByDate(apps)
+      setExistByDate(exist)
+      setCandidateByDate(cand)
+
+      // 기존 기록 있는 인원 pre-select
+      const initSel = {}
+      Object.entries(exist).forEach(([date, ids]) => {
+        initSel[date] = {}
+        ids.forEach(id => { initSel[date][id] = true })
+      })
+      setSel(initSel)
+      setInitDone(true)
+    }).catch(() => {
+      setInitDone(true) // 실패 시 fallback: 빈 모달
+    })
+  }, [year, month])
+
+  const getDisplayEmps = (date) => {
+    if (showAll) return employees.filter(e => e.is_active !== false)
+    const cands = candidateByDate[date] || new Set()
+    if (cands.size === 0) return []
+    return employees.filter(e => cands.has(e.emp_id))
+  }
 
   const toggleEmp = (date, empId) =>
     setSel(prev => ({ ...prev, [date]: { ...(prev[date] || {}), [empId]: !(prev[date]?.[empId]) } }))
 
   const toggleAllDate = (date, on) => {
     const m = {}
-    prodEmps.forEach(e => { m[e.emp_id] = on })
+    getDisplayEmps(date).forEach(e => { m[e.emp_id] = on })
     setSel(prev => ({ ...prev, [date]: m }))
   }
 
@@ -474,83 +552,286 @@ function BulkHolidayModal({ year, month, employees, onClose, onSaved }) {
 
   return (
     <div className="modal-overlay">
-      <div className="modal" style={{ maxWidth: 580, maxHeight: '88vh', display: 'flex', flexDirection: 'column' }}>
+      <div className="modal" style={{ maxWidth: 620, maxHeight: '88vh', display: 'flex', flexDirection: 'column' }}>
         {/* 헤더 */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
           <h3 style={{ margin: 0, fontSize: 16 }}>{year}년 {month}월 주말 특근 일괄 등록</h3>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ fontSize: 12, color: '#64748b' }}>퇴근시간</span>
+            <label style={{ fontSize: 11, color: '#64748b', display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}>
+              <input type="checkbox" checked={showAll} onChange={e => setShowAll(e.target.checked)} />
+              전체직원
+            </label>
+            <span style={{ fontSize: 12, color: '#64748b' }}>퇴근</span>
             <input
-              className="form-control" style={{ width: 80, padding: '4px 8px', fontSize: 13 }}
+              className="form-control" style={{ width: 72, padding: '4px 8px', fontSize: 13 }}
               value={checkOut} onChange={e => setCheckOut(e.target.value)} placeholder="17:30"
             />
           </div>
         </div>
 
-        {/* 날짜별 직원 선택 */}
-        <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {weekends.map(({ date, day, dow }) => {
-            const dateSel = sel[date] || {}
-            const checkedCount = Object.values(dateSel).filter(Boolean).length
-            return (
-              <div key={date} style={{ border: '1px solid #e2e8f0', borderRadius: 8, overflow: 'hidden' }}>
-                {/* 날짜 헤더 */}
-                <div style={{
-                  background: dow === '토' ? '#eff6ff' : '#fdf4ff',
-                  padding: '7px 12px',
-                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                }}>
-                  <span style={{ fontWeight: 700, fontSize: 14, color: dow === '토' ? '#1d4ed8' : '#7c3aed' }}>
-                    {month}월 {day}일 ({dow}요일)
-                    {checkedCount > 0 && (
-                      <span style={{ marginLeft: 8, fontSize: 12, fontWeight: 600,
-                        color: '#16a34a', background: '#dcfce7', padding: '1px 7px', borderRadius: 20 }}>
-                        {checkedCount}명
+        {!initDone && (
+          <div style={{ textAlign: 'center', padding: 24, color: '#94a3b8', fontSize: 13 }}>
+            데이터 로딩 중...
+          </div>
+        )}
+
+        {initDone && (
+          <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {weekends.map(({ date, day, dow }) => {
+              const dateSel = sel[date] || {}
+              const checkedCount = Object.values(dateSel).filter(Boolean).length
+              const dispEmps = getDisplayEmps(date)
+              const apps = appByDate[date] || new Set()
+              const exist = existByDate[date] || new Set()
+
+              return (
+                <div key={date} style={{ border: '1px solid #e2e8f0', borderRadius: 8, overflow: 'hidden' }}>
+                  <div style={{
+                    background: dow === '토' ? '#eff6ff' : '#fdf4ff',
+                    padding: '7px 12px',
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                  }}>
+                    <span style={{ fontWeight: 700, fontSize: 14, color: dow === '토' ? '#1d4ed8' : '#7c3aed' }}>
+                      {month}월 {day}일 ({dow}요일)
+                      {checkedCount > 0 && (
+                        <span style={{ marginLeft: 8, fontSize: 12, fontWeight: 600,
+                          color: '#16a34a', background: '#dcfce7', padding: '1px 7px', borderRadius: 20 }}>
+                          {checkedCount}명
+                        </span>
+                      )}
+                    </span>
+                    <div style={{ display: 'flex', gap: 5 }}>
+                      <button className="btn btn-sm btn-outline" style={{ fontSize: 11, padding: '2px 8px' }}
+                        onClick={() => toggleAllDate(date, true)}>전체</button>
+                      <button className="btn btn-sm btn-outline" style={{ fontSize: 11, padding: '2px 8px' }}
+                        onClick={() => toggleAllDate(date, false)}>해제</button>
+                    </div>
+                  </div>
+
+                  <div style={{ padding: '8px 12px', display: 'flex', flexWrap: 'wrap', gap: 6, minHeight: 44 }}>
+                    {dispEmps.length === 0 ? (
+                      <span style={{ fontSize: 12, color: '#94a3b8', alignSelf: 'center' }}>
+                        {showAll ? '직원 없음' : '특근신청 없음 · 위 "전체직원" 체크 시 수동 선택 가능'}
                       </span>
-                    )}
-                  </span>
-                  <div style={{ display: 'flex', gap: 5 }}>
-                    <button className="btn btn-sm btn-outline" style={{ fontSize: 11, padding: '2px 8px' }}
-                      onClick={() => toggleAllDate(date, true)}>전체</button>
-                    <button className="btn btn-sm btn-outline" style={{ fontSize: 11, padding: '2px 8px' }}
-                      onClick={() => toggleAllDate(date, false)}>해제</button>
+                    ) : dispEmps.map(e => {
+                      const on = !!dateSel[e.emp_id]
+                      const isApp = apps.has(e.emp_id)
+                      const isExist = exist.has(e.emp_id)
+                      const tag = isExist ? '기존' : isApp ? '신청' : null
+                      return (
+                        <button key={e.emp_id} onClick={() => toggleEmp(date, e.emp_id)} style={{
+                          padding: '4px 10px', borderRadius: 20, fontSize: 12, cursor: 'pointer',
+                          border: `1px solid ${on ? '#86efac' : isApp ? '#fcd34d' : '#e2e8f0'}`,
+                          background: on ? '#dcfce7' : isApp ? '#fefce8' : '#f8fafc',
+                          fontWeight: on ? 700 : 400,
+                          color: on ? '#16a34a' : '#374151',
+                          transition: 'all .15s',
+                          position: 'relative',
+                        }}>
+                          {e.name}
+                          {tag && (
+                            <span style={{
+                              marginLeft: 4, fontSize: 9, fontWeight: 700,
+                              color: isExist ? '#6366f1' : '#d97706',
+                              background: isExist ? '#e0e7ff' : '#fef3c7',
+                              padding: '0 4px', borderRadius: 6,
+                            }}>{tag}</span>
+                          )}
+                        </button>
+                      )
+                    })}
                   </div>
                 </div>
-                {/* 직원 칩 */}
-                <div style={{ padding: '8px 12px', display: 'flex', flexWrap: 'wrap', gap: 6, minHeight: 44 }}>
-                  {prodEmps.length === 0 && (
-                    <span style={{ fontSize: 12, color: '#94a3b8' }}>생산부 직원 없음</span>
-                  )}
-                  {prodEmps.map(e => {
-                    const on = !!dateSel[e.emp_id]
-                    return (
-                      <button key={e.emp_id} onClick={() => toggleEmp(date, e.emp_id)} style={{
-                        padding: '4px 12px', borderRadius: 20, fontSize: 12, cursor: 'pointer',
-                        border: `1px solid ${on ? '#86efac' : '#e2e8f0'}`,
-                        background: on ? '#dcfce7' : '#f8fafc',
-                        fontWeight: on ? 700 : 400,
-                        color: on ? '#16a34a' : '#374151',
-                        transition: 'all .15s',
-                      }}>
-                        {e.name}
-                      </button>
-                    )
-                  })}
-                </div>
-              </div>
-            )
-          })}
-        </div>
+              )
+            })}
+          </div>
+        )}
 
         <div style={{ marginTop: 8, fontSize: 11, color: '#94a3b8' }}>
-          출근 08:30 고정 · 클릭으로 직원 선택 · 총 {totalCount}건 등록 예정
+          출근 08:30 고정 · <span style={{ color: '#d97706' }}>■ 신청</span> = 특근신청서 등록됨 · <span style={{ color: '#6366f1' }}>■ 기존</span> = 이미 등록된 기록
         </div>
         <div className="modal-footer">
           <button className="btn btn-outline" onClick={onClose}>취소</button>
           <button className="btn btn-primary" style={{ background: '#7c3aed', border: 'none' }}
-            onClick={submit} disabled={loading || totalCount === 0}>
+            onClick={submit} disabled={loading || totalCount === 0 || !initDone}>
             {loading ? '등록 중...' : `총 ${totalCount}건 특근 등록`}
           </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+
+// ── 특근신청 관리 모달 ──────────────────────────────────────────────────
+function OvertimeAppModal({ year, month, employees, onClose }) {
+  const weekends = (() => {
+    const list = []
+    const daysInMonth = new Date(year, month, 0).getDate()
+    for (let d = 1; d <= daysInMonth; d++) {
+      const dow = new Date(year, month - 1, d).getDay()
+      if (dow === 0 || dow === 6) {
+        list.push({
+          date: `${year}-${String(month).padStart(2,'0')}-${String(d).padStart(2,'0')}`,
+          day: d, dow: dow === 6 ? '토' : '일',
+        })
+      }
+    }
+    return list
+  })()
+
+  const activeEmps = employees.filter(e => e.is_active !== false)
+  // { [date]: Set<emp_id> }
+  const [appByDate, setAppByDate] = useState({})
+  const [nocapsByDate, setNocapsByDate] = useState({}) // 52시간 비캡스 표시용
+  const [loading, setLoading] = useState(false)
+  const [saving, setSaving] = useState(null) // 저장 중인 date
+
+  const load = () => {
+    setLoading(true)
+    api.get(`/hr/overtime-applications?year=${year}&month=${month}`)
+      .then(r => {
+        const apps = {}
+        const nocaps = {}
+        r.data.forEach(a => {
+          if (!apps[a.work_date]) apps[a.work_date] = new Set()
+          apps[a.work_date].add(a.emp_id)
+          if (a.no_caps) {
+            if (!nocaps[a.work_date]) nocaps[a.work_date] = new Set()
+            nocaps[a.work_date].add(a.emp_id)
+          }
+        })
+        setAppByDate(apps)
+        setNocapsByDate(nocaps)
+      })
+      .finally(() => setLoading(false))
+  }
+
+  useEffect(() => { load() }, [year, month])
+
+  const toggleEmp = (date, empId) => {
+    setAppByDate(prev => {
+      const s = new Set(prev[date] || [])
+      s.has(empId) ? s.delete(empId) : s.add(empId)
+      return { ...prev, [date]: s }
+    })
+  }
+
+  const saveDate = async (date) => {
+    setSaving(date)
+    try {
+      const ids = [...(appByDate[date] || [])]
+      await api.post('/hr/overtime-applications/bulk', {
+        work_date: date, emp_ids: ids, no_caps: false,
+      })
+    } catch (e) {
+      alert('저장 실패: ' + (e.response?.data?.detail || e.message))
+    } finally {
+      setSaving(null)
+    }
+  }
+
+  const toggleNoCaps = (date, empId) => {
+    setNocapsByDate(prev => {
+      const s = new Set(prev[date] || [])
+      s.has(empId) ? s.delete(empId) : s.add(empId)
+      return { ...prev, [date]: s }
+    })
+  }
+
+  return (
+    <div className="modal-overlay">
+      <div className="modal" style={{ maxWidth: 640, maxHeight: '88vh', display: 'flex', flexDirection: 'column' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+          <h3 style={{ margin: 0, fontSize: 16 }}>{year}년 {month}월 특근신청 관리</h3>
+          <span style={{ fontSize: 12, color: '#64748b' }}>클릭으로 신청/취소 · 저장 버튼으로 확정</span>
+        </div>
+
+        {loading && <div style={{ textAlign: 'center', padding: 24, color: '#94a3b8' }}>로딩 중...</div>}
+
+        {!loading && (
+          <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {weekends.map(({ date, day, dow }) => {
+              const apps = appByDate[date] || new Set()
+              const nocaps = nocapsByDate[date] || new Set()
+              return (
+                <div key={date} style={{ border: '1px solid #e2e8f0', borderRadius: 8, overflow: 'hidden' }}>
+                  <div style={{
+                    background: dow === '토' ? '#eff6ff' : '#fdf4ff',
+                    padding: '7px 12px',
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                  }}>
+                    <span style={{ fontWeight: 700, fontSize: 14, color: dow === '토' ? '#1d4ed8' : '#7c3aed' }}>
+                      {month}월 {day}일 ({dow}요일)
+                      {apps.size > 0 && (
+                        <span style={{ marginLeft: 8, fontSize: 12, fontWeight: 600,
+                          color: '#059669', background: '#d1fae5', padding: '1px 7px', borderRadius: 20 }}>
+                          {apps.size}명 신청
+                        </span>
+                      )}
+                    </span>
+                    <button
+                      className="btn btn-sm"
+                      style={{ background: '#059669', color: '#fff', border: 'none', fontSize: 11, padding: '3px 10px' }}
+                      onClick={() => saveDate(date)}
+                      disabled={saving === date}
+                    >
+                      {saving === date ? '저장 중...' : '저장'}
+                    </button>
+                  </div>
+
+                  <div style={{ padding: '8px 12px', display: 'flex', flexWrap: 'wrap', gap: 6, minHeight: 44 }}>
+                    {activeEmps.map(e => {
+                      const on = apps.has(e.emp_id)
+                      const isNocaps = nocaps.has(e.emp_id)
+                      return (
+                        <button key={e.emp_id} onClick={() => toggleEmp(date, e.emp_id)} style={{
+                          padding: '4px 10px', borderRadius: 20, fontSize: 12, cursor: 'pointer',
+                          border: `1px solid ${on ? '#86efac' : '#e2e8f0'}`,
+                          background: on ? (isNocaps ? '#fef3c7' : '#dcfce7') : '#f8fafc',
+                          fontWeight: on ? 700 : 400,
+                          color: on ? (isNocaps ? '#92400e' : '#16a34a') : '#374151',
+                          transition: 'all .15s',
+                        }}>
+                          {e.name}
+                          {on && isNocaps && (
+                            <span style={{ marginLeft: 4, fontSize: 9, color: '#d97706', fontWeight: 700 }}>52H</span>
+                          )}
+                        </button>
+                      )
+                    })}
+                  </div>
+
+                  {apps.size > 0 && (
+                    <div style={{ padding: '0 12px 8px', display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                      <span style={{ fontSize: 11, color: '#64748b', alignSelf: 'center' }}>52시간 비캡스:</span>
+                      {[...apps].map(empId => {
+                        const emp = employees.find(e => e.emp_id === empId)
+                        const isNc = nocaps.has(empId)
+                        return (
+                          <button key={empId} onClick={() => toggleNoCaps(date, empId)} style={{
+                            padding: '2px 8px', borderRadius: 20, fontSize: 11, cursor: 'pointer',
+                            border: `1px solid ${isNc ? '#fcd34d' : '#e2e8f0'}`,
+                            background: isNc ? '#fef3c7' : '#f8fafc',
+                            color: isNc ? '#92400e' : '#94a3b8',
+                          }}>
+                            {emp?.name || empId}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        )}
+
+        <div style={{ marginTop: 8, fontSize: 11, color: '#94a3b8' }}>
+          직원 클릭 → 신청/취소 · 52시간 비캡스 체크 → 주황색 표시 · 각 날짜별 "저장" 클릭 필요
+        </div>
+        <div className="modal-footer">
+          <button className="btn btn-outline" onClick={onClose}>닫기</button>
         </div>
       </div>
     </div>

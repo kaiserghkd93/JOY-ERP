@@ -126,6 +126,26 @@ class EmployeeHrHistory(Base):
     employee: Mapped["Employee"] = relationship(back_populates="hr_histories")
 
 
+class OvertimeApplication(Base):
+    """특근신청 — 주말/공휴일 특근 신청 관리 (캡스 미찍힌 52시간 케이스 포함)"""
+    __tablename__ = "hr_overtime_application"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    emp_id: Mapped[str] = mapped_column(ForeignKey("hr_employee.emp_id"), nullable=False)
+    work_date: Mapped[date] = mapped_column(Date, nullable=False)
+    status: Mapped[str] = mapped_column(String(10), default="신청")   # 신청 / 승인 / 반려 / 처리완료
+    no_caps: Mapped[bool] = mapped_column(Boolean, default=False)      # True = 52시간 초과로 캡스 미찍힘
+    reason: Mapped[str | None] = mapped_column(String(200))
+    note: Mapped[str | None] = mapped_column(String(200))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+
+    employee: Mapped["Employee"] = relationship()
+
+    __table_args__ = (
+        __import__('sqlalchemy').UniqueConstraint('emp_id', 'work_date', name='uq_ot_app_emp_date'),
+    )
+
+
 class Payroll(Base):
     """월 급여 명세"""
     __tablename__ = "hr_payroll"

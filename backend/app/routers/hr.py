@@ -27,7 +27,7 @@ from pydantic import BaseModel
 
 from app.database import get_db
 from app.routers.auth import get_current_user, require_admin, require_admin_or_accounting
-from app.models.hr import Employee, Attendance, Payroll, EmployeeKpi, EmployeeHrHistory
+from app.models.hr import Employee, Attendance, Payroll, EmployeeKpi, EmployeeHrHistory, OvertimeApplication
 
 router = APIRouter(prefix="/hr", tags=["인사"])
 
@@ -1368,6 +1368,110 @@ def bulk_holiday_entry(
 
     db.commit()
     return {"created": created, "updated": updated}
+
+
+# ── 특근신청 관리 ─────────────────────────────────────────────────────
+
+@router.get("/overtime-applications")
+def list_overtime_applications(
+    year: int = Query(...), month: int = Query(...),
+    db: Session = Depends(get_db), _=Depends(get_current_user),
+):
+    """월별 특근신청 목록 조회"""
+    from datetime import date as _date2
+    import calendar
+    first = _date2(year, month, 1)
+    last = _date2(year, month, calendar.monthrange(year, month)[1])
+    apps = (
+        db.query(OvertimeApplication)
+        .filter(OvertimeApplication.work_date >= first, OvertimeApplication.work_date <= last)
+        .order_by(OvertimeApplication.work_date, OvertimeApplication.emp_id)
+        .all()
+    )
+    return [
+        {
+            "id": a.id,
+            "emp_id": a.emp_id,
+            "emp_name": a.employee.name if a.employee else a.emp_id,
+            "work_date": a.work_date.isoformat(),
+            "status": a.status,
+            "no_caps": a.no_caps,
+            "reason": a.reason,
+            "note": a.note,
+        }
+        for a in apps
+    ]
+
+
+@router.post("/overtime-applications/bulk")
+def bulk_upsert_overtime_applications(
+    work_date: str = Body(...),
+    emp_ids: list[str] = Body(...),
+    no_caps: bool = Body(False),
+    reason: Optional[str] = Body(None),
+    db: Session = Depends(get_db), _=Depends(get_current_user),
+):
+    """날짜별 특근신청 일괄 등록 (upsert). emp_ids 에 없는 기존 신청은 삭제."""
+    from datetime import date as _date2
+    wd = _date2.fromisoformat(work_date)
+
+    existing = {
+        a.emp_id: a
+        for a in db.query(OvertimeApplication).filter(OvertimeApplication.work_date == wd).all()
+    }
+
+    created = updated = deleted = 0
+    new_set = set(emp_ids)
+
+    for emp_id in new_set:
+        if emp_id in existing:
+            a = existing[emp_id]
+            a.no_caps = no_caps
+            a.reason = reason
+            a.status = "신청"
+            updated += 1
+        else:
+            db.add(OvertimeApplication(emp_id=emp_id, work_date=wd, no_caps=no_caps, reason=reason))
+            created += 1
+
+    for emp_id, a in existing.items():
+        if emp_id not in new_set:
+            db.delete(a)
+            deleted += 1
+
+    db.commit()
+    return {"created": created, "updated": updated, "deleted": deleted}
+
+
+@router.patch("/overtime-applications/{app_id}")
+def patch_overtime_application(
+    app_id: int,
+    status: Optional[str] = Body(None),
+    note: Optional[str] = Body(None),
+    db: Session = Depends(get_db), _=Depends(get_current_user),
+):
+    app = db.query(OvertimeApplication).get(app_id)
+    if not app:
+        raise HTTPException(status_code=404)
+    if status is not None:
+        app.status = status
+    if note is not None:
+        app.note = note
+    db.commit()
+    return {"ok": True}
+
+
+@router.delete("/overtime-applications/{app_id}")
+def delete_overtime_application(
+    app_id: int,
+    db: Session = Depends(get_db), _=Depends(get_current_user),
+):
+    app = db.query(OvertimeApplication).get(app_id)
+    if not app:
+        raise HTTPException(status_code=404)
+    db.delete(app)
+    db.commit()
+    return {"ok": True}
 
 
 # ── 월간 근무 요약 ─────────────────────────────────────────────────────
