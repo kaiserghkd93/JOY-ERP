@@ -7,6 +7,7 @@ export default function HrAttendance() {
   const [year, setYear] = useState(now.getFullYear())
   const [month, setMonth] = useState(now.getMonth() + 1)
   const [empFilter, setEmpFilter] = useState('')
+  const [searchQuery, setSearchQuery] = useState('')
   const [employees, setEmployees] = useState([])
   const [summary, setSummary] = useState([])
   const [detail, setDetail] = useState([])
@@ -174,17 +175,23 @@ export default function HrAttendance() {
       <div style={{ display: 'flex', gap: 8, marginBottom: 12, alignItems: 'center', flexWrap: 'wrap' }}>
         <div className="qdate-bar">
           {[['summary','월간 집계'],['detail','일별 상세'],['matrix','출근부'],['annual','연차 현황']].map(([v,l]) => (
-            <button key={v} className={`qdate-btn${viewMode===v?' active':''}`} onClick={() => setViewMode(v)}>{l}</button>
+            <button key={v} className={`qdate-btn${viewMode===v?' active':''}`} onClick={() => { setViewMode(v); setSearchQuery('') }}>{l}</button>
           ))}
         </div>
+        {/* 직원명 검색 — 모든 탭 공통 */}
+        <input
+          className="form-control"
+          placeholder="직원명 검색..."
+          value={searchQuery}
+          onChange={e => setSearchQuery(e.target.value)}
+          style={{ width: 160, fontSize: 13 }}
+        />
+        {searchQuery && (
+          <button style={{ fontSize: 12, color: '#94a3b8', background: 'none', border: 'none', cursor: 'pointer', padding: '0 4px' }}
+            onClick={() => setSearchQuery('')}>✕</button>
+        )}
         {viewMode === 'detail' && (
-          <>
-            <select className="form-control" value={empFilter} onChange={e => setEmpFilter(e.target.value)} style={{ width: 150 }}>
-              <option value="">전체 사원</option>
-              {employees.map(e => <option key={e.emp_id} value={e.emp_id}>{e.name} ({e.emp_id})</option>)}
-            </select>
-            <button className="btn btn-primary btn-sm" onClick={() => setModal({})}>＋ 수기 등록</button>
-          </>
+          <button className="btn btn-primary btn-sm" onClick={() => setModal({})}>＋ 수기 등록</button>
         )}
         {viewMode === 'matrix' && (
           <button className="btn btn-sm" style={{ background: '#f1f5f9', border: '1px solid #e2e8f0' }}
@@ -215,8 +222,10 @@ export default function HrAttendance() {
               </tr>
             </thead>
             <tbody>
-              {summary.length === 0 && <tr><td colSpan={10} style={{ textAlign: 'center', color: '#94a3b8', padding: 24 }}>데이터 없음</td></tr>}
-              {summary.map(s => (
+              {summary.filter(s => !searchQuery || s.name?.includes(searchQuery)).length === 0 && (
+                <tr><td colSpan={10} style={{ textAlign: 'center', color: '#94a3b8', padding: 24 }}>데이터 없음</td></tr>
+              )}
+              {summary.filter(s => !searchQuery || s.name?.includes(searchQuery)).map(s => (
                 <tr key={s.emp_id}>
                   <td><code style={{ fontSize: 11 }}>{s.emp_id}</code></td>
                   <td style={{ fontWeight: 600 }}>{s.name}</td>
@@ -260,8 +269,10 @@ export default function HrAttendance() {
               </tr>
             </thead>
             <tbody>
-              {detail.length === 0 && <tr><td colSpan={10} style={{ textAlign: 'center', color: '#94a3b8', padding: 24 }}>데이터 없음</td></tr>}
-              {detail.map(a => {
+              {detail.filter(a => !searchQuery || (employees.find(e => e.emp_id === a.emp_id)?.name || '').includes(searchQuery)).length === 0 && (
+                <tr><td colSpan={10} style={{ textAlign: 'center', color: '#94a3b8', padding: 24 }}>데이터 없음</td></tr>
+              )}
+              {detail.filter(a => !searchQuery || (employees.find(e => e.emp_id === a.emp_id)?.name || '').includes(searchQuery)).map(a => {
                 const empName = employees.find(e => e.emp_id === a.emp_id)?.name || '—'
                 return (
                   <tr key={a.id}>
@@ -320,10 +331,10 @@ export default function HrAttendance() {
       )}
 
       {/* 출근부 매트릭스 */}
-      {viewMode === 'matrix' && <AttendanceMatrix matrix={matrix} />}
+      {viewMode === 'matrix' && <AttendanceMatrix matrix={matrix} searchQuery={searchQuery} />}
 
       {/* 연차 현황 */}
-      {viewMode === 'annual' && <AnnualLeaveTable data={annualLeave} onRefresh={loadAnnualLeave} />}
+      {viewMode === 'annual' && <AnnualLeaveTable data={annualLeave} onRefresh={loadAnnualLeave} searchQuery={searchQuery} />}
 
       {/* 수기 등록 모달 */}
       {modal !== null && (
@@ -909,7 +920,7 @@ function MatrixCell({ cell }) {
   )
 }
 
-function AttendanceMatrix({ matrix }) {
+function AttendanceMatrix({ matrix, searchQuery }) {
   if (!matrix) return (
     <div style={{ textAlign: 'center', padding: 48, color: '#94a3b8' }}>
       데이터 로딩 중... (월 선택 후 "출근부" 탭을 클릭하세요)
@@ -919,7 +930,10 @@ function AttendanceMatrix({ matrix }) {
     <div style={{ textAlign: 'center', padding: 48, color: '#94a3b8' }}>출근 데이터 없음</div>
   )
 
-  const { dates, rows } = matrix
+  const { dates } = matrix
+  const rows = searchQuery
+    ? matrix.rows.filter(r => r.name?.includes(searchQuery))
+    : matrix.rows
   const DOW = ['월', '화', '수', '목', '금', '토', '일']
 
   // 범례
@@ -1025,7 +1039,7 @@ function AttendanceMatrix({ matrix }) {
 
 // ── 연차 현황 컴포넌트 ────────────────────────────────────────────────
 
-function AnnualLeaveTable({ data, onRefresh }) {
+function AnnualLeaveTable({ data, onRefresh, searchQuery }) {
   const [editId, setEditId] = useState(null)
   const [editVal, setEditVal] = useState('')
 
@@ -1068,10 +1082,10 @@ function AnnualLeaveTable({ data, onRefresh }) {
             </tr>
           </thead>
           <tbody>
-            {data.length === 0 && (
+            {data.filter(r => !searchQuery || r.name?.includes(searchQuery)).length === 0 && (
               <tr><td colSpan={10} style={{ textAlign: 'center', color: '#94a3b8', padding: 24 }}>데이터 없음 (입사일이 등록된 직원부터 표시됩니다)</td></tr>
             )}
-            {data.map(row => (
+            {data.filter(r => !searchQuery || r.name?.includes(searchQuery)).map(row => (
               <tr key={row.emp_id}>
                 <td><code style={{ fontSize: 11 }}>{row.emp_id}</code></td>
                 <td style={{ fontWeight: 600 }}>{row.name}</td>
