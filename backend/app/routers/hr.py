@@ -545,8 +545,11 @@ async def upload_caps_excel(
                     return i
         return None
 
-    col_name  = find_col(['이름', '성명', '직원명'])
-    col_gubun = find_col(['구분'])
+    col_name     = find_col(['이름', '성명', '직원명'])
+    col_gubun    = find_col(['구분'])
+    col_emp_id   = find_col(['사원번호', '사번', '직원번호'])
+    col_dept     = find_col(['부서'])
+    col_position = find_col(['직급', '직위'])
     # 일(1~31) 컬럼 인덱스 맵
     day_cols: dict[int, int] = {}
     for i, h in enumerate(headers):
@@ -584,12 +587,33 @@ async def upload_caps_excel(
     # 행 파싱: 출근행/퇴근행 쌍 수집
     # {이름: {day: {'in': 'HH:MM', 'out': 'HH:MM'}}}
     emp_days: dict[str, dict[int, dict]] = {}
+    emp_meta: dict[str, dict] = {}  # name → {emp_id, dept, position}
     cur_name: str | None = None
+
+    def _cell_str(row, ci):
+        if ci is None or ci >= len(row):
+            return ""
+        v = str(row[ci]).strip()
+        return "" if v in ("None", "nan", "") else v
 
     for row in rows[1:]:
         raw_name = str(row[col_name]).strip() if row[col_name] else ""
         if raw_name and raw_name not in ("None", "nan"):
             cur_name = raw_name
+            if cur_name not in emp_meta:
+                meta: dict = {}
+                raw_eid = _cell_str(row, col_emp_id)
+                if raw_eid:
+                    try: raw_eid = str(int(float(raw_eid)))
+                    except (ValueError, TypeError): pass
+                    meta['emp_id'] = raw_eid
+                dept_v = _cell_str(row, col_dept)
+                if dept_v:
+                    meta['dept'] = dept_v
+                pos_v = _cell_str(row, col_position)
+                if pos_v:
+                    meta['position'] = pos_v
+                emp_meta[cur_name] = meta
         if cur_name is None:
             continue
 
@@ -617,12 +641,40 @@ async def upload_caps_excel(
     errors: list = []
     warnings: list = []
     unmatched: set = set()
+    auto_created_employees: list = []
 
     for name, day_map in emp_days.items():
         emp = all_emps.get(name)
         if not emp:
-            unmatched.add(name)
-            continue
+            meta = emp_meta.get(name, {})
+            raw_eid = meta.get('emp_id', '')
+            # emp_id 충돌 체크
+            if raw_eid and db.get(Employee, raw_eid):
+                raw_eid = ''  # 이미 다른 직원이 쓰는 ID → 자동 생성
+            if not raw_eid:
+                existing_p = [e.emp_id for e in db.query(Employee).filter(
+                    Employee.emp_id.like('P%')).all()]
+                p_nums = [int(e[1:]) for e in existing_p if e[1:].isdigit()]
+                next_n = max(p_nums, default=0) + 1
+                raw_eid = f"P{next_n:03d}"
+            try:
+                new_emp = Employee(
+                    emp_id=raw_eid,
+                    name=name,
+                    dept=meta.get('dept', '생산'),
+                    position=meta.get('position', ''),
+                    is_active=True,
+                )
+                db.add(new_emp)
+                db.flush()
+                all_emps[name] = new_emp
+                auto_created_employees.append({'name': name, 'emp_id': raw_eid, 'dept': meta.get('dept', '생산')})
+                emp = new_emp
+            except Exception as _ce:
+                db.rollback()
+                unmatched.add(name)
+                errors.append(f"직원 자동생성 실패({name}): {_ce}")
+                continue
 
         schedule = _get_schedule(emp)
         if schedule == 'exempt':
@@ -742,6 +794,7 @@ async def upload_caps_excel(
         "errors": errors,
         "warnings_52h": warnings,
         "unmatched": sorted(unmatched),
+        "auto_created_employees": auto_created_employees,
     }
 
 
