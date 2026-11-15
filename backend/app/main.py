@@ -31,7 +31,7 @@ from app.models import inventory_adj as _inv_adj_models  # noqa: ensure tables r
 from app.models import audit as _audit_models  # noqa: ensure audit_log table
 from app.models import tps as _tps_models  # noqa: ensure TPS tables
 
-Base.metadata.create_all(bind=engine)
+Base.metadata.create_all(bind=engine, checkfirst=True)
 
 from sqlalchemy import text as _text
 with engine.connect() as _conn:
@@ -271,6 +271,21 @@ with SessionLocal() as _s:
         if _adm:
             _adm.password_hash = _pw_hash(_ap)
     _s.commit()
+
+# ── 주용하(N011)/김영일(S001) 매니저 포지션 보정 ─────────────────────────
+# 금형 부서 소속이지만 관리자급 처우 (고정OT 50h, 고정특근 16h)
+with SessionLocal() as _hs:
+    from app.models.hr import Employee as _HrEmployee
+    for _eid, _pos in [('N011', '매니저'), ('S001', '매니저')]:
+        _he = _hs.get(_HrEmployee, _eid)
+        if _he:
+            if not _he.position or _he.position in ('사원', '고정직', '금형 고정직', ''):
+                _he.position = _pos
+            if hasattr(_he, 'fixed_ot_hrs') and (_he.fixed_ot_hrs or 0) < 50:
+                _he.fixed_ot_hrs = 50
+            if hasattr(_he, 'fixed_holiday_hrs') and (_he.fixed_holiday_hrs or 0) < 16:
+                _he.fixed_holiday_hrs = 16
+    _hs.commit()
 
 app = FastAPI(title="넥스젬 ERP", version="0.2.0")
 

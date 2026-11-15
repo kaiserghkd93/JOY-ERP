@@ -126,6 +126,25 @@ class EmployeeHrHistory(Base):
     employee: Mapped["Employee"] = relationship(back_populates="hr_histories")
 
 
+class AnnualLeave(Base):
+    """연차 부여 내역 — 입사기준 사이클별 (근로기준법)"""
+    __tablename__ = "hr_annual_leave"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    emp_id: Mapped[str] = mapped_column(ForeignKey("hr_employee.emp_id"), nullable=False)
+    period_start: Mapped[date] = mapped_column(Date, nullable=False)  # 사이클 시작 (입사기념일)
+    period_end: Mapped[date] = mapped_column(Date, nullable=False)    # 사이클 종료 (다음 기념일 전날)
+    granted_days: Mapped[float] = mapped_column(Float, default=0.0)   # 부여 연차일수
+    note: Mapped[str | None] = mapped_column(String(200))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+
+    employee: Mapped["Employee"] = relationship()
+
+    __table_args__ = (
+        __import__('sqlalchemy').UniqueConstraint('emp_id', 'period_start', name='uq_annual_leave_emp_period'),
+    )
+
+
 class OvertimeApplication(Base):
     """특근신청 — 주말/공휴일 특근 신청 관리 (캡스 미찍힌 52시간 케이스 포함)"""
     __tablename__ = "hr_overtime_application"

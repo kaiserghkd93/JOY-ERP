@@ -10,7 +10,9 @@ export default function HrAttendance() {
   const [employees, setEmployees] = useState([])
   const [summary, setSummary] = useState([])
   const [detail, setDetail] = useState([])
-  const [viewMode, setViewMode] = useState('summary')  // summary | detail
+  const [viewMode, setViewMode] = useState('summary')  // summary | detail | matrix | annual
+  const [matrix, setMatrix] = useState(null)
+  const [annualLeave, setAnnualLeave] = useState([])
   const [modal, setModal] = useState(null)
   const [bulkHolidayModal, setBulkHolidayModal] = useState(false)
   const [overtimeAppModal, setOvertimeAppModal] = useState(false)
@@ -40,14 +42,24 @@ export default function HrAttendance() {
     api.get(`/hr/attendance?year=${year}&month=${month}${p}`).then(r => setDetail(r.data)).catch(() => setDetail([]))
   }, [year, month, empFilter])
 
+  const loadMatrix = useCallback(() => {
+    api.get(`/hr/attendance/matrix?year=${year}&month=${month}`).then(r => setMatrix(r.data)).catch(() => setMatrix(null))
+  }, [year, month])
+
+  const loadAnnualLeave = useCallback(() => {
+    api.get('/hr/annual-leave').then(r => setAnnualLeave(r.data)).catch(() => setAnnualLeave([]))
+  }, [])
+
   useEffect(() => {
     loadEmployees()
   }, [loadEmployees])
 
   useEffect(() => {
     if (viewMode === 'summary') loadSummary()
-    else loadDetail()
-  }, [viewMode, loadSummary, loadDetail])
+    else if (viewMode === 'detail') loadDetail()
+    else if (viewMode === 'matrix') loadMatrix()
+    else if (viewMode === 'annual') loadAnnualLeave()
+  }, [viewMode, loadSummary, loadDetail, loadMatrix, loadAnnualLeave])
 
   const uploadCaps = async (e) => {
     const file = e.target.files[0]
@@ -159,9 +171,9 @@ export default function HrAttendance() {
       )}
 
       {/* 뷰 전환 + 수기 등록 */}
-      <div style={{ display: 'flex', gap: 8, marginBottom: 12, alignItems: 'center' }}>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 12, alignItems: 'center', flexWrap: 'wrap' }}>
         <div className="qdate-bar">
-          {[['summary','월간 집계'],['detail','일별 상세']].map(([v,l]) => (
+          {[['summary','월간 집계'],['detail','일별 상세'],['matrix','출근부'],['annual','연차 현황']].map(([v,l]) => (
             <button key={v} className={`qdate-btn${viewMode===v?' active':''}`} onClick={() => setViewMode(v)}>{l}</button>
           ))}
         </div>
@@ -173,6 +185,14 @@ export default function HrAttendance() {
             </select>
             <button className="btn btn-primary btn-sm" onClick={() => setModal({})}>＋ 수기 등록</button>
           </>
+        )}
+        {viewMode === 'matrix' && (
+          <button className="btn btn-sm" style={{ background: '#f1f5f9', border: '1px solid #e2e8f0' }}
+            onClick={loadMatrix}>↻ 새로고침</button>
+        )}
+        {viewMode === 'annual' && (
+          <button className="btn btn-sm" style={{ background: '#f1f5f9', border: '1px solid #e2e8f0' }}
+            onClick={loadAnnualLeave}>↻ 새로고침</button>
         )}
       </div>
 
@@ -298,6 +318,12 @@ export default function HrAttendance() {
           </table>
         </div>
       )}
+
+      {/* 출근부 매트릭스 */}
+      {viewMode === 'matrix' && <AttendanceMatrix matrix={matrix} />}
+
+      {/* 연차 현황 */}
+      {viewMode === 'annual' && <AnnualLeaveTable data={annualLeave} onRefresh={loadAnnualLeave} />}
 
       {/* 수기 등록 모달 */}
       {modal !== null && (
@@ -833,6 +859,252 @@ function OvertimeAppModal({ year, month, employees, onClose }) {
         <div className="modal-footer">
           <button className="btn btn-outline" onClick={onClose}>닫기</button>
         </div>
+      </div>
+    </div>
+  )
+}
+
+// ── 출근부 매트릭스 컴포넌트 ──────────────────────────────────────────
+
+const CELL_STYLE = {
+  ok:      { bg: '#dcfce7', color: '#166534', fw: 700 },
+  absent:  { bg: '#fee2e2', color: '#991b1b', fw: 700 },
+  late:    { bg: '#fff7ed', color: '#9a3412', fw: 700 },
+  holiday: { bg: '#f3e8ff', color: '#6b21a8', fw: 700 },
+  leave:   { bg: '#dbeafe', color: '#1e40af', fw: 700 },
+  weekend: { bg: '#f1f5f9', color: '#94a3b8', fw: 400 },
+  dim:     { bg: '#fff',    color: '#d1d5db', fw: 400 },
+  future:  { bg: '#fff',    color: '#e2e8f0', fw: 400 },
+}
+
+function MatrixCell({ cell }) {
+  if (!cell) return <td style={{ background: '#fff', width: 28, minWidth: 28, padding: 0 }} />
+  const s = CELL_STYLE[cell.style] || CELL_STYLE.dim
+  const title = cell.in ? `${cell.in} ~ ${cell.out || '—'}` : (cell.label || '')
+  return (
+    <td title={title} style={{
+      background: s.bg, color: s.color, fontWeight: s.fw,
+      textAlign: 'center', fontSize: 11, width: 28, minWidth: 28,
+      padding: '3px 0', cursor: title ? 'help' : 'default',
+      border: '1px solid #e2e8f0',
+    }}>
+      {cell.code}
+    </td>
+  )
+}
+
+function AttendanceMatrix({ matrix }) {
+  if (!matrix) return (
+    <div style={{ textAlign: 'center', padding: 48, color: '#94a3b8' }}>
+      데이터 로딩 중... (월 선택 후 "출근부" 탭을 클릭하세요)
+    </div>
+  )
+  if (!matrix.rows?.length) return (
+    <div style={{ textAlign: 'center', padding: 48, color: '#94a3b8' }}>출근 데이터 없음</div>
+  )
+
+  const { dates, rows } = matrix
+  const DOW = ['월', '화', '수', '목', '금', '토', '일']
+
+  // 범례
+  const legend = [
+    { code: '○', style: 'ok', label: '정상' },
+    { code: '×', style: 'absent', label: '결근' },
+    { code: '지', style: 'late', label: '지각' },
+    { code: '특', style: 'holiday', label: '휴일특근' },
+    { code: '연', style: 'leave', label: '연차' },
+    { code: '주', style: 'weekend', label: '주말' },
+  ]
+
+  return (
+    <div>
+      {/* 범례 */}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
+        {legend.map(l => {
+          const s = CELL_STYLE[l.style]
+          return (
+            <span key={l.code} style={{
+              display: 'inline-flex', alignItems: 'center', gap: 4,
+              fontSize: 11, color: '#475569',
+            }}>
+              <span style={{
+                display: 'inline-block', width: 20, height: 20, lineHeight: '20px',
+                textAlign: 'center', borderRadius: 4, background: s.bg, color: s.color,
+                fontWeight: s.fw, border: '1px solid #e2e8f0', fontSize: 11,
+              }}>{l.code}</span>
+              {l.label}
+            </span>
+          )
+        })}
+      </div>
+
+      <div style={{ overflowX: 'auto', overflowY: 'auto', maxHeight: '72vh', borderRadius: 8, border: '1px solid #e2e8f0' }}>
+        <table style={{ borderCollapse: 'collapse', fontSize: 12, whiteSpace: 'nowrap' }}>
+          <thead>
+            {/* 요일 행 */}
+            <tr style={{ background: '#f8fafc', position: 'sticky', top: 0, zIndex: 10 }}>
+              <th style={{ position: 'sticky', left: 0, zIndex: 11, background: '#f8fafc', minWidth: 70, padding: '6px 8px', borderBottom: '2px solid #e2e8f0', textAlign: 'left', fontWeight: 700 }}>이름</th>
+              <th style={{ position: 'sticky', left: 70, zIndex: 11, background: '#f8fafc', minWidth: 60, padding: '6px 8px', borderBottom: '2px solid #e2e8f0', textAlign: 'left', fontWeight: 700 }}>부서</th>
+              {dates.map(d => (
+                <th key={d.day} style={{
+                  width: 28, minWidth: 28, padding: '4px 0', textAlign: 'center',
+                  borderBottom: '2px solid #e2e8f0', fontSize: 10,
+                  background: d.is_weekend ? '#f1f5f9' : '#f8fafc',
+                  color: d.weekday === 6 ? '#dc2626' : d.weekday === 5 ? '#2563eb' : '#475569',
+                  fontWeight: 600,
+                }}>
+                  {DOW[d.weekday]}
+                </th>
+              ))}
+              {[['근무','#1e40af'],['결근','#991b1b'],['지각','#9a3412'],['연차','#166534'],['특근','#6b21a8']].map(([lbl, c]) => (
+                <th key={lbl} style={{ minWidth: 36, padding: '4px 6px', textAlign: 'center', borderBottom: '2px solid #e2e8f0', fontSize: 11, color: c, background: '#f8fafc' }}>{lbl}</th>
+              ))}
+            </tr>
+            {/* 날짜 행 */}
+            <tr style={{ background: '#f8fafc', position: 'sticky', top: 29, zIndex: 10 }}>
+              <th style={{ position: 'sticky', left: 0, zIndex: 11, background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }} />
+              <th style={{ position: 'sticky', left: 70, zIndex: 11, background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }} />
+              {dates.map(d => (
+                <th key={d.day} style={{
+                  width: 28, minWidth: 28, padding: '2px 0', textAlign: 'center',
+                  borderBottom: '1px solid #e2e8f0', fontSize: 11, fontWeight: 700,
+                  background: d.is_weekend ? '#f1f5f9' : '#f8fafc',
+                  color: d.weekday === 6 ? '#dc2626' : d.weekday === 5 ? '#2563eb' : '#1e293b',
+                }}>
+                  {d.day}
+                </th>
+              ))}
+              {[1,2,3,4,5].map(i => <th key={i} style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }} />)}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row, ri) => (
+              <tr key={row.emp_id} style={{ background: ri % 2 === 0 ? '#fff' : '#fafafa' }}>
+                <td style={{
+                  position: 'sticky', left: 0, zIndex: 2, background: ri % 2 === 0 ? '#fff' : '#fafafa',
+                  padding: '4px 8px', fontWeight: 600, minWidth: 70, borderRight: '2px solid #e2e8f0',
+                }}>
+                  {row.name}
+                </td>
+                <td style={{
+                  position: 'sticky', left: 70, zIndex: 2, background: ri % 2 === 0 ? '#fff' : '#fafafa',
+                  padding: '4px 8px', fontSize: 11, color: '#64748b', minWidth: 60, borderRight: '1px solid #e2e8f0',
+                }}>
+                  {row.dept}
+                </td>
+                {dates.map(d => <MatrixCell key={d.day} cell={row.cells[d.day]} />)}
+                <td style={{ textAlign: 'center', fontWeight: 700, color: '#1e40af', padding: '4px 6px', borderLeft: '2px solid #e2e8f0' }}>{row.summary.work_days}</td>
+                <td style={{ textAlign: 'center', color: row.summary.absent > 0 ? '#991b1b' : '#94a3b8', padding: '4px 6px' }}>{row.summary.absent || '—'}</td>
+                <td style={{ textAlign: 'center', color: row.summary.late > 0 ? '#9a3412' : '#94a3b8', padding: '4px 6px' }}>{row.summary.late || '—'}</td>
+                <td style={{ textAlign: 'center', color: row.summary.leave > 0 ? '#166534' : '#94a3b8', padding: '4px 6px' }}>{row.summary.leave || '—'}</td>
+                <td style={{ textAlign: 'center', color: row.summary.holiday > 0 ? '#6b21a8' : '#94a3b8', padding: '4px 6px' }}>{row.summary.holiday || '—'}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
+// ── 연차 현황 컴포넌트 ────────────────────────────────────────────────
+
+function AnnualLeaveTable({ data, onRefresh }) {
+  const [editId, setEditId] = useState(null)
+  const [editVal, setEditVal] = useState('')
+
+  const saveEdit = async (id) => {
+    try {
+      await api.patch(`/hr/annual-leave/${id}`, { granted_days: parseFloat(editVal) })
+      setEditId(null)
+      onRefresh()
+    } catch (e) {
+      alert('저장 실패: ' + (e.response?.data?.detail || e.message))
+    }
+  }
+
+  const remainColor = (r) => {
+    if (r <= 0) return '#dc2626'
+    if (r <= 3) return '#ea580c'
+    if (r <= 7) return '#d97706'
+    return '#16a34a'
+  }
+
+  return (
+    <div>
+      <div style={{ marginBottom: 10, fontSize: 12, color: '#64748b' }}>
+        입사기념일 기준 연차 사이클 | 사용일수는 출근기록(연차/반차/병가)에서 자동 집계
+      </div>
+      <div className="table-wrap">
+        <table className="table">
+          <thead>
+            <tr>
+              <th>사번</th>
+              <th>이름</th>
+              <th>부서</th>
+              <th>입사일</th>
+              <th style={{ textAlign: 'center' }}>근속</th>
+              <th>연차 사이클</th>
+              <th style={{ textAlign: 'right' }}>발생</th>
+              <th style={{ textAlign: 'right' }}>사용</th>
+              <th style={{ textAlign: 'right' }}>잔여</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.length === 0 && (
+              <tr><td colSpan={10} style={{ textAlign: 'center', color: '#94a3b8', padding: 24 }}>데이터 없음 (입사일이 등록된 직원부터 표시됩니다)</td></tr>
+            )}
+            {data.map(row => (
+              <tr key={row.emp_id}>
+                <td><code style={{ fontSize: 11 }}>{row.emp_id}</code></td>
+                <td style={{ fontWeight: 600 }}>{row.name}</td>
+                <td>{row.dept}</td>
+                <td style={{ fontSize: 12 }}>{row.hire_date}</td>
+                <td style={{ textAlign: 'center' }}>
+                  <span style={{
+                    padding: '1px 8px', borderRadius: 20, fontSize: 11,
+                    background: '#f1f5f9', color: '#475569', fontWeight: 600,
+                  }}>
+                    {row.years_worked}년차
+                  </span>
+                </td>
+                <td style={{ fontSize: 11, color: '#64748b' }}>
+                  {row.cycle_start} ~ {row.cycle_end}
+                </td>
+                <td style={{ textAlign: 'right', fontWeight: 700 }}>
+                  {editId === row.annual_leave_id ? (
+                    <input type="number" value={editVal} step="0.5" min="0" max="25"
+                      onChange={e => setEditVal(e.target.value)}
+                      style={{ width: 60, fontSize: 12, textAlign: 'right', border: '1px solid #3b82f6', borderRadius: 4, padding: '2px 4px' }}
+                    />
+                  ) : (
+                    <span>{row.granted_days}일</span>
+                  )}
+                </td>
+                <td style={{ textAlign: 'right', color: '#475569' }}>{row.used_days}일</td>
+                <td style={{ textAlign: 'right' }}>
+                  <span style={{ fontWeight: 700, color: remainColor(row.remain_days), fontSize: 13 }}>
+                    {row.remain_days}일
+                  </span>
+                </td>
+                <td>
+                  {editId === row.annual_leave_id ? (
+                    <div style={{ display: 'flex', gap: 4 }}>
+                      <button className="btn btn-sm btn-primary" style={{ fontSize: 11 }} onClick={() => saveEdit(row.annual_leave_id)}>저장</button>
+                      <button className="btn btn-sm btn-outline" style={{ fontSize: 11 }} onClick={() => setEditId(null)}>취소</button>
+                    </div>
+                  ) : (
+                    <button className="btn btn-sm" style={{ fontSize: 11, background: '#f1f5f9', border: '1px solid #e2e8f0' }}
+                      onClick={() => { setEditId(row.annual_leave_id); setEditVal(String(row.granted_days)) }}>
+                      조정
+                    </button>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
     </div>
   )

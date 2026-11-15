@@ -15,7 +15,7 @@
  과세표준 = 총지급 - min(식대,200000) - min(차량,200000)
  4대보험 = 과세표준 × 법정요율 (10원 단위 반올림)
 """
-from datetime import date, datetime, time as dtime
+from datetime import date, datetime, time as dtime, timedelta
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Optional
 from io import BytesIO
@@ -27,7 +27,7 @@ from pydantic import BaseModel
 
 from app.database import get_db
 from app.routers.auth import get_current_user, require_admin, require_admin_or_accounting
-from app.models.hr import Employee, Attendance, Payroll, EmployeeKpi, EmployeeHrHistory, OvertimeApplication
+from app.models.hr import Employee, Attendance, Payroll, EmployeeKpi, EmployeeHrHistory, OvertimeApplication, AnnualLeave
 
 router = APIRouter(prefix="/hr", tags=["인사"])
 
@@ -343,7 +343,7 @@ _MANAGER_POSITIONS    = {'과장', '차장', '부장', '실장', '이사'}
 # 포괄임금제: 기본급 고정, OT/야간/휴일 수당 별도 미지급
 _FLAT_SALARY_POSITIONS = {'실장'}
 _PROD_RULE_DEPTS   = {'생산', '금형', '출하'}
-_FIXED_EMP_IDS     = {'N011', 'S001'}   # 주용하, 김영일 (금형 고정직)
+_FIXED_EMP_IDS     = {'N011', 'S001'}   # 주용하(N011), 김영일(S001): 금형 부서지만 매니저 처우 — 생산룰 적용 방지
 
 # 생산룰: 08:30 출근 고정, 17:50 정규종료, 18:10~잔업 10분 단위
 _PROD_IN   = dtime(8, 30)
@@ -1798,3 +1798,251 @@ def delete_hr_history(
     db.delete(h)
     db.commit()
     return {"ok": True}
+
+
+# ── 연차 관리 ─────────────────────────────────────────────────────────
+
+def _years_worked(hire_date: date, as_of: date) -> int:
+    """입사일 기준 완성 연수 계산"""
+    y = as_of.year - hire_date.year
+    if (as_of.month, as_of.day) < (hire_date.month, hire_date.day):
+        y -= 1
+    return max(0, y)
+
+
+def _leave_cycle(hire_date: date, today: date):
+    """현재 연차 사이클 (입사기념일 기준) → (cycle_start, cycle_end, years_worked)"""
+    yw = _years_worked(hire_date, today)
+    cy = hire_date.year + yw
+    try:
+        cs = date(cy, hire_date.month, hire_date.day)
+    except ValueError:
+        cs = date(cy, hire_date.month, 28)
+    ny = cy + 1
+    try:
+        ce = date(ny, hire_date.month, hire_date.day) - timedelta(days=1)
+    except ValueError:
+        ce = date(ny, hire_date.month, 28) - timedelta(days=1)
+    return cs, ce, yw
+
+
+def _granted_days(years_worked: int) -> float:
+    """근로기준법 연차 부여일수: 1년차=15일, 3년차부터 2년마다 +1일, 최대 25일"""
+    if years_worked < 1:
+        return 0.0
+    return float(min(15 + (years_worked - 1) // 2, 25))
+
+
+def _used_days(db, emp_id: str, start: date, end: date) -> float:
+    """출근기록 leave_type 에서 사용 연차일수 집계"""
+    recs = db.query(Attendance).filter(
+        Attendance.emp_id == emp_id,
+        Attendance.work_date >= start,
+        Attendance.work_date <= end,
+        Attendance.leave_type.in_(["연차", "반차", "병가", "공가"]),
+    ).all()
+    total = 0.0
+    for r in recs:
+        total += 0.5 if r.leave_type == "반차" else 1.0
+    return total
+
+
+@router.get("/annual-leave")
+def list_annual_leave(
+    year: int = Query(None),
+    db: Session = Depends(get_db), _=Depends(get_current_user),
+):
+    """전 직원 연차 현황 (현재 사이클 기준)"""
+    today = date.today()
+    emps = (
+        db.query(Employee)
+        .filter(Employee.is_active.isnot(False), Employee.hire_date.isnot(None))
+        .order_by(Employee.company, Employee.dept, Employee.emp_id)
+        .all()
+    )
+    result = []
+    for emp in emps:
+        cs, ce, yw = _leave_cycle(emp.hire_date, today)
+        granted = _granted_days(yw)
+
+        # 1년 미만: 발생한 개월 수 (최대 11일)
+        if yw < 1:
+            months = (today.year - emp.hire_date.year) * 12 + (today.month - emp.hire_date.month)
+            granted = float(min(months, 11))
+
+        # AnnualLeave 레코드 upsert
+        al = db.query(AnnualLeave).filter(
+            AnnualLeave.emp_id == emp.emp_id,
+            AnnualLeave.period_start == cs,
+        ).first()
+        if not al:
+            al = AnnualLeave(emp_id=emp.emp_id, period_start=cs, period_end=ce, granted_days=granted)
+            db.add(al)
+            try:
+                db.flush()
+            except Exception:
+                db.rollback()
+                al = db.query(AnnualLeave).filter(
+                    AnnualLeave.emp_id == emp.emp_id,
+                    AnnualLeave.period_start == cs,
+                ).first()
+                if not al:
+                    continue
+        else:
+            # 발생일수 갱신 (입사일 변경 등 대비)
+            if abs(al.granted_days - granted) > 0.1:
+                al.granted_days = granted
+
+        used = _used_days(db, emp.emp_id, cs, today)
+
+        result.append({
+            "emp_id": emp.emp_id,
+            "name": emp.name,
+            "dept": emp.dept or "—",
+            "company": emp.company,
+            "hire_date": str(emp.hire_date),
+            "years_worked": yw,
+            "cycle_start": str(cs),
+            "cycle_end": str(ce),
+            "granted_days": granted,
+            "used_days": used,
+            "remain_days": round(granted - used, 1),
+            "annual_leave_id": al.id if al else None,
+        })
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+    return result
+
+
+@router.patch("/annual-leave/{al_id}")
+def update_annual_leave(
+    al_id: int,
+    body: dict,
+    db: Session = Depends(get_db), _=Depends(get_current_user),
+):
+    """연차 부여일수 수동 조정"""
+    al = db.get(AnnualLeave, al_id)
+    if not al:
+        raise HTTPException(404)
+    if "granted_days" in body:
+        al.granted_days = float(body["granted_days"])
+    if "note" in body:
+        al.note = body.get("note")
+    db.commit()
+    return {"ok": True, "granted_days": al.granted_days}
+
+
+# ── 출근부 매트릭스 ───────────────────────────────────────────────────
+
+@router.get("/attendance/matrix")
+def attendance_matrix(
+    year: int = Query(...), month: int = Query(...),
+    company: Optional[str] = Query(None),
+    db: Session = Depends(get_db), _=Depends(get_current_user),
+):
+    """월별 직원×날짜 출근부 매트릭스 반환"""
+    import calendar
+    today = date.today()
+    num_days = calendar.monthrange(year, month)[1]
+    start = date(year, month, 1)
+    end = date(year, month, num_days)
+
+    # 출근기록 인덱싱
+    q = db.query(Attendance).filter(Attendance.work_date >= start, Attendance.work_date <= end)
+    att_map: dict = {}
+    for a in q.all():
+        att_map[(a.emp_id, a.work_date.day)] = a
+
+    # 직원 목록
+    emps_q = db.query(Employee).filter(Employee.is_active.isnot(False))
+    if company:
+        emps_q = emps_q.filter(Employee.company == company)
+    emps = emps_q.order_by(Employee.company, Employee.dept, Employee.emp_id).all()
+
+    # 날짜 메타
+    dates = []
+    for d in range(1, num_days + 1):
+        dt = date(year, month, d)
+        wd = dt.weekday()  # 0=Mon 6=Sun
+        dates.append({"day": d, "weekday": wd, "is_weekend": wd >= 5, "is_future": dt > today})
+
+    rows = []
+    for emp in emps:
+        cells: dict = {}
+        work_days = absent_cnt = late_cnt = holiday_cnt = 0
+        leave_days = 0.0
+
+        for di in dates:
+            d = di["day"]
+            dt = date(year, month, d)
+
+            # 입사 전 / 퇴직 후
+            if emp.hire_date and dt < emp.hire_date:
+                cells[d] = {"code": "—", "style": "dim"}
+                continue
+            if emp.retire_date and dt > emp.retire_date:
+                cells[d] = {"code": "—", "style": "dim"}
+                continue
+
+            a = att_map.get((emp.emp_id, d))
+
+            if di["is_future"] and not a:
+                cells[d] = {"code": "", "style": "future"}
+                continue
+
+            if di["is_weekend"]:
+                if a and a.holiday:
+                    cells[d] = {"code": "특", "style": "holiday",
+                                "in": str(a.check_in)[:5] if a.check_in else None,
+                                "out": str(a.check_out)[:5] if a.check_out else None}
+                    holiday_cnt += 1
+                else:
+                    cells[d] = {"code": "주", "style": "weekend"}
+                continue
+
+            if not a:
+                cells[d] = {"code": "—", "style": "dim"}
+            elif a.absent:
+                if a.leave_type:
+                    abbr = {"연차": "연", "반차": "반", "병가": "병", "공가": "공"}.get(a.leave_type, a.leave_type[0])
+                    cells[d] = {"code": abbr, "style": "leave", "label": a.leave_type}
+                    leave_days += 0.5 if a.leave_type == "반차" else 1.0
+                else:
+                    cells[d] = {"code": "×", "style": "absent"}
+                    absent_cnt += 1
+            elif a.holiday:
+                cells[d] = {"code": "특", "style": "holiday",
+                            "in": str(a.check_in)[:5] if a.check_in else None,
+                            "out": str(a.check_out)[:5] if a.check_out else None}
+                holiday_cnt += 1
+                work_days += 1
+            elif a.late:
+                cells[d] = {"code": "지", "style": "late",
+                            "in": str(a.check_in)[:5] if a.check_in else None,
+                            "out": str(a.check_out)[:5] if a.check_out else None}
+                late_cnt += 1
+                work_days += 1
+            else:
+                cells[d] = {"code": "○", "style": "ok",
+                            "in": str(a.check_in)[:5] if a.check_in else None,
+                            "out": str(a.check_out)[:5] if a.check_out else None}
+                work_days += 1
+
+        rows.append({
+            "emp_id": emp.emp_id,
+            "name": emp.name,
+            "dept": emp.dept or "—",
+            "company": emp.company,
+            "cells": cells,
+            "summary": {
+                "work_days": work_days,
+                "absent": absent_cnt,
+                "late": late_cnt,
+                "leave": leave_days,
+                "holiday": holiday_cnt,
+            },
+        })
+
+    return {"year": year, "month": month, "num_days": num_days, "dates": dates, "rows": rows}
