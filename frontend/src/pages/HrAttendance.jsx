@@ -682,9 +682,9 @@ function BulkHolidayModal({ year, month, employees, onClose, onSaved }) {
                         </button>
                       )
                     })}
-                    </div>  {/* flex wrap */}
+                    </div>
                     )}
-                  </div>  {/* scroll */}
+                  </div>
                 </div>
               )
             })}
@@ -861,8 +861,8 @@ function OvertimeAppModal({ year, month, employees, onClose }) {
                         </button>
                       )
                     })}
-                    </div>  {/* flex wrap */}
-                  </div>  {/* scroll */}
+                    </div>
+                  </div>
 
                   {apps.size > 0 && (
                     <div style={{ padding: '0 12px 8px', display: 'flex', gap: 6, flexWrap: 'wrap' }}>
