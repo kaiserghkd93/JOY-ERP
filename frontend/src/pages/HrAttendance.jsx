@@ -545,11 +545,14 @@ function BulkHolidayModal({ year, month, employees, onClose, onSaved }) {
     })
   }, [year, month])
 
+  const MGMT_POSITIONS = new Set(['대표','상무이사','전무이사','과장','차장','부장','실장','이사'])
+  const eligibleEmps = employees.filter(e => e.is_active !== false && !MGMT_POSITIONS.has(e.position))
+
   const getDisplayEmps = (date) => {
-    if (showAll) return employees.filter(e => e.is_active !== false)
+    if (showAll) return eligibleEmps
     const cands = candidateByDate[date] || new Set()
     if (cands.size === 0) return []
-    return employees.filter(e => cands.has(e.emp_id))
+    return eligibleEmps.filter(e => cands.has(e.emp_id))
   }
 
   const toggleEmp = (date, empId) =>
@@ -589,7 +592,7 @@ function BulkHolidayModal({ year, month, employees, onClose, onSaved }) {
 
   return (
     <div className="modal-overlay">
-      <div className="modal" style={{ maxWidth: 620, maxHeight: '88vh', display: 'flex', flexDirection: 'column' }}>
+      <div className="modal" style={{ width: '95vw', maxWidth: 1200, maxHeight: '92vh', display: 'flex', flexDirection: 'column' }}>
         {/* 헤더 */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
           <h3 style={{ margin: 0, fontSize: 16 }}>{year}년 {month}월 주말 특근 일괄 등록</h3>
@@ -645,12 +648,14 @@ function BulkHolidayModal({ year, month, employees, onClose, onSaved }) {
                     </div>
                   </div>
 
-                  <div style={{ padding: '8px 12px', display: 'flex', flexWrap: 'wrap', gap: 6, minHeight: 44 }}>
+                  <div style={{ padding: '8px 12px', maxHeight: 150, overflowY: 'auto', minHeight: 44 }}>
                     {dispEmps.length === 0 ? (
-                      <span style={{ fontSize: 12, color: '#94a3b8', alignSelf: 'center' }}>
+                      <span style={{ fontSize: 12, color: '#94a3b8' }}>
                         {showAll ? '직원 없음' : '특근신청 없음 · 위 "전체직원" 체크 시 수동 선택 가능'}
                       </span>
-                    ) : dispEmps.map(e => {
+                    ) : (
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+                    {dispEmps.map(e => {
                       const on = !!dateSel[e.emp_id]
                       const isApp = apps.has(e.emp_id)
                       const isExist = exist.has(e.emp_id)
@@ -677,7 +682,9 @@ function BulkHolidayModal({ year, month, employees, onClose, onSaved }) {
                         </button>
                       )
                     })}
-                  </div>
+                    </div>  {/* flex wrap */}
+                    )}
+                  </div>  {/* scroll */}
                 </div>
               )
             })}
@@ -717,7 +724,8 @@ function OvertimeAppModal({ year, month, employees, onClose }) {
     return list
   })()
 
-  const activeEmps = employees.filter(e => e.is_active !== false)
+  const MGMT_POSITIONS = new Set(['대표','상무이사','전무이사','과장','차장','부장','실장','이사'])
+  const activeEmps = employees.filter(e => e.is_active !== false && !MGMT_POSITIONS.has(e.position))
   // { [date]: Set<emp_id> }
   const [appByDate, setAppByDate] = useState({})
   const [nocapsByDate, setNocapsByDate] = useState({}) // 52시간 비캡스 표시용
@@ -831,9 +839,9 @@ function OvertimeAppModal({ year, month, employees, onClose }) {
                     </div>
                   </div>
 
-                  {/* 직원 선택 — 날짜별 고정 높이 + 개별 스크롤 */}
-                  <div style={{ padding: '8px 12px', maxHeight: 140, overflowY: 'auto',
-                    display: 'flex', flexWrap: 'wrap', gap: 5, alignContent: 'flex-start' }}>
+                  {/* 직원 선택 — 날짜별 고정 높이 + 개별 스크롤 (flex와 scroll 컨테이너 분리) */}
+                  <div style={{ padding: '8px 12px', maxHeight: 150, overflowY: 'auto' }}>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
                     {activeEmps.map(e => {
                       const on = apps.has(e.emp_id)
                       const isNocaps = nocaps.has(e.emp_id)
@@ -853,7 +861,8 @@ function OvertimeAppModal({ year, month, employees, onClose }) {
                         </button>
                       )
                     })}
-                  </div>
+                    </div>  {/* flex wrap */}
+                  </div>  {/* scroll */}
 
                   {apps.size > 0 && (
                     <div style={{ padding: '0 12px 8px', display: 'flex', gap: 6, flexWrap: 'wrap' }}>
