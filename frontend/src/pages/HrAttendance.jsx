@@ -765,9 +765,16 @@ function OvertimeAppModal({ year, month, employees, onClose }) {
     })
   }
 
+  const selectAll = (date) => {
+    setAppByDate(prev => ({ ...prev, [date]: new Set(activeEmps.map(e => e.emp_id)) }))
+  }
+  const clearAll = (date) => {
+    setAppByDate(prev => ({ ...prev, [date]: new Set() }))
+  }
+
   return (
     <div className="modal-overlay">
-      <div className="modal" style={{ maxWidth: 640, maxHeight: '88vh', display: 'flex', flexDirection: 'column' }}>
+      <div className="modal" style={{ width: '95vw', maxWidth: 1200, maxHeight: '92vh', display: 'flex', flexDirection: 'column' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
           <h3 style={{ margin: 0, fontSize: 16 }}>{year}년 {month}월 특근신청 관리</h3>
           <span style={{ fontSize: 12, color: '#64748b' }}>클릭으로 신청/취소 · 저장 버튼으로 확정</span>
@@ -782,6 +789,7 @@ function OvertimeAppModal({ year, month, employees, onClose }) {
               const nocaps = nocapsByDate[date] || new Set()
               return (
                 <div key={date} style={{ border: '1px solid #e2e8f0', borderRadius: 8, overflow: 'hidden' }}>
+                  {/* 날짜 헤더 */}
                   <div style={{
                     background: dow === '토' ? '#eff6ff' : '#fdf4ff',
                     padding: '7px 12px',
@@ -796,28 +804,36 @@ function OvertimeAppModal({ year, month, employees, onClose }) {
                         </span>
                       )}
                     </span>
-                    <button
-                      className="btn btn-sm"
-                      style={{ background: '#059669', color: '#fff', border: 'none', fontSize: 11, padding: '3px 10px' }}
-                      onClick={() => saveDate(date)}
-                      disabled={saving === date}
-                    >
-                      {saving === date ? '저장 중...' : '저장'}
-                    </button>
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      <button className="btn btn-sm" style={{ fontSize: 11, padding: '3px 10px' }}
+                        onClick={() => selectAll(date)}>전체</button>
+                      <button className="btn btn-sm" style={{ fontSize: 11, padding: '3px 10px', background: '#f1f5f9', color: '#475569', border: '1px solid #cbd5e1' }}
+                        onClick={() => clearAll(date)}>해제</button>
+                      <button
+                        className="btn btn-sm"
+                        style={{ background: '#059669', color: '#fff', border: 'none', fontSize: 11, padding: '3px 10px' }}
+                        onClick={() => saveDate(date)}
+                        disabled={saving === date}
+                      >
+                        {saving === date ? '저장 중...' : '저장'}
+                      </button>
+                    </div>
                   </div>
 
-                  <div style={{ padding: '8px 12px', display: 'flex', flexWrap: 'wrap', gap: 6, minHeight: 44 }}>
+                  {/* 직원 선택 — 날짜별 고정 높이 + 개별 스크롤 */}
+                  <div style={{ padding: '8px 12px', maxHeight: 140, overflowY: 'auto',
+                    display: 'flex', flexWrap: 'wrap', gap: 5, alignContent: 'flex-start' }}>
                     {activeEmps.map(e => {
                       const on = apps.has(e.emp_id)
                       const isNocaps = nocaps.has(e.emp_id)
                       return (
                         <button key={e.emp_id} onClick={() => toggleEmp(date, e.emp_id)} style={{
-                          padding: '4px 10px', borderRadius: 20, fontSize: 12, cursor: 'pointer',
+                          padding: '3px 9px', borderRadius: 20, fontSize: 12, cursor: 'pointer',
                           border: `1px solid ${on ? '#86efac' : '#e2e8f0'}`,
                           background: on ? (isNocaps ? '#fef3c7' : '#dcfce7') : '#f8fafc',
                           fontWeight: on ? 700 : 400,
                           color: on ? (isNocaps ? '#92400e' : '#16a34a') : '#374151',
-                          transition: 'all .15s',
+                          transition: 'all .15s', whiteSpace: 'nowrap',
                         }}>
                           {e.name}
                           {on && isNocaps && (
