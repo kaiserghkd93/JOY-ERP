@@ -139,6 +139,44 @@ def purge_all_outsource(db: Session = Depends(get_db), _: User = Depends(require
     }
 
 
+@router.get("/preview-price-fix")
+def preview_price_fix(
+    part_no: str, old_price: float, db: Session = Depends(get_db), _: User = Depends(require_admin)
+):
+    """출하 단가 수정 미리보기 — 영향받는 출하 목록 반환"""
+    rows = db.execute(
+        text("SELECT sh_no, so_no, part_no, qty, unit_price, ship_date FROM shipment "
+             "WHERE part_no = :p AND CAST(unit_price AS NUMERIC) = :up ORDER BY ship_date, sh_no"),
+        {"p": part_no, "up": old_price}
+    ).fetchall()
+    return {
+        "count": len(rows),
+        "rows": [{"sh_no": r[0], "so_no": r[1], "part_no": r[2], "qty": r[3],
+                  "unit_price": float(r[4]), "ship_date": str(r[5])} for r in rows]
+    }
+
+
+@router.post("/apply-price-fix")
+def apply_price_fix(
+    part_no: str, old_price: float, new_price: float,
+    db: Session = Depends(get_db), _: User = Depends(require_admin)
+):
+    """출하 단가 일괄 수정 (단가 오입력 수정용)"""
+    result = db.execute(
+        text("UPDATE shipment SET unit_price = :new_p "
+             "WHERE part_no = :pn AND CAST(unit_price AS NUMERIC) = :old_p"),
+        {"new_p": new_price, "pn": part_no, "old_p": old_price}
+    )
+    db.commit()
+    return {
+        "updated": result.rowcount,
+        "part_no": part_no,
+        "old_price": old_price,
+        "new_price": new_price,
+        "message": f"{part_no} 출하 {result.rowcount}건 단가 {old_price:,.0f} → {new_price:,.0f} 수정 완료"
+    }
+
+
 @router.post("/import-data")
 def import_data(data: dict, db: Session = Depends(get_db), _: User = Depends(require_admin)):
     results = {}
