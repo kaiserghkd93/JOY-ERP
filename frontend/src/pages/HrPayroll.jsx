@@ -758,7 +758,6 @@ function PayslipModal({ payroll: initialP, onClose, onSaved }) {
           )}
         </div>
       </div>
-      </>}
     </div>
   )
 }
