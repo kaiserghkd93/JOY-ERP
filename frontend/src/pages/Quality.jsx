@@ -3,6 +3,7 @@ import api from '../api'
 import { downloadQualityReport } from '../utils/reportPptx'
 import { getRole, isMaster } from '../auth'
 import { SpcPanel, ControlPlanPanel, PfmeaPanel, CalibrationPanel, AuditPanel, PpapPanel, MsaPanel } from './QualityAdvanced'
+import { printIqcReport, printIpqcReport, printOqcReport, printNcr8D } from './QualityPrint'
 
 const AQL_OPTIONS = [0.065, 0.1, 0.15, 0.25, 0.4, 0.65, 1.0, 1.5, 2.5, 4.0, 6.5]
 
@@ -327,6 +328,7 @@ function NcrDetailModal({ ncr, isManager, onClose, onSaved }) {
 
         <div className="modal-footer">
           <button className="btn btn-outline" onClick={onClose}>닫기</button>
+          <button className="btn btn-outline" style={{borderColor:'var(--primary)',color:'var(--primary)'}} onClick={() => printNcr8D(ncr)}>🖨 8D 보고서</button>
           {['반품','폐기','특채'].includes(ncr.disposal) && (
             <button className="btn btn-outline" style={{borderColor:'var(--primary)',color:'var(--primary)'}} onClick={() => printReturnSlip(ncr)}>🖨 반품명세서 출력</button>
           )}
@@ -1627,6 +1629,10 @@ export default function Quality() {
                       ✍ 결과 입력
                     </button>
                   )}
+                  <button className="btn btn-sm" style={{ background: 'rgba(255,255,255,0.15)', color: '#fff', border: '1px solid rgba(255,255,255,0.3)', fontSize: 11 }}
+                    onClick={() => printIqcReport(selectedInsp)}>
+                    🖨 IQC 성적서
+                  </button>
                   {isMaster() && (
                     <button className="btn btn-sm" style={{ background: '#7f1d1d', color: '#fff', border: 'none', fontSize: 10 }}
                       onClick={async () => {
@@ -2069,6 +2075,9 @@ export default function Quality() {
                   <td style={{maxWidth:120,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.action_taken||'—'}</td>
                   <td style={{fontSize:11,color:'var(--text-sm)'}}>{r.registered_by||'—'}</td>
                   <td style={{whiteSpace:'nowrap'}}>
+                    <button className="btn btn-xs btn-outline" style={{marginRight:4}} onClick={()=>
+                      r.inspect_type==='출하검사' ? printOqcReport(r) : printIpqcReport(r)
+                    }>🖨 성적서</button>
                     <button className="btn btn-xs btn-outline" style={{marginRight:4}} onClick={()=>setEditDefReg({...r})}>수정</button>
                     <button className="btn btn-xs btn-danger" onClick={async()=>{if(window.confirm('삭제?')){await api.delete(`/quality/defect-reg/${r.id}`);load()}}}>삭제</button>
                   </td>

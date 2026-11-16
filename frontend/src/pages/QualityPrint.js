@@ -577,3 +577,360 @@ ${analysis && !analysis.error ? `
 </body></html>`
   openPrint(html)
 }
+
+// ── 8. 수입검사 성적서 IQC (IATF 16949 §8.6) ─────────────────────
+export function printIqcReport(insp) {
+  if (!insp) return
+  const docNo = `IQC-${(insp.inspect_date||today().replace(/\./g,'-')).replace(/-/g,'')}-${String(insp.id||'001').padStart(3,'0')}`
+  const passQty = insp.pass_qty ?? (insp.inspect_qty - (insp.fail_qty||0))
+
+  const html = `<!DOCTYPE html><html lang="ko"><head><meta charset="UTF-8">
+<title>수입검사 성적서 ${docNo}</title>
+<style>${BASE_CSS}
+  .box4 { display:grid; grid-template-columns:repeat(4,1fr); border:2px solid #000; }
+  .cell { border-right:1px solid #000; border-bottom:1px solid #000; padding:5px 8px; }
+  .cell:last-child { border-right:none; }
+  .cell-label { font-size:7.5pt; color:#555; font-weight:700; display:block; margin-bottom:2px; }
+  .cell-val { font-size:9.5pt; font-weight:700; }
+  .section-h { background:#0d1f3c; color:#fff; padding:4px 8px; font-size:9pt; font-weight:900; margin:10px 0 0; letter-spacing:1px; }
+  .iatf-ref { font-size:7pt; color:#93c5fd; float:right; font-weight:400; }
+</style></head><body>
+
+<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px">
+  <div>
+    <div style="font-size:8pt;color:#555">${COMPANY}</div>
+    <div style="font-size:8pt;color:#555">품질보증부 (QA)</div>
+  </div>
+  <div style="text-align:right">
+    <div style="font-size:7.5pt;color:#555">문서번호: <strong>${docNo}</strong></div>
+    <div style="font-size:7.5pt;color:#555">개정번호: 00 &nbsp;|&nbsp; 발행일: ${today()}</div>
+    <div style="font-size:7pt;color:#1d4ed8">참조: IATF 16949:2016 §8.6 / ISO 9001:2015 §8.6 — Incoming Inspection</div>
+  </div>
+</div>
+
+<h1>수입검사 성적서 (INCOMING QUALITY INSPECTION REPORT)</h1>
+
+<div class="section-h">1. 검사 기본 정보 <span class="iatf-ref">§8.6.1 Receiving Inspection</span></div>
+<div class="box4" style="margin-bottom:0">
+  <div class="cell"><span class="cell-label">검사일</span><span class="cell-val">${insp.inspect_date||'—'}</span></div>
+  <div class="cell"><span class="cell-label">입고번호 (GR No.)</span><span class="cell-val" style="font-family:monospace">${insp.gr_no||'—'}</span></div>
+  <div class="cell"><span class="cell-label">품번</span><span class="cell-val" style="font-family:monospace">${insp.part_no||'—'}</span></div>
+  <div class="cell" style="border-right:none"><span class="cell-label">검사원</span><span class="cell-val">${insp.inspector_id||'—'}</span></div>
+</div>
+<div class="box4" style="border-top:none;margin-bottom:0">
+  <div class="cell"><span class="cell-label">로트 크기</span><span class="cell-val">${(insp.lot_size||insp.inspect_qty||0).toLocaleString()}</span></div>
+  <div class="cell"><span class="cell-label">샘플 크기 (AQL)</span><span class="cell-val">${insp.sample_size||insp.inspect_qty||'—'}</span></div>
+  <div class="cell"><span class="cell-label">합격기준 (Ac / Re)</span><span class="cell-val">${insp.ac!=null?`${insp.ac} / ${insp.re}`:'—'}</span></div>
+  <div class="cell" style="border-right:none"><span class="cell-label">승인상태</span><span class="cell-val">${insp.approval_status||'작성중'}</span></div>
+</div>
+
+<div class="section-h">2. 검사 결과 <span class="iatf-ref">§8.6.2 Inspection Results</span></div>
+<table>
+  <thead><tr>
+    <th>품번</th>
+    <th style="text-align:right">검사수량</th>
+    <th style="text-align:right">합격수량</th>
+    <th style="text-align:right">불합격수량</th>
+    <th>불량내용</th>
+    <th>판정</th>
+  </tr></thead>
+  <tbody>
+    <tr>
+      <td style="font-family:monospace">${insp.part_no||'—'}</td>
+      <td class="right">${(insp.inspect_qty||0).toLocaleString()}</td>
+      <td class="right" style="color:#166534;font-weight:700">${passQty.toLocaleString()}</td>
+      <td class="right" style="${(insp.fail_qty||0)>0?'color:#cc0000;font-weight:700':''}">
+        ${(insp.fail_qty||0).toLocaleString()}
+      </td>
+      <td>${insp.defect_note||'—'}</td>
+      <td class="center" style="${insp.result==='합격'?'color:#166534;font-weight:700':'color:#cc0000;font-weight:700'}">
+        ${insp.result||'—'}
+      </td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="sign-row" style="margin-top:16px">
+  <div class="sign-box"><div class="sign-title">검사자 (서명)</div></div>
+  <div class="sign-box"><div class="sign-title">검토자 (서명)</div></div>
+  <div class="sign-box"><div class="sign-title">승인 (서명)</div></div>
+</div>
+<div class="footer">
+  <span>${COMPANY} — 수입검사 절차 (IATF 16949 §8.6)</span>
+  <span>출력일: ${today()}</span>
+</div>
+</body></html>`
+  openPrint(html)
+}
+
+// ── 9. 출하검사 성적서 OQC (IATF 16949 §8.6) ─────────────────────
+export function printOqcReport(r) {
+  if (!r) return
+  const docNo = `OQC-${(r.defect_date||today().replace(/\./g,'-')).replace(/-/g,'')}-${String(r.id||'001').padStart(3,'0')}`
+  const passQty = (r.inspect_qty||0) - (r.defect_qty||0)
+  const judgment = (r.defect_qty||0) === 0 ? '합격 (PASS)' : r.defect_rate > 0 ? `조건부 합격 / 불합격` : '합격 (PASS)'
+  const jColor   = (r.defect_qty||0) === 0 ? '#16a34a' : '#dc2626'
+
+  const html = `<!DOCTYPE html><html lang="ko"><head><meta charset="UTF-8">
+<title>출하검사 성적서 ${docNo}</title>
+<style>${BASE_CSS}
+  .box2 { display:grid; grid-template-columns:1fr 1fr; border:2px solid #000; }
+  .box3 { display:grid; grid-template-columns:1fr 1fr 1fr; border:2px solid #000; }
+  .box4 { display:grid; grid-template-columns:repeat(4,1fr); border:2px solid #000; }
+  .cell { border-right:1px solid #000; border-bottom:1px solid #000; padding:5px 8px; }
+  .cell:last-child { border-right:none; }
+  .cell-label { font-size:7.5pt; color:#555; font-weight:700; display:block; margin-bottom:2px; }
+  .cell-val { font-size:9.5pt; font-weight:700; }
+  .section-h { background:#0d1f3c; color:#fff; padding:4px 8px; font-size:9pt; font-weight:900; margin:10px 0 0; letter-spacing:1px; }
+  .iatf-ref { font-size:7pt; color:#1d4ed8; font-style:italic; float:right; font-weight:400; }
+  .judgment { font-size:14pt; font-weight:900; color:${jColor}; border:2px solid ${jColor}; padding:4px 16px; display:inline-block; border-radius:4px; }
+</style></head><body>
+
+<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px">
+  <div>
+    <div style="font-size:8pt;color:#555">${COMPANY}</div>
+    <div style="font-size:8pt;color:#555">품질보증부 (QA)</div>
+  </div>
+  <div style="text-align:right">
+    <div style="font-size:7.5pt;color:#555">문서번호: <strong>${docNo}</strong></div>
+    <div style="font-size:7.5pt;color:#555">개정번호: 00 &nbsp;|&nbsp; 발행일: ${today()}</div>
+    <div style="font-size:7pt;color:#1d4ed8">참조: IATF 16949:2016 §8.6 / ISO 9001:2015 §8.6</div>
+  </div>
+</div>
+
+<h1>출하검사 성적서 (OUTGOING INSPECTION REPORT)</h1>
+
+<div class="section-h">1. 검사 기본 정보 <span class="iatf-ref">IATF 16949 §8.6.1 — Inspection / Test</span></div>
+<div class="box4" style="margin-bottom:0">
+  <div class="cell"><span class="cell-label">검사일</span><span class="cell-val">${r.defect_date||'—'}</span></div>
+  <div class="cell"><span class="cell-label">검사유형</span><span class="cell-val">${r.inspect_type||'출하검사'}</span></div>
+  <div class="cell"><span class="cell-label">라인/공정</span><span class="cell-val">${r.line_no||'—'}</span></div>
+  <div class="cell" style="border-right:none"><span class="cell-label">검토자</span><span class="cell-val">${r.reviewer||'—'}</span></div>
+</div>
+<div class="box4" style="border-top:none;margin-bottom:0">
+  <div class="cell"><span class="cell-label">품번</span><span class="cell-val" style="font-family:monospace">${r.part_no||'—'}</span></div>
+  <div class="cell"><span class="cell-label">품명</span><span class="cell-val">${r.part_name||'—'}</span></div>
+  <div class="cell"><span class="cell-label">출처/거래처</span><span class="cell-val">${r.partner_name||r.source_type||'자체'}</span></div>
+  <div class="cell" style="border-right:none"><span class="cell-label">등록자</span><span class="cell-val">${r.registered_by||'—'}</span></div>
+</div>
+
+<div class="section-h">2. 검사 결과 <span class="iatf-ref">§8.6.2 — Layout Inspection</span></div>
+<table>
+  <thead><tr>
+    <th style="width:35%">검사 항목</th>
+    <th style="width:15%;text-align:right">검사수량</th>
+    <th style="width:15%;text-align:right">합격수량</th>
+    <th style="width:15%;text-align:right">불량수량</th>
+    <th style="width:10%;text-align:right">불량율</th>
+    <th style="width:10%">판정</th>
+  </tr></thead>
+  <tbody>
+    <tr>
+      <td>${r.defect_type||'외관/치수 검사'}</td>
+      <td class="right">${(r.inspect_qty||0).toLocaleString()}</td>
+      <td class="right">${passQty.toLocaleString()}</td>
+      <td class="right" style="${(r.defect_qty||0)>0?'color:#cc0000;font-weight:700':''}">
+        ${(r.defect_qty||0).toLocaleString()}
+      </td>
+      <td class="right" style="${(r.defect_rate||0)>5?'color:#cc0000;font-weight:700':(r.defect_rate||0)>2?'color:#cc6600;font-weight:700':''}">
+        ${r.defect_rate!=null ? r.defect_rate+'%' : '—'}
+      </td>
+      <td class="center" style="${(r.defect_qty||0)>0?'color:#cc0000;font-weight:700':'color:#166534;font-weight:700'}">
+        ${(r.defect_qty||0)>0?'불합격':'합격'}
+      </td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="section-h">3. 불량 원인 및 조치 <span class="iatf-ref">§8.7.1 — Control of Nonconforming Outputs</span></div>
+<table>
+  <tr><th style="width:20%;background:#d9d9d9">불량 내용</th><td colspan="3">${r.defect_type||'—'}</td></tr>
+  <tr><th style="background:#d9d9d9">불량 원인</th><td colspan="3">${r.cause||'—'}</td></tr>
+  <tr><th style="background:#d9d9d9">처리 조치</th><td colspan="3">${r.action_taken||'—'}</td></tr>
+  <tr><th style="background:#d9d9d9">로스 금액</th><td>${r.loss_amount>0?r.loss_amount.toLocaleString()+'원':'—'}</td>
+      <th style="background:#d9d9d9">현재 상태</th><td>${r.status||'—'}</td></tr>
+</table>
+
+<div style="display:flex;justify-content:flex-end;margin-top:12px">
+  <div class="judgment">${(r.defect_qty||0)===0?'합격 (PASS)':'불합격 (FAIL)'}</div>
+</div>
+
+<div class="sign-row" style="margin-top:16px">
+  <div class="sign-box"><div class="sign-title">검사자 (서명)</div></div>
+  <div class="sign-box"><div class="sign-title">확인자 (서명)</div></div>
+  <div class="sign-box"><div class="sign-title">승인 (서명)</div></div>
+</div>
+<div class="footer">
+  <span>${COMPANY} — 출하검사 절차 (IATF 16949 §8.6)</span>
+  <span>출력일: ${today()}</span>
+</div>
+</body></html>`
+  openPrint(html)
+}
+
+// ── 10. 공정검사 성적서 IPQC (IATF 16949 §8.5.1) ─────────────────
+export function printIpqcReport(r) {
+  if (!r) return
+  const docNo = `IPQC-${(r.defect_date||today().replace(/\./g,'-')).replace(/-/g,'')}-${String(r.id||'001').padStart(3,'0')}`
+  const passQty = (r.inspect_qty||0) - (r.defect_qty||0)
+
+  const html = `<!DOCTYPE html><html lang="ko"><head><meta charset="UTF-8">
+<title>공정검사 성적서 ${docNo}</title>
+<style>${BASE_CSS}
+  .box4 { display:grid; grid-template-columns:repeat(4,1fr); border:2px solid #000; }
+  .cell { border-right:1px solid #000; border-bottom:1px solid #000; padding:5px 8px; }
+  .cell:last-child { border-right:none; }
+  .cell-label { font-size:7.5pt; color:#555; font-weight:700; display:block; margin-bottom:2px; }
+  .cell-val { font-size:9.5pt; font-weight:700; }
+  .section-h { background:#0d1f3c; color:#fff; padding:4px 8px; font-size:9pt; font-weight:900; margin:10px 0 0; letter-spacing:1px; }
+  .iatf-ref { font-size:7pt; color:#93c5fd; float:right; font-weight:400; }
+</style></head><body>
+
+<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px">
+  <div><div style="font-size:8pt;color:#555">${COMPANY}</div><div style="font-size:8pt;color:#555">품질보증부 (QA)</div></div>
+  <div style="text-align:right">
+    <div style="font-size:7.5pt;color:#555">문서번호: <strong>${docNo}</strong></div>
+    <div style="font-size:7.5pt;color:#555">개정번호: 00 &nbsp;|&nbsp; 발행일: ${today()}</div>
+    <div style="font-size:7pt;color:#1d4ed8">참조: IATF 16949:2016 §8.5.1 / ISO 9001:2015 §8.5.1 — In-Process Inspection</div>
+  </div>
+</div>
+
+<h1>공정검사 성적서 (IN-PROCESS QUALITY INSPECTION REPORT)</h1>
+
+<div class="section-h">1. 검사 기본 정보 <span class="iatf-ref">§8.5.1 Control of Production</span></div>
+<div class="box4" style="margin-bottom:0">
+  <div class="cell"><span class="cell-label">검사일</span><span class="cell-val">${r.defect_date||'—'}</span></div>
+  <div class="cell"><span class="cell-label">라인/공정</span><span class="cell-val">${r.line_no||'—'}</span></div>
+  <div class="cell"><span class="cell-label">품번</span><span class="cell-val" style="font-family:monospace">${r.part_no||'—'}</span></div>
+  <div class="cell" style="border-right:none"><span class="cell-label">검토자</span><span class="cell-val">${r.reviewer||'—'}</span></div>
+</div>
+<div class="box4" style="border-top:none;margin-bottom:0">
+  <div class="cell"><span class="cell-label">품명</span><span class="cell-val">${r.part_name||'—'}</span></div>
+  <div class="cell"><span class="cell-label">출처</span><span class="cell-val">${r.partner_name||r.source_type||'자체'}</span></div>
+  <div class="cell"><span class="cell-label">불량유형</span><span class="cell-val">${r.defect_type||'—'}</span></div>
+  <div class="cell" style="border-right:none"><span class="cell-label">등록자</span><span class="cell-val">${r.registered_by||'—'}</span></div>
+</div>
+
+<div class="section-h">2. 검사 결과 <span class="iatf-ref">§8.5.1 Process Monitoring</span></div>
+<table>
+  <thead><tr>
+    <th style="width:30%">검사 항목 / 불량유형</th>
+    <th style="text-align:right">검사수량</th>
+    <th style="text-align:right">합격수량</th>
+    <th style="text-align:right">불량수량</th>
+    <th style="text-align:right">불량율</th>
+    <th>판정</th>
+  </tr></thead>
+  <tbody>
+    <tr>
+      <td>${r.defect_type||'외관/치수 검사'}</td>
+      <td class="right">${(r.inspect_qty||0).toLocaleString()}</td>
+      <td class="right" style="color:#166534;font-weight:700">${passQty.toLocaleString()}</td>
+      <td class="right" style="${(r.defect_qty||0)>0?'color:#cc0000;font-weight:700':''}">
+        ${(r.defect_qty||0).toLocaleString()}
+      </td>
+      <td class="right" style="${(r.defect_rate||0)>5?'color:#cc0000;font-weight:700':(r.defect_rate||0)>2?'color:#cc6600;font-weight:700':''}">
+        ${r.defect_rate!=null ? r.defect_rate+'%' : '—'}
+      </td>
+      <td class="center" style="${(r.defect_qty||0)>0?'color:#cc0000;font-weight:700':'color:#166534;font-weight:700'}">
+        ${(r.defect_qty||0)>0?'불합격':'합격'}
+      </td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="section-h">3. 처리 조치 <span class="iatf-ref">§8.5.6 — 공정변경</span></div>
+<table>
+  <tr><th style="width:20%;background:#d9d9d9">불량 원인</th><td colspan="3">${r.cause||'—'}</td></tr>
+  <tr><th style="background:#d9d9d9">처리 조치</th><td colspan="3">${r.action_taken||'—'}</td></tr>
+  <tr><th style="background:#d9d9d9">로스 금액</th><td>${r.loss_amount>0?r.loss_amount.toLocaleString()+'원':'—'}</td>
+      <th style="background:#d9d9d9">현재 상태</th><td>${r.status||'—'}</td></tr>
+</table>
+
+<div class="sign-row" style="margin-top:16px">
+  <div class="sign-box"><div class="sign-title">검사자 (서명)</div></div>
+  <div class="sign-box"><div class="sign-title">확인자 (서명)</div></div>
+  <div class="sign-box"><div class="sign-title">승인 (서명)</div></div>
+</div>
+<div class="footer">
+  <span>${COMPANY} — 공정검사 절차 (IATF 16949 §8.5.1)</span>
+  <span>출력일: ${today()}</span>
+</div>
+</body></html>`
+  openPrint(html)
+}
+
+// ── 11. NCR + 8D 부적합보고서 (IATF 16949 §8.7 / AIAG 8D) ─────────
+export function printNcr8D(ncr) {
+  if (!ncr) return
+  const docNo = ncr.ncr_no || `NCR-${today().replace(/\./g,'')}-001`
+
+  const D_STEPS = [
+    { key: 'd1_team',        label: 'D1 — 팀 구성 (Problem-Solving Team)',         ref: '§8.7.1' },
+    { key: 'd2_desc',        label: 'D2 — 문제 기술 (Problem Description)',         ref: '§8.7.1' },
+    { key: 'd3_containment', label: 'D3 — 봉쇄조치 (Containment Actions)',          ref: '§8.7.1' },
+    { key: 'd4_root_cause',  label: 'D4 — 근본원인 (Root Cause Analysis)',          ref: '§8.5.6' },
+    { key: 'd5_corrective',  label: 'D5 — 영구 시정조치 (Permanent Corrective Action)', ref: '§8.7.2' },
+    { key: 'd6_implemented', label: 'D6 — 실행 및 검증 (Implementation & Verification)', ref: '§8.7.2' },
+    { key: 'd7_preventive',  label: 'D7 — 재발방지 (Preventive Action)',            ref: '§10.2' },
+    { key: 'd8_verification',label: 'D8 — 완료 및 감사 (Closure & Congratulations)', ref: '§10.2' },
+  ]
+
+  const html = `<!DOCTYPE html><html lang="ko"><head><meta charset="UTF-8">
+<title>8D 부적합보고서 ${docNo}</title>
+<style>${BASE_CSS}
+  .box4 { display:grid; grid-template-columns:repeat(4,1fr); border:2px solid #000; }
+  .cell { border-right:1px solid #000; border-bottom:1px solid #000; padding:5px 8px; }
+  .cell:last-child { border-right:none; }
+  .cell-label { font-size:7.5pt; color:#555; font-weight:700; display:block; margin-bottom:2px; }
+  .cell-val { font-size:9.5pt; font-weight:700; }
+  .d-label { background:#0d1f3c; color:#fff; font-size:9pt; font-weight:900; padding:5px 10px; letter-spacing:1px; }
+  .d-ref { font-size:7pt; color:#93c5fd; float:right; font-weight:400; }
+  .d-content { border:1px solid #000; border-top:none; padding:8px 10px; min-height:36px; font-size:9pt; }
+  .empty-box { color:#aaa; font-style:italic; }
+</style></head><body>
+
+<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px">
+  <div>
+    <div style="font-size:8pt;color:#555">${COMPANY}</div>
+    <div style="font-size:8pt;color:#555">품질보증부 (QA)</div>
+  </div>
+  <div style="text-align:right">
+    <div style="font-size:7.5pt;color:#555">문서번호: <strong>${docNo}</strong></div>
+    <div style="font-size:7.5pt;color:#555">발행일: ${today()}</div>
+    <div style="font-size:7pt;color:#1d4ed8">참조: IATF 16949:2016 §8.7 / AIAG 8D Methodology</div>
+  </div>
+</div>
+
+<h1>8D 부적합 대응 보고서 (8D CORRECTIVE ACTION REPORT)</h1>
+
+<div class="box4" style="margin-bottom:8px">
+  <div class="cell"><span class="cell-label">NCR 번호</span><span class="cell-val" style="font-family:monospace">${ncr.ncr_no}</span></div>
+  <div class="cell"><span class="cell-label">발생경로</span><span class="cell-val">${ncr.occur_type||'—'}</span></div>
+  <div class="cell"><span class="cell-label">처리방법</span><span class="cell-val">${ncr.disposal||'—'}</span></div>
+  <div class="cell" style="border-right:none"><span class="cell-label">상태</span><span class="cell-val">${ncr.status||'—'}</span></div>
+</div>
+<div class="box4" style="border-top:none;margin-bottom:12px">
+  <div class="cell"><span class="cell-label">품번</span><span class="cell-val" style="font-family:monospace">${ncr.part_no||'—'}</span></div>
+  <div class="cell"><span class="cell-label">품명</span><span class="cell-val">${ncr.item_name||ncr.part_no||'—'}</span></div>
+  <div class="cell"><span class="cell-label">불량내용</span><span class="cell-val">${ncr.defect_type||'—'}</span></div>
+  <div class="cell" style="border-right:none"><span class="cell-label">불량수량</span><span class="cell-val" style="color:#cc0000">${(ncr.defect_qty||0).toLocaleString()}개</span></div>
+</div>
+
+${D_STEPS.map(s => `
+<div class="d-label">${s.label} <span class="d-ref">${s.ref}</span></div>
+<div class="d-content">${ncr[s.key]||'<span class="empty-box">— 미작성 —</span>'}</div>
+`).join('')}
+
+<div class="sign-row" style="margin-top:16px">
+  <div class="sign-box"><div class="sign-title">작성자 (서명)</div><div style="font-size:8pt;margin-top:16px">Date:</div></div>
+  <div class="sign-box"><div class="sign-title">검토자 (서명)</div><div style="font-size:8pt;margin-top:16px">Date:</div></div>
+  <div class="sign-box"><div class="sign-title">고객 확인 (서명)</div><div style="font-size:8pt;margin-top:16px">Date:</div></div>
+</div>
+<div class="footer">
+  <span>${COMPANY} — 부적합 관리 절차 (IATF 16949 §8.7 / AIAG 8D)</span>
+  <span>출력일: ${today()}</span>
+</div>
+</body></html>`
+  openPrint(html)
+}
