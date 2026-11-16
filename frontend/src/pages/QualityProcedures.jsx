@@ -1,0 +1,1050 @@
+/**
+ * IATF 16949 / ISO 9001 품질경영시스템 절차서 뷰어
+ * (주)넥스젬 품질보증팀
+ */
+import { useState } from 'react'
+
+const COMPANY = '(주)넥스젬'
+const TODAY = new Date().toISOString().slice(0, 10)
+
+// ─────────────────────────────────────────────────────────────
+// 절차서 데이터 (15종)
+// ─────────────────────────────────────────────────────────────
+export const PROCEDURES = [
+  // ── 1. 품질경영시스템 절차 ────────────────────────────────
+  {
+    no: 'QMS-P-001', title: '품질경영시스템 절차', rev: '01',
+    date: '2026-01-02', author: '품질보증팀장', approver: '대표이사',
+    clause: 'IATF 16949 §4.4 / ISO 9001 §4.4', status: '승인완료',
+    purpose: '(주)넥스젬의 품질경영시스템(QMS)을 계획·수립·실행·유지·개선하기 위한 체계적인 절차를 규정함으로써 고객만족 및 지속적 개선을 달성한다.',
+    scope: '전사 모든 부서(생산, 품질, 구매, 영업, 개발) 및 외주 공급업체에 적용한다.',
+    definitions: [
+      { term: 'QMS', def: '품질경영시스템(Quality Management System): 조직의 품질 방침, 목표 및 프로세스를 수립·실행·유지·개선하는 체계' },
+      { term: '프로세스 접근법', def: 'PDCA(Plan-Do-Check-Act) 사이클과 리스크 기반 사고를 적용하여 목적 달성을 체계적으로 관리하는 방법' },
+      { term: '리스크', def: '불확실성이 목표에 미치는 영향으로, 긍정적 기회와 부정적 위협을 모두 포함' },
+    ],
+    responsibilities: [
+      { role: '대표이사', resp: 'QMS 정책 승인, 경영검토 주재, 자원 제공 최종 결정' },
+      { role: '품질보증팀장', resp: 'QMS 수립·유지·개선 총괄, 내부심사 계획 수립, 시정조치 관리' },
+      { role: '각 부서장', resp: '소관 프로세스의 절차 수립·실행, 목표 관리, 기록 유지' },
+    ],
+    procedure: [
+      {
+        section: '1. QMS 범위 및 경계 결정',
+        steps: [
+          '품질보증팀장은 조직의 내·외부 이슈(SWOT 분석) 및 이해관계자 요구사항을 연 1회 이상 파악한다.',
+          'QMS 범위 문서(QMS-D-001)를 작성하고 대표이사 승인을 득한 후 사내 게시한다.',
+          '적용 제외 항목이 있는 경우 근거를 명시하고, ISO 9001 요구사항의 적용가능성을 확인한다.',
+        ]
+      },
+      {
+        section: '2. 프로세스 수립 및 관리',
+        steps: [
+          '프로세스 맵(QMS-D-002)을 작성하여 모든 핵심 프로세스의 입력-출력-상호관계를 정의한다.',
+          '각 프로세스에 대해 목표(KPI), 책임자, 실행 방법, 모니터링 방법을 수립한다.',
+          '프로세스 성과는 분기별 측정·분석하고 목표 미달 시 시정조치를 개시한다.',
+        ]
+      },
+      {
+        section: '3. 리스크 및 기회 관리',
+        steps: [
+          '각 프로세스별 리스크 등록부(QMS-F-003)를 작성하고 연 1회 이상 갱신한다.',
+          '리스크 평가는 발생가능성(1~5) × 영향도(1~5)로 위험도(RPN)를 산출하고 임계치(≥9) 초과 시 대응계획을 수립한다.',
+          '기회는 별도 등록하여 활용 방안과 담당자를 명시한다.',
+        ]
+      },
+      {
+        section: '4. 지속적 개선',
+        steps: [
+          '경영검토, 내부심사, 고객불만, 부적합 분석 결과를 개선 입력으로 활용한다.',
+          '개선 과제는 개선등록부(QMS-F-004)에 등록하고 담당자·기한을 지정 후 추적 관리한다.',
+          '개선 효과는 측정 가능한 지표로 확인하고 그 결과를 경영검토에 보고한다.',
+        ]
+      },
+    ],
+    related_docs: ['QMS-D-001 QMS 범위 문서', 'QMS-D-002 프로세스 맵', 'QMS-P-002 문서 및 기록 관리 절차', 'QMS-P-014 경영검토 절차'],
+    records: ['QMS-F-001 이해관계자 요구사항 목록', 'QMS-F-002 내외부 이슈 분석서', 'QMS-F-003 리스크 등록부', 'QMS-F-004 개선 등록부'],
+  },
+
+  // ── 2. 문서 및 기록 관리 절차 ───────────────────────────────
+  {
+    no: 'QMS-P-002', title: '문서 및 기록 관리 절차', rev: '01',
+    date: '2026-01-02', author: '품질보증팀장', approver: '대표이사',
+    clause: 'IATF 16949 §7.5 / ISO 9001 §7.5', status: '승인완료',
+    purpose: '품질경영시스템에 필요한 문서화된 정보의 작성·검토·승인·배포·개정·폐기 및 기록의 식별·보관·보호·검색·보존·폐기에 관한 절차를 규정한다.',
+    scope: '전사 품질경영시스템 관련 절차서, 작업표준서, 품질기록에 적용한다.',
+    definitions: [
+      { term: '문서', def: '수행하여야 할 사항을 명시한 절차서, 지침서, 도면, 규격서 등' },
+      { term: '기록', def: '수행한 결과를 증거로 남긴 것으로 형태 불문(전자, 종이)' },
+      { term: '마스터 목록', def: '현재 유효한 문서의 번호·제목·개정번호·최신일자를 나열한 목록' },
+    ],
+    responsibilities: [
+      { role: '문서관리 담당자', resp: '문서 마스터 목록 유지, 배포 관리, 구버전 회수·폐기' },
+      { role: '문서 작성자', resp: '문서 초안 작성, 개정 필요 시 개정요청서 발행' },
+      { role: '승인자(팀장/임원)', resp: '문서 내용 검토 및 최종 승인' },
+    ],
+    procedure: [
+      {
+        section: '1. 문서 작성 및 승인',
+        steps: [
+          '문서 작성자는 문서작성표준(QMS-D-010)에 따라 초안을 작성하고 검토자에게 배포한다.',
+          '검토자는 내용의 정확성·완전성·현행 규정 부합성을 확인 후 의견을 반영한다.',
+          '승인권자는 최종 내용을 검토 후 서명 승인하며, 문서에 개정번호·유효일자를 부여한다.',
+        ]
+      },
+      {
+        section: '2. 문서 배포 및 관리',
+        steps: [
+          '문서관리 담당자는 마스터 목록(QMS-F-010)을 최신 상태로 유지하고 접근권한을 관리한다.',
+          '전자 문서는 ERP 문서관리 모듈에 등록하여 접근 통제하고, 종이 문서는 "관리본" 도장을 날인 후 배포한다.',
+          '구버전 문서는 "폐기" 도장을 날인하거나 삭제하여 오용을 방지한다.',
+        ]
+      },
+      {
+        section: '3. 문서 개정',
+        steps: [
+          '개정 필요 시 개정요청서(QMS-F-011)를 작성하고 개정 사유·내용·범위를 명시한다.',
+          '개정본은 변경된 항목을 표시(밑줄 또는 사이드바)하여 관련자가 확인할 수 있게 한다.',
+          '개정번호는 "00"부터 시작하며 2자리 순번으로 관리한다.',
+        ]
+      },
+      {
+        section: '4. 기록 관리',
+        steps: [
+          '각 프로세스에서 생성되는 기록은 기록목록(QMS-F-012)에 등재하고 보존 기간을 지정한다.',
+          '최소 보존 기간: 품질기록 3년, 고객요구 기록은 고객 요건에 따름, 법적 요건에 의한 기록은 해당 법령에 따름.',
+          '보존기간 경과 기록은 보안 파기하고 폐기 기록을 유지한다.',
+        ]
+      },
+    ],
+    related_docs: ['QMS-D-010 문서작성표준', 'QMS-P-001 품질경영시스템 절차'],
+    records: ['QMS-F-010 문서 마스터 목록', 'QMS-F-011 개정요청서', 'QMS-F-012 기록 목록'],
+  },
+
+  // ── 3. 리스크 및 기회 관리 절차 ─────────────────────────────
+  {
+    no: 'QMS-P-003', title: '리스크 및 기회 관리 절차', rev: '01',
+    date: '2026-01-02', author: '품질보증팀장', approver: '대표이사',
+    clause: 'IATF 16949 §6.1 / ISO 9001 §6.1', status: '승인완료',
+    purpose: '품질경영시스템 운영에 영향을 미치는 리스크와 기회를 체계적으로 식별·평가·처리하여 의도한 결과를 달성하고 바람직하지 않은 영향을 예방한다.',
+    scope: '전사 모든 프로세스 및 외부 공급업체 관련 리스크에 적용한다.',
+    definitions: [
+      { term: '리스크', def: '불확실성이 조직 목표에 미치는 영향 (부정적 위협)' },
+      { term: '기회', def: '목표 달성에 유리한 상황 또는 가능성 (긍정적 효과)' },
+      { term: 'RPN', def: '위험 우선순위 번호 = 발생 가능성 × 심각도 × 검출 가능성' },
+    ],
+    responsibilities: [
+      { role: '각 부서장', resp: '소관 프로세스의 리스크 식별 및 대응계획 수립·이행' },
+      { role: '품질보증팀장', resp: '리스크 등록부 취합·관리, 중요 리스크 경영층 보고' },
+      { role: '경영진', resp: '리스크 처리 방향 결정, 자원 배분 승인' },
+    ],
+    procedure: [
+      {
+        section: '1. 리스크 식별',
+        steps: [
+          '각 부서는 연 1회(경영계획 수립 전) 내·외부 이슈 분석, 고객 피드백, 공정 데이터 등을 활용하여 리스크를 식별한다.',
+          'FMEA, 특성요인도(이시카와 다이어그램), 브레인스토밍을 활용하여 잠재 리스크를 도출한다.',
+          '식별된 리스크는 리스크 등록부(QMS-F-003)에 카테고리(품질/생산/공급망/규제/환경)별로 등재한다.',
+        ]
+      },
+      {
+        section: '2. 리스크 평가',
+        steps: [
+          '각 리스크에 대해 발생가능성(1~5) × 심각도(1~5)로 위험도 점수를 산출한다.',
+          '위험도 임계치 기준: ≥16 긴급대응, 9~15 중기대응, ≤8 모니터링 유지.',
+          '평가 결과는 리스크 등록부에 기록하고 처리 우선순위를 결정한다.',
+        ]
+      },
+      {
+        section: '3. 리스크 처리',
+        steps: [
+          '처리 방법: 회피(원인 제거), 완화(가능성·영향 감소), 전이(보험·계약), 수용(모니터링만).',
+          '긴급/중기 대응 리스크는 담당자·기한을 지정하고 대응계획을 수립·실행한다.',
+          '대응 조치의 효과는 완료 후 60일 이내 재평가하여 위험도 감소 여부를 확인한다.',
+        ]
+      },
+    ],
+    related_docs: ['QMS-P-001 품질경영시스템 절차', 'QMS-P-010 시정조치 절차'],
+    records: ['QMS-F-003 리스크 등록부', 'QMS-F-005 리스크 처리계획서'],
+  },
+
+  // ── 4. 목표 및 기획 절차 ───────────────────────────────────
+  {
+    no: 'QMS-P-004', title: '품질목표 수립 및 관리 절차', rev: '01',
+    date: '2026-01-02', author: '품질보증팀장', approver: '대표이사',
+    clause: 'IATF 16949 §6.2 / ISO 9001 §6.2', status: '승인완료',
+    purpose: '품질목표를 SMART(Specific·Measurable·Achievable·Relevant·Time-bound) 원칙에 따라 수립하고 계획·실행·모니터링·검토 체계를 규정한다.',
+    scope: '전사 품질 KPI 및 부서별 목표 관리에 적용한다.',
+    definitions: [
+      { term: 'KPI', def: '핵심성과지표 (Key Performance Indicator): 목표 달성도를 측정하는 계량 지표' },
+      { term: 'SMART', def: '목표 설정 원칙: Specific(구체적), Measurable(측정가능), Achievable(달성가능), Relevant(관련성), Time-bound(기한명시)' },
+    ],
+    responsibilities: [
+      { role: '대표이사', resp: '전사 품질목표 최종 승인, 자원 배분 결정' },
+      { role: '품질보증팀장', resp: '품질목표 초안 수립, 월간 실적 취합·보고, 미달 시 대책 수립' },
+      { role: '각 부서장', resp: '부서별 세부목표 수립·실행, 월간 실적 보고' },
+    ],
+    procedure: [
+      {
+        section: '1. 목표 수립',
+        steps: [
+          '전년도 실적, 고객 요구사항, 경쟁사 벤치마크를 분석하여 11월 말까지 목표(안)을 작성한다.',
+          '전사 품질목표는 불량률, 고객불만, 납기준수율, 협력사 품질지수, 시정조치 완결률 등을 포함한다.',
+          '목표(안)을 경영검토에서 심의 후 대표이사 승인으로 확정하고 1월 초 전 부서에 전달한다.',
+        ]
+      },
+      {
+        section: '2. 실적 모니터링',
+        steps: [
+          '각 부서는 월 5일까지 전월 KPI 실적을 품질보증팀에 보고한다.',
+          '품질보증팀은 취합·분석 후 월 10일까지 경영층에 월간 품질성과 보고서를 제출한다.',
+          '목표 대비 달성률 80% 미만 항목은 원인분석과 개선계획을 반드시 첨부한다.',
+        ]
+      },
+    ],
+    related_docs: ['QMS-P-001 품질경영시스템 절차', 'QMS-P-014 경영검토 절차'],
+    records: ['QMS-F-020 품질목표 관리표', 'QMS-F-021 월간 품질성과 보고서'],
+  },
+
+  // ── 5. 수입검사 절차 ─────────────────────────────────────
+  {
+    no: 'INS-P-001', title: '수입검사(IQC) 절차', rev: '01',
+    date: '2026-01-02', author: '품질보증팀장', approver: '대표이사',
+    clause: 'IATF 16949 §8.6.1 / ISO 9001 §8.4.3', status: '승인완료',
+    purpose: '외부 공급업체로부터 입고되는 원자재, 부품, 반제품에 대한 수입검사를 실시하여 규격에 부적합한 품목이 생산 공정에 투입되는 것을 방지한다.',
+    scope: '모든 외부 구매품(원자재, 사급품, 외주가공품 포함)의 입고검사에 적용한다. 단, 고객 승인된 공급업체의 인증품은 검사 면제 가능.',
+    definitions: [
+      { term: 'IQC', def: 'Incoming Quality Control: 수입검사' },
+      { term: 'AQL', def: 'Acceptable Quality Level: 합격품질수준 (ISO 2859-1 기반 샘플링 기준)' },
+      { term: 'GR No.', def: 'Goods Receipt Number: 입고번호' },
+      { term: '특채', def: '규격 미달 품목을 조건부 사용 허가하는 처리 방법' },
+    ],
+    responsibilities: [
+      { role: '구매팀', resp: '입고 사전 통보, 입고증 발행, 불합격 반품 처리 주관' },
+      { role: '수입검사원(QA)', resp: '검사기준서에 따른 샘플 채취·검사·기록, 합격/불합격 판정' },
+      { role: '품질보증팀장', resp: '검사기준서 승인, 불합격 처리(반품/특채) 최종 결정' },
+    ],
+    procedure: [
+      {
+        section: '1. 입고 접수 및 검사 준비',
+        steps: [
+          '입고 담당자는 납품서와 현물을 대조하여 품번·품명·수량·납품업체를 확인하고 GR No.를 발행한다.',
+          '검사원은 해당 품번의 최신 검사기준서(IQC-STD)를 확인하고 측정장비(교정 유효기간 내)를 준비한다.',
+          '검사기준서 미등록 품목은 품질보증팀장에게 임시기준 확인 후 검사를 진행한다.',
+        ]
+      },
+      {
+        section: '2. 샘플링 및 검사',
+        steps: [
+          'ISO 2859-1 AQL 샘플링 계획에 따라 로트 크기별 샘플 수 및 Ac/Re를 결정한다.',
+          '검사항목별(외관, 치수, 기능, 재질)로 순서에 따라 검사를 실시하고 각 측정값을 검사성적서(IQC-F-001)에 기록한다.',
+          '치수 검사는 5-SHOT 측정을 원칙으로 하고 Xbar/R을 산출하여 규격 대비 판정한다.',
+        ]
+      },
+      {
+        section: '3. 판정 및 처리',
+        steps: [
+          '합격 판정: 검사성적서에 "합격" 기재, 합격 스티커 부착 후 지정 보관 위치로 이동.',
+          '불합격 판정: 검사성적서에 "불합격" 기재, 격리 구역 이동, NCR을 발행하고 구매팀에 반품 처리 요청.',
+          '특채 처리: 고객 또는 엔지니어링 승인이 필요한 경우 특채승인서(IQC-F-002)를 작성하고 관련 부서 서명 후 처리한다.',
+        ]
+      },
+      {
+        section: '4. 검사 면제 관리',
+        steps: [
+          '우수 협력사(최근 6개월 불량률 0.3% 이하, 납기준수율 98% 이상) 인증 품목은 외관검사만 실시하는 약식검사를 적용한다.',
+          '검사 면제 협력사 목록은 반기 1회 갱신하고 품질보증팀장 승인 후 구매팀에 통보한다.',
+          '검사 면제 협력사에서 불량 발생 시 즉시 면제 자격을 취소하고 전수검사를 실시한다.',
+        ]
+      },
+    ],
+    related_docs: ['INS-P-003 측정장비 관리 절차', 'NCR-P-001 부적합품 관리 절차', 'SUP-P-001 외주공급업체 관리 절차'],
+    records: ['IQC-F-001 수입검사 성적서', 'IQC-F-002 특채승인서', 'IQC-F-003 검사기준서 목록'],
+  },
+
+  // ── 6. 공정검사 절차 ─────────────────────────────────────
+  {
+    no: 'INS-P-002', title: '공정검사(IPQC) 절차', rev: '01',
+    date: '2026-01-02', author: '품질보증팀장', approver: '대표이사',
+    clause: 'IATF 16949 §8.5.1 / ISO 9001 §8.5.1', status: '승인완료',
+    purpose: '생산 공정 중 품질특성을 모니터링하여 부적합품 발생을 조기에 검출하고 공정을 안정 상태로 유지한다.',
+    scope: '전 사출성형 공정, 도장 공정, 조립 공정, 포장 공정에 적용한다.',
+    definitions: [
+      { term: 'IPQC', def: 'In-Process Quality Control: 공정검사' },
+      { term: 'SPC', def: 'Statistical Process Control: 통계적 공정관리. Xbar-R 관리도를 사용하여 공정 이상을 감지' },
+      { term: 'UCL/LCL', def: '관리상한선(Upper Control Limit) / 관리하한선(Lower Control Limit)' },
+    ],
+    responsibilities: [
+      { role: '공정 작업자', resp: '초물검사, 중간검사 실시, 이상 발생 시 즉시 작업 중단 및 보고' },
+      { role: '공정검사원(QA)', resp: '순회검사, SPC 데이터 수집·분석, 공정이상 조치 지시' },
+      { role: '생산팀장', resp: '공정이상 조치 이행, 불량품 격리, 재검사 지시' },
+    ],
+    procedure: [
+      {
+        section: '1. 초물검사 (First Article Inspection)',
+        steps: [
+          '작업 시작 전 작업표준서, 금형/설비 조건을 확인하고 초물 5개를 채취하여 전 항목 검사를 실시한다.',
+          '초물검사 결과를 초물검사표(IPQC-F-001)에 기록하고 합격 판정 후 양산을 시작한다.',
+          '초물 불합격 시 조건 조정 후 재초물 검사를 반복하며 2회 연속 불합격 시 품질보증팀장에게 보고한다.',
+        ]
+      },
+      {
+        section: '2. 중간검사 (In-Process Patrol)',
+        steps: [
+          '검사 주기는 관리계획서(CP)에 따르며 기본 2시간 1회, 중요특성(KPC) 보유 품목은 1시간 1회 실시한다.',
+          '5-SHOT 측정 방식으로 치수를 측정하고 Xbar-R 관리도에 타점한다.',
+          '관리한계선 초과, 7점 연속 증가/감소, 연속 3점 2σ 초과 등 이상 패턴 발생 시 즉시 작업 중단 후 원인조사를 실시한다.',
+        ]
+      },
+      {
+        section: '3. 외관 순회검사',
+        steps: [
+          '검사원은 1시간 간격으로 각 공정을 순회하며 외관 불량(스크래치, 버, 오염, 미성형)을 확인한다.',
+          '공정불량률은 실시간 불량등록 시스템에 입력하고 시간당 불량률 추이를 모니터링한다.',
+          '불량률 임계치(1.0%) 초과 시 생산 라인을 중단하고 원인분석 후 대책 수립 완료 후 재가동한다.',
+        ]
+      },
+      {
+        section: '4. 작업 종료 검사',
+        steps: [
+          '작업 종료 시 최종 완성품 샘플 10개를 채취하여 전 항목 검사를 실시한다.',
+          '합격 시 "합격" 태그를 부착하고 완성품 보관 구역으로 이동한다.',
+          '일간 공정 품질 현황을 익일 아침 조회 시 보고한다.',
+        ]
+      },
+    ],
+    related_docs: ['INS-P-003 측정장비 관리 절차', 'PRD-P-001 생산 관리 절차', 'NCR-P-001 부적합품 관리 절차'],
+    records: ['IPQC-F-001 초물검사표', 'IPQC-F-002 공정검사 성적서', 'IPQC-F-003 SPC 관리도'],
+  },
+
+  // ── 7. 출하검사 절차 ─────────────────────────────────────
+  {
+    no: 'INS-P-003', title: '출하검사(OQC) 절차', rev: '01',
+    date: '2026-01-02', author: '품질보증팀장', approver: '대표이사',
+    clause: 'IATF 16949 §8.6.4 / ISO 9001 §8.6', status: '승인완료',
+    purpose: '고객에게 출하되기 전 완성품의 품질을 최종 확인하여 고객 요구사항을 충족하는 제품만 출하되도록 보증한다.',
+    scope: '모든 고객 납품용 완성품에 적용한다.',
+    definitions: [
+      { term: 'OQC', def: 'Outgoing Quality Control: 출하검사' },
+      { term: '출하보류', def: '검사 완료 전 또는 불합격 판정 제품을 출하 대기 구역에 격리하는 조치' },
+    ],
+    responsibilities: [
+      { role: '출하검사원(QA)', resp: '검사기준서에 따른 최종 검사 실시, 출하검사 성적서 발행' },
+      { role: '물류팀', resp: '출하 일정 사전 통보(D-1), 합격품 포장·출하 처리' },
+      { role: '품질보증팀장', resp: '출하검사 기준 승인, 불합격 처리 결정' },
+    ],
+    procedure: [
+      {
+        section: '1. 출하 준비 확인',
+        steps: [
+          '물류팀은 출하 전일까지 품번·수량·납품처를 품질보증팀에 통보한다.',
+          '검사원은 해당 품번의 최신 검사기준서와 고객 도면을 확인하고 측정장비를 준비한다.',
+          '공정검사 기록을 검토하여 이상 이력이 있는 경우 샘플 수를 증가하여 검사한다.',
+        ]
+      },
+      {
+        section: '2. 출하검사 실시',
+        steps: [
+          'ISO 2859-1 AQL 1.0 기준으로 샘플 수를 결정하고 외관·치수·기능을 검사한다.',
+          '치수 측정은 고객 도면 기준으로 중요 치수 전항목을 측정하고 성적서에 측정값을 기재한다.',
+          '포장 상태(라벨 표기, 수량, 보호재)를 확인하고 출하검사 성적서(OQC-F-001)를 작성한다.',
+        ]
+      },
+      {
+        section: '3. 판정 및 출하',
+        steps: [
+          '합격 판정: 출하검사 성적서에 "합격" 기재 및 서명, 출하 허가증을 물류팀에 전달한다.',
+          '불합격 판정: 출하보류 조치, NCR 발행, 재작업/교체 완료 후 재검사를 실시한다.',
+          '출하검사 성적서는 고객 요청 시 제공하고 3년 이상 보관한다.',
+        ]
+      },
+    ],
+    related_docs: ['INS-P-001 수입검사 절차', 'NCR-P-001 부적합품 관리 절차'],
+    records: ['OQC-F-001 출하검사 성적서', 'OQC-F-002 출하허가증'],
+  },
+
+  // ── 8. 측정장비 관리 절차 ───────────────────────────────────
+  {
+    no: 'INS-P-004', title: '측정장비 관리 절차', rev: '01',
+    date: '2026-01-02', author: '품질보증팀장', approver: '대표이사',
+    clause: 'IATF 16949 §7.1.5 / ISO 9001 §7.1.5 / AIAG MSA 4th Ed.', status: '승인완료',
+    purpose: '측정·시험 장비의 적절한 보관·취급·교정을 통해 측정의 신뢰성을 확보하고 측정 불확도가 측정 목적에 적합함을 보증한다.',
+    scope: '품질 검사 및 공정 관리에 사용되는 모든 측정장비(버니어캘리퍼스, 마이크로미터, 게이지, 3차원 측정기 등)에 적용한다.',
+    definitions: [
+      { term: '교정', def: '국가 측정 표준에 소급 가능한 측정 표준에 대한 비교 측정' },
+      { term: 'MSA', def: 'Measurement System Analysis: 측정시스템 분석. 반복성·재현성(%R&R)을 평가' },
+      { term: 'GR&R', def: 'Gauge Repeatability & Reproducibility: %R&R < 10% 합격, 10~30% 조건부, > 30% 불합격' },
+    ],
+    responsibilities: [
+      { role: '교정 담당자(QA)', resp: '교정 주기 관리, 교정 의뢰, 교정 성적서 보관, 불합격 장비 격리' },
+      { role: '장비 사용자', resp: '사용 전 교정 유효기간 확인, 이상 발견 시 교정 담당자에게 즉시 보고' },
+      { role: '품질보증팀장', resp: '교정 주기 승인, 외부 교정기관 선정·평가' },
+    ],
+    procedure: [
+      {
+        section: '1. 장비 등록 및 식별',
+        steps: [
+          '모든 측정장비는 측정장비 대장(INS-F-040)에 관리번호, 명칭, 모델, 교정 주기를 등록한다.',
+          '각 장비에 관리번호 라벨을 부착하고 교정 유효기간을 표시한 교정 스티커를 부착한다.',
+          '교정 만료 30일 전 교정 담당자에게 자동 알림이 발송되고 교정을 의뢰한다.',
+        ]
+      },
+      {
+        section: '2. 교정 실시',
+        steps: [
+          '자체 교정: 교정절차서(INS-D-041)에 따라 자체 교정 실시, 교정성적서에 기록.',
+          '외부 교정: KAS(한국인정기구) 인정 교정기관에 의뢰, 교정 성적서 보관.',
+          '교정 결과 "부적합"인 경우 해당 장비로 측정한 최근 기록을 소급 검토하고 영향 받은 제품을 재검사한다.',
+        ]
+      },
+      {
+        section: '3. MSA 실시',
+        steps: [
+          '신규 측정장비 도입 시 및 중요특성(KPC) 관련 장비는 최초 사용 전 GR&R 연구를 실시한다.',
+          'GR&R은 측정자 2~3명, 부품 10개, 2~3회 반복 측정으로 실시하며 AIAG MSA 4판 방법을 따른다.',
+          '%R&R > 30% 장비는 사용을 금지하고 개선 조치 후 재평가한다.',
+        ]
+      },
+    ],
+    related_docs: ['INS-P-001 수입검사 절차', 'INS-P-002 공정검사 절차'],
+    records: ['INS-F-040 측정장비 대장', 'INS-F-041 교정성적서', 'INS-F-042 MSA 보고서'],
+  },
+
+  // ── 9. 부적합품 관리 절차 ────────────────────────────────
+  {
+    no: 'NCR-P-001', title: '부적합품 관리 절차', rev: '01',
+    date: '2026-01-02', author: '품질보증팀장', approver: '대표이사',
+    clause: 'IATF 16949 §8.7 / ISO 9001 §8.7', status: '승인완료',
+    purpose: '의도하지 않은 사용·납품을 방지하기 위해 부적합품을 식별·격리·처리하고 발생 원인을 제거하는 절차를 규정한다.',
+    scope: '수입검사, 공정검사, 출하검사, 고객 반품 등 모든 부적합품 발생 단계에 적용한다.',
+    definitions: [
+      { term: 'NCR', def: 'Non-Conformance Report: 부적합 보고서' },
+      { term: '특채', def: '규격 미달이지만 사용 가능성을 검토하여 조건부 사용 허가하는 처리 방법' },
+      { term: '재작업', def: '부적합 제품을 규격에 맞도록 수정·수리하는 작업' },
+    ],
+    responsibilities: [
+      { role: '발견자(QA/생산)', resp: '즉시 격리, NCR 발행, 적색 태그 부착' },
+      { role: '품질보증팀장', resp: 'NCR 검토 및 처리방법(반품/재작업/특채/폐기) 결정' },
+      { role: '생산팀', resp: '재작업 실시, 재작업 완료 후 재검사 의뢰' },
+    ],
+    procedure: [
+      {
+        section: '1. 부적합품 식별 및 격리',
+        steps: [
+          '부적합품 발견 즉시 적색 "부적합" 태그를 부착하고 지정된 격리 구역(빨간 선 내)으로 이동한다.',
+          'NCR(부적합 보고서)을 발행하고 발생 위치, 불량 내용, 수량, 발생일을 기록한다.',
+          '발견자는 즉시 품질보증팀에 통보하고 부적합품이 추가 가공·출하되지 않도록 조치한다.',
+        ]
+      },
+      {
+        section: '2. 처리 결정',
+        steps: [
+          '품질보증팀장은 NCR 접수 후 24시간 이내 처리방법을 결정한다.',
+          '처리방법: 재작업(기준 충족 가능), 특채(고객 또는 엔지니어링 승인), 폐기, 반품(공급업체 귀책).',
+          '고객 귀책 판단이 필요한 경우 고객과 협의하여 처리 방향을 결정하고 그 결과를 기록한다.',
+        ]
+      },
+      {
+        section: '3. 재작업 관리',
+        steps: [
+          '재작업 지시서(NCR-F-002)를 발행하고 작업 방법, 담당자, 완료 기한을 명시한다.',
+          '재작업 완료 후 품질검사원이 재검사를 실시하고 합격 판정 후 "재작업 합격" 태그로 교체한다.',
+          '재작업 이력이 있는 제품은 추적 가능하도록 별도 LOT 관리를 실시한다.',
+        ]
+      },
+      {
+        section: '4. 소급 평가',
+        steps: [
+          '불합격 판정 후 동일 로트 또는 동일 공정에서 생산된 선행 제품에 대해 소급 검토를 실시한다.',
+          '출하된 제품에 영향이 있을 경우 즉시 고객에게 통보하고 현장 조치 계획을 수립한다.',
+          '소급 평가 결과는 NCR에 기록하고 경영층에 보고한다.',
+        ]
+      },
+    ],
+    related_docs: ['NCR-P-002 시정조치 및 재발방지 절차', 'INS-P-001~003 검사 절차'],
+    records: ['NCR-F-001 부적합 보고서', 'NCR-F-002 재작업 지시서', 'NCR-F-003 특채승인서'],
+  },
+
+  // ── 10. 시정조치 및 재발방지 절차 ───────────────────────────
+  {
+    no: 'NCR-P-002', title: '시정조치 및 재발방지(CAPA) 절차', rev: '01',
+    date: '2026-01-02', author: '품질보증팀장', approver: '대표이사',
+    clause: 'IATF 16949 §10.2 / ISO 9001 §10.2', status: '승인완료',
+    purpose: '부적합 발생의 근본원인을 분석하여 시정조치를 취하고 재발을 방지함으로써 품질경영시스템의 지속적 개선을 도모한다.',
+    scope: '고객 불만, 내부 부적합, 공급업체 부적합, 내부심사 지적사항에 적용한다.',
+    definitions: [
+      { term: 'CAPA', def: 'Corrective Action / Preventive Action: 시정조치 / 예방조치' },
+      { term: '근본원인', def: '부적합이 발생하게 된 가장 근본적인 원인으로, 이를 제거하면 재발이 방지됨' },
+      { term: '5-Why', def: '왜를 5번 반복하여 근본원인을 도출하는 분석 방법' },
+    ],
+    responsibilities: [
+      { role: '부적합 발생 부서', resp: '즉각 조치, 근본원인 분석, 시정조치 이행' },
+      { role: '품질보증팀', resp: 'CAR 발행·배포, 기한 준수 관리, 효과 검증' },
+      { role: '경영층', resp: '중요 CAPA 진행 상황 보고 수신, 자원 지원 결정' },
+    ],
+    procedure: [
+      {
+        section: '1. 시정조치 개시',
+        steps: [
+          '부적합 중요도(고객 불만·안전 관련·반복 발생)에 따라 시정조치 요청서(CAR)를 발행한다.',
+          'CAR에는 발생 현상, 발생 일시·위치, 긴급 봉쇄조치 내용, 완료 기한을 명시한다.',
+          '긴급 봉쇄조치(D3)는 CAR 발행 후 24시간 이내 완료하고 품질보증팀장에게 보고한다.',
+        ]
+      },
+      {
+        section: '2. 근본원인 분석',
+        steps: [
+          '5-Why 분석 또는 특성요인도(이시카와 다이어그램)를 이용하여 근본원인을 도출한다.',
+          '분석 결과는 근본원인 분석서(NCR-F-010)에 기록하고 증빙 자료를 첨부한다.',
+          '근본원인은 발생원인(왜 발생했는가)과 유출원인(왜 검출되지 않았는가)을 모두 분석한다.',
+        ]
+      },
+      {
+        section: '3. 시정조치 이행',
+        steps: [
+          '근본원인에 대한 시정조치 계획을 수립하고 담당자·완료 기한을 지정한다.',
+          '시정조치 완료 후 관련 문서(작업표준, 검사기준, 관리계획서)를 개정한다.',
+          '유사 공정·제품에 대한 수평 전개(Horizontal Deployment) 여부를 검토한다.',
+        ]
+      },
+      {
+        section: '4. 효과 검증',
+        steps: [
+          '시정조치 완료 후 30일간 모니터링을 통해 재발 여부를 확인한다.',
+          '효과 검증 기간 중 동일 부적합이 재발하지 않으면 "효과 확인"으로 종결 처리한다.',
+          '효과가 없는 경우 근본원인 재분석을 실시하고 새로운 조치를 수립한다.',
+        ]
+      },
+    ],
+    related_docs: ['NCR-P-001 부적합품 관리 절차', 'QMS-P-013 내부심사 절차'],
+    records: ['NCR-F-010 시정조치 요청서(CAR)', 'NCR-F-011 근본원인 분석서', 'NCR-F-012 CAPA 추적 대장'],
+  },
+
+  // ── 11. 외주공급업체 관리 절차 ───────────────────────────────
+  {
+    no: 'SUP-P-001', title: '외주공급업체 관리 절차', rev: '01',
+    date: '2026-01-02', author: '구매팀장', approver: '대표이사',
+    clause: 'IATF 16949 §8.4 / ISO 9001 §8.4', status: '승인완료',
+    purpose: '외부 공급업체의 평가·선정·모니터링·개발을 통해 구매한 제품 및 서비스의 품질을 확보하고 공급망 리스크를 관리한다.',
+    scope: '원자재, 부품, 외주가공, 용역 서비스 공급업체에 적용한다.',
+    definitions: [
+      { term: '승인 공급업체', def: '평가를 통해 거래 적합성이 인정된 공급업체 (Approved Vendor List 등재)' },
+      { term: 'CSR', def: 'Customer Specific Requirements: 고객 특수요구사항 (공급업체까지 흐름 전달 필요)' },
+      { term: 'SQM', def: 'Supplier Quality Management: 공급업체 품질 관리' },
+    ],
+    responsibilities: [
+      { role: '구매팀', resp: '공급업체 발굴, AVL 관리, 공급업체 평가 주관' },
+      { role: '품질보증팀', resp: '공급업체 품질 평가, 현장 감사, 개선 요구' },
+      { role: '개발팀', resp: '기술적 적합성 평가, 샘플 승인' },
+    ],
+    procedure: [
+      {
+        section: '1. 공급업체 신규 등록',
+        steps: [
+          '공급업체는 사전 조사 체크리스트(SUP-F-001)를 작성 제출하고 현장 방문 감사를 실시한다.',
+          '평가 항목: 품질시스템(40점), 기술 능력(30점), 가격경쟁력(15점), 납기 능력(15점). 총 70점 이상이면 등록한다.',
+          '고객이 지정한 공급업체(Directed Supplier)는 절차 없이 AVL에 등재하되 품질 모니터링은 동일하게 실시한다.',
+        ]
+      },
+      {
+        section: '2. 공급업체 성과 평가',
+        steps: [
+          '분기별로 품질(PPM 불량률 50%), 납기(납기준수율 30%), 대응(이슈 대응도 20%)을 평가한다.',
+          'A등급(90점 이상): 우수 협력사, 약식검사 적용 가능. B등급(70~89점): 정기 관리. C등급(70점 미만): 개선 요구 및 집중 관리.',
+          '2분기 연속 C등급인 경우 공급업체 개선계획서(SUP-F-003) 제출을 요구하고 불이행 시 거래 중단을 검토한다.',
+        ]
+      },
+      {
+        section: '3. 고객 특수요구사항(CSR) 전달',
+        steps: [
+          '고객 CSR은 구매 발주서 또는 공급업체 품질계획서(SUP-F-005)에 반드시 포함하여 전달한다.',
+          '공급업체가 CSR을 충족함을 확인한 서명된 확인서를 접수·보관한다.',
+          '고객 CSR 변경 시 30일 이내 해당 공급업체에 개정 내용을 통보한다.',
+        ]
+      },
+    ],
+    related_docs: ['INS-P-001 수입검사 절차', 'NCR-P-001 부적합품 관리 절차'],
+    records: ['SUP-F-001 공급업체 평가표', 'SUP-F-002 승인공급업체 목록(AVL)', 'SUP-F-003 공급업체 개선계획서'],
+  },
+
+  // ── 12. 생산 관리 절차 ──────────────────────────────────
+  {
+    no: 'PRD-P-001', title: '생산 관리 절차', rev: '01',
+    date: '2026-01-02', author: '생산팀장', approver: '대표이사',
+    clause: 'IATF 16949 §8.5 / ISO 9001 §8.5', status: '승인완료',
+    purpose: '생산 계획, 작업 지시, 공정 관리, 설비 관리의 절차를 규정하여 품질·납기·원가 목표를 안정적으로 달성한다.',
+    scope: '전 사출성형, 도장, 조립 공정 및 외주 가공에 적용한다.',
+    definitions: [
+      { term: 'BOM', def: 'Bill of Materials: 자재명세서. 완제품 1개 생산에 필요한 원자재·부품·공정 목록' },
+      { term: 'MRP', def: 'Material Requirements Planning: 자재소요량 계획' },
+      { term: '작업지시서', def: '생산해야 할 품목, 수량, 완료 기한을 명시한 지시 문서' },
+    ],
+    responsibilities: [
+      { role: '생산계획 담당자', resp: '주간·월간 생산계획 수립, MRP 실행, 자재 수급 조정' },
+      { role: '생산팀장', resp: '작업 배분, 공정 관리, 설비 가동률 관리, 일간 생산 실적 보고' },
+      { role: '공정 작업자', resp: '작업표준서에 따른 작업 수행, 초물검사, 이상 보고' },
+    ],
+    procedure: [
+      {
+        section: '1. 생산 계획',
+        steps: [
+          '영업팀 수주 정보를 기반으로 월 25일까지 익월 생산계획(PRD-F-001)을 수립한다.',
+          'MRP를 실행하여 자재 소요량을 산출하고 구매팀에 발주 요청을 한다.',
+          '설비 능력(CAPA) 초과 시 외주 가공 여부를 판단하고 외주업체에 사전 통보한다.',
+        ]
+      },
+      {
+        section: '2. 작업 준비 및 시작',
+        steps: [
+          '작업 시작 전 작업표준서(QC공정도), 조건표, 금형·설비 체크시트를 확인한다.',
+          '초물검사 합격 후 양산을 시작하며, 작업표준서와 다른 조건으로 작업하면 안 된다.',
+          '작업 조건(온도, 압력, 속도 등) 변경 시 품질보증팀 승인 후 작업표준서를 개정한다.',
+        ]
+      },
+      {
+        section: '3. 공정 이상 처리',
+        steps: [
+          '불량 발생, 설비 고장, 자재 품질 이상 발생 시 즉시 작업을 중단하고 팀장에게 보고한다.',
+          '공정 이상은 이상보고서(PRD-F-003)에 기록하고 원인·조치·재발방지 대책을 수립한다.',
+          '중대 공정 이상(연속 10개 이상 불량, 설비 고장 2시간 이상)은 품질·생산팀장 공동 대응한다.',
+        ]
+      },
+    ],
+    related_docs: ['INS-P-002 공정검사 절차', 'NCR-P-001 부적합품 관리 절차'],
+    records: ['PRD-F-001 생산계획서', 'PRD-F-002 작업지시서', 'PRD-F-003 공정 이상 보고서', 'PRD-F-004 일간 생산 실적'],
+  },
+
+  // ── 13. 식별 및 추적성 관리 절차 ───────────────────────────
+  {
+    no: 'TRC-P-001', title: '식별 및 추적성 관리 절차', rev: '01',
+    date: '2026-01-02', author: '품질보증팀장', approver: '대표이사',
+    clause: 'IATF 16949 §8.5.2 / ISO 9001 §8.5.2', status: '승인완료',
+    purpose: '원자재 입고부터 완제품 출하까지 모든 단계에서 제품을 식별하고 추적 가능한 체계를 유지하여 부적합 발생 시 소급 추적 및 격리가 가능하게 한다.',
+    scope: '원자재, 반제품, 완제품 및 외주가공품에 적용한다.',
+    definitions: [
+      { term: '추적성', def: '제품의 이력, 적용 또는 위치를 추적할 수 있는 능력' },
+      { term: 'LOT', def: '동일 조건에서 동일 시기에 생산된 제품의 묶음 단위' },
+      { term: '태그', def: '제품 상태(검사 대기/합격/불합격/격리)를 표시하는 색상 태그' },
+    ],
+    responsibilities: [
+      { role: '입고 담당자', resp: 'LOT 번호 부여, 원자재 식별 태그 부착' },
+      { role: '공정 작업자', resp: '공정 간 이동 시 작업지시번호·LOT 번호 유지' },
+      { role: '출하 담당자', resp: '출하 LOT 번호 기록 및 고객 납품서에 추적성 정보 기재' },
+    ],
+    procedure: [
+      {
+        section: '1. 원자재 식별',
+        steps: [
+          '입고 시 품번·LOT 번호·입고일·공급업체를 표시한 식별 태그를 부착한다.',
+          'LOT 번호 부여 체계: 품번-YYYYMMDD-일련번호 (예: A001-20261117-001).',
+          '검사 상태에 따라 태그 색상 구분: 흰색(검사 대기), 녹색(합격), 적색(불합격), 황색(보류).',
+        ]
+      },
+      {
+        section: '2. 공정 추적성',
+        steps: [
+          '공정 투입 시 작업지시서에 원자재 LOT 번호를 기재하여 완제품 LOT과 연결한다.',
+          '각 공정 완료 후 작업지시서에 담당자 서명, 완료 수량, 불량 수량을 기록한다.',
+          '금형·설비 번호도 작업지시서에 기재하여 설비 이상과 불량의 연관성을 추적 가능하게 한다.',
+        ]
+      },
+      {
+        section: '3. 완제품 출하 추적성',
+        steps: [
+          '출하 완제품 LOT 번호를 납품서에 기재하고 고객이 추적 가능하게 한다.',
+          '출하 기록(품번, LOT, 수량, 납품처, 출하일)을 3년 이상 보관한다.',
+          '리콜 또는 고객 클레임 발생 시 출하 기록을 바탕으로 24시간 이내 해당 LOT의 출하 현황을 파악한다.',
+        ]
+      },
+    ],
+    related_docs: ['NCR-P-001 부적합품 관리 절차', 'PRD-P-001 생산 관리 절차'],
+    records: ['TRC-F-001 LOT 추적 대장', 'TRC-F-002 공정 작업지시서', 'TRC-F-003 출하 기록'],
+  },
+
+  // ── 14. 내부심사 절차 ───────────────────────────────────
+  {
+    no: 'AUD-P-001', title: '내부심사 절차', rev: '01',
+    date: '2026-01-02', author: '품질보증팀장', approver: '대표이사',
+    clause: 'IATF 16949 §9.2 / ISO 9001 §9.2', status: '승인완료',
+    purpose: '품질경영시스템이 계획된 요구사항, ISO/IATF 표준, 고객 요구사항에 부합하는지를 독립적으로 검증하여 개선 기회를 도출한다.',
+    scope: '전사 품질경영시스템, 제품 품질, 제조공정에 대한 연간 내부심사에 적용한다.',
+    definitions: [
+      { term: '심사원', def: '내부심사를 수행하는 자격을 갖춘 직원 (객관성·공정성 보장을 위해 자기 부서 심사 불가)' },
+      { term: '지적사항', def: '심사 중 발견된 부적합(중대/경미), 관찰사항, 강점' },
+      { term: '수감 부서', def: '내부심사를 받는 부서' },
+    ],
+    responsibilities: [
+      { role: '심사팀장(QA)', resp: '연간 심사 계획 수립, 심사팀 구성, 심사 보고서 작성' },
+      { role: '내부심사원', resp: '체크리스트 준비, 심사 수행, 지적사항 기록' },
+      { role: '수감 부서장', resp: '심사 협조, 지적사항에 대한 시정조치 계획 제출·이행' },
+    ],
+    procedure: [
+      {
+        section: '1. 심사 계획',
+        steps: [
+          '연간 내부심사 계획서(AUD-F-001)를 1월 중 수립하고 경영층 승인을 받는다.',
+          '심사 범위: QMS 전체(연 1회), 제품 품질심사(제품별 연 1회), 제조공정 심사(공정별 연 1회).',
+          '이전 심사 결과, 고객 불만, 불량 발생 현황을 고려하여 중점 심사 영역을 선정한다.',
+        ]
+      },
+      {
+        section: '2. 심사 준비',
+        steps: [
+          '심사 10일 전 수감 부서에 심사 일정, 심사 범위, 심사원을 통보한다.',
+          '심사원은 적용 조항별 체크리스트(AUD-F-002)를 준비하고 이전 심사 지적사항을 검토한다.',
+          '심사원은 자기 부서 심사에 배정되지 않음을 확인하고 이해충돌이 있으면 팀장에게 보고한다.',
+        ]
+      },
+      {
+        section: '3. 심사 실시',
+        steps: [
+          '오프닝 미팅에서 심사 목적·범위·방법·일정을 수감 부서장에게 설명한다.',
+          '인터뷰, 관찰, 기록 검토를 통해 증거를 수집하고 체크리스트에 기록한다.',
+          '지적사항은 증거와 함께 지적사항 목록(AUD-F-003)에 기록하고 수감 부서장에게 확인 서명을 받는다.',
+        ]
+      },
+      {
+        section: '4. 심사 후속 조치',
+        steps: [
+          '심사 보고서는 심사 완료 후 5영업일 이내 경영층에 배포한다.',
+          '수감 부서는 보고서 접수 후 15영업일 이내 시정조치 계획을 제출한다.',
+          '심사팀장은 시정조치 완료 여부를 확인하고 종결 처리한다. 종결 불가 시 에스컬레이션한다.',
+        ]
+      },
+    ],
+    related_docs: ['NCR-P-002 시정조치 및 재발방지 절차', 'QMS-P-014 경영검토 절차'],
+    records: ['AUD-F-001 연간 내부심사 계획서', 'AUD-F-002 심사 체크리스트', 'AUD-F-003 지적사항 목록', 'AUD-F-004 심사 보고서'],
+  },
+
+  // ── 15. 경영검토 절차 ───────────────────────────────────
+  {
+    no: 'QMS-P-014', title: '경영검토 절차', rev: '01',
+    date: '2026-01-02', author: '품질보증팀장', approver: '대표이사',
+    clause: 'IATF 16949 §9.3 / ISO 9001 §9.3', status: '승인완료',
+    purpose: '최고경영자가 품질경영시스템의 적합성·충분성·유효성을 주기적으로 검토하여 지속적 개선 방향을 결정하는 절차를 규정한다.',
+    scope: '전사 품질경영시스템 경영검토에 적용한다.',
+    definitions: [
+      { term: '경영검토', def: '최고경영자가 QMS의 성과와 개선 필요성을 주기적으로 검토하는 공식 활동' },
+      { term: '검토 입력', def: '경영검토에 필요한 데이터와 정보 (고객 만족도, 품질목표 달성률, 심사결과 등)' },
+      { term: '검토 출력', def: '경영검토 결과로 도출된 개선 결정사항, 자원 배분, 시정조치 방향' },
+    ],
+    responsibilities: [
+      { role: '대표이사', resp: '경영검토 주재, 검토 출력(결정사항) 승인' },
+      { role: '품질보증팀장', resp: '검토 입력 자료 취합·보고서 작성, 의사록 작성·배포' },
+      { role: '각 팀장', resp: '소관 분야 성과 데이터 제출, 경영검토 참석' },
+    ],
+    procedure: [
+      {
+        section: '1. 경영검토 계획',
+        steps: [
+          '경영검토는 연 2회(상반기: 7월, 하반기: 1월) 이상 실시한다.',
+          '품질보증팀장은 경영검토 15일 전 의제 목록과 자료 제출 요청을 각 부서에 발송한다.',
+          '특별 경영검토: 중대 고객 불만, 리콜, 대형 품질 사고 발생 시 긴급 소집한다.',
+        ]
+      },
+      {
+        section: '2. 검토 입력 준비',
+        steps: [
+          '검토 입력 항목: ①고객 만족도·불만 ②품질목표 달성률 ③프로세스 성과·제품 적합성 ④내부심사 결과 ⑤공급업체 성과 ⑥변경 필요성 ⑦이전 검토 후속조치 ⑧리스크·기회.',
+          '각 팀장은 소관 분야 데이터를 경영검토 5일 전까지 품질보증팀에 제출한다.',
+          '품질보증팀장은 취합된 자료를 경영검토 보고서(QMS-F-050) 양식으로 정리한다.',
+        ]
+      },
+      {
+        section: '3. 경영검토 실시',
+        steps: [
+          '경영검토는 대표이사가 주재하고 품질·생산·구매·영업·개발 팀장이 참석한다.',
+          '각 발표자는 성과 데이터를 발표하고 목표 미달 항목에 대한 원인과 대책을 설명한다.',
+          '대표이사는 개선 방향을 결정하고 필요 시 자원(인력, 설비, 예산) 배분을 승인한다.',
+        ]
+      },
+      {
+        section: '4. 검토 출력 및 후속조치',
+        steps: [
+          '경영검토 의사록(QMS-F-051)에 결정사항, 담당자, 완료 기한을 기재하고 참석자 서명을 받는다.',
+          '의사록은 경영검토 완료 후 3영업일 이내 전 참석자 및 관련 부서에 배포한다.',
+          '다음 경영검토 시 이전 결정사항의 이행 여부를 첫 번째 의제로 검토한다.',
+        ]
+      },
+    ],
+    related_docs: ['QMS-P-001 품질경영시스템 절차', 'AUD-P-001 내부심사 절차', 'NCR-P-002 시정조치 절차'],
+    records: ['QMS-F-050 경영검토 보고서', 'QMS-F-051 경영검토 의사록'],
+  },
+]
+
+// ─────────────────────────────────────────────────────────────
+// 절차서 출력 함수
+// ─────────────────────────────────────────────────────────────
+function printProcedure(proc) {
+  const html = `<!DOCTYPE html><html lang="ko"><head><meta charset="UTF-8">
+<title>${proc.no} ${proc.title}</title>
+<style>
+  @page { size: A4 portrait; margin: 15mm 12mm; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Malgun Gothic','Apple SD Gothic Neo',Arial,sans-serif; font-size: 9pt; color: #000; background: #fff; }
+  .doc-header { display: grid; grid-template-columns: 60px 1fr 100px 100px 80px; border: 2px solid #000; margin-bottom: 0; }
+  .doc-header > div { padding: 4px 8px; border-right: 1px solid #000; }
+  .doc-header > div:last-child { border-right: none; }
+  .dh-label { font-size: 7pt; color: #555; }
+  .dh-val { font-size: 8.5pt; font-weight: 700; }
+  h1 { text-align: center; font-size: 13pt; font-weight: 900; letter-spacing: 3px; padding: 8px 0; border: 1px solid #000; border-top: none; margin-bottom: 10px; }
+  .meta-bar { display: flex; gap: 0; border: 1px solid #ccc; margin-bottom: 10px; font-size: 8pt; }
+  .meta-cell { padding: 4px 10px; border-right: 1px solid #ccc; }
+  .meta-cell:last-child { border-right: none; }
+  .meta-label { font-size: 7pt; color: #777; }
+  h2 { font-size: 10pt; font-weight: 900; background: #0d1f3c; color: #fff; padding: 4px 10px; margin: 10px 0 4px; letter-spacing: 1px; }
+  h3 { font-size: 9pt; font-weight: 700; padding: 3px 0 2px; border-bottom: 1px solid #ccc; margin: 8px 0 4px; color: #0d1f3c; }
+  p { font-size: 9pt; line-height: 1.6; padding: 2px 4px; }
+  .def-table { width: 100%; border-collapse: collapse; margin-top: 4px; }
+  .def-table th { background: #d9d9d9; font-size: 8pt; padding: 4px 8px; border: 1px solid #000; text-align: left; }
+  .def-table td { font-size: 8pt; padding: 4px 8px; border: 1px solid #000; vertical-align: top; }
+  .resp-table { width: 100%; border-collapse: collapse; margin-top: 4px; }
+  .resp-table th { background: #d9d9d9; font-size: 8pt; padding: 4px 8px; border: 1px solid #000; }
+  .resp-table td { font-size: 8pt; padding: 4px 8px; border: 1px solid #000; vertical-align: top; }
+  ol { padding-left: 18px; }
+  ol li { font-size: 8.5pt; line-height: 1.7; }
+  .related-list, .record-list { margin: 4px 0 0 0; padding: 0; list-style: none; }
+  .related-list li, .record-list li { font-size: 8.5pt; padding: 2px 0 2px 12px; line-height: 1.5; }
+  .related-list li::before { content: '▸ '; color: #0d1f3c; font-weight: 700; margin-left: -12px; }
+  .record-list li::before { content: '□ '; margin-left: -12px; }
+  .sign-row { display: flex; gap: 10px; margin-top: 20px; }
+  .sign-box { flex: 1; border: 1px solid #000; padding: 6px 10px; min-height: 40px; }
+  .sign-title { font-size: 8pt; color: #555; }
+  .footer { margin-top: 12px; display: flex; justify-content: space-between; font-size: 7.5pt; color: #555; border-top: 1px solid #ccc; padding-top: 5px; }
+  @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
+</style></head><body>
+
+<div class="doc-header">
+  <div><div class="dh-label">문서번호</div><div class="dh-val">${proc.no}</div></div>
+  <div><div class="dh-label">제목</div><div class="dh-val">${proc.title}</div></div>
+  <div><div class="dh-label">개정번호</div><div class="dh-val">Rev.${proc.rev}</div></div>
+  <div><div class="dh-label">적용일</div><div class="dh-val">${proc.date}</div></div>
+  <div><div class="dh-label">상태</div><div class="dh-val">${proc.status}</div></div>
+</div>
+<h1>${proc.title}</h1>
+
+<div class="meta-bar">
+  <div class="meta-cell"><div class="meta-label">회사</div><strong>${COMPANY}</strong></div>
+  <div class="meta-cell"><div class="meta-label">부서</div><strong>품질보증팀</strong></div>
+  <div class="meta-cell"><div class="meta-label">작성자</div><strong>${proc.author}</strong></div>
+  <div class="meta-cell"><div class="meta-label">승인자</div><strong>${proc.approver}</strong></div>
+  <div class="meta-cell"><div class="meta-label">적용 조항</div><strong>${proc.clause}</strong></div>
+</div>
+
+<h2>1. 목적 (Purpose)</h2>
+<p>${proc.purpose}</p>
+
+<h2>2. 적용 범위 (Scope)</h2>
+<p>${proc.scope}</p>
+
+<h2>3. 용어 및 정의 (Definitions)</h2>
+<table class="def-table">
+  <tr><th style="width:120px">용어</th><th>정의</th></tr>
+  ${proc.definitions.map(d => `<tr><td><strong>${d.term}</strong></td><td>${d.def}</td></tr>`).join('')}
+</table>
+
+<h2>4. 책임과 권한 (Responsibilities)</h2>
+<table class="resp-table">
+  <tr><th style="width:150px">역할</th><th>책임 사항</th></tr>
+  ${proc.responsibilities.map(r => `<tr><td><strong>${r.role}</strong></td><td>${r.resp}</td></tr>`).join('')}
+</table>
+
+<h2>5. 절차 (Procedure)</h2>
+${proc.procedure.map(s => `
+  <h3>${s.section}</h3>
+  <ol>${s.steps.map(step => `<li>${step}</li>`).join('')}</ol>
+`).join('')}
+
+<h2>6. 관련 문서 (Related Documents)</h2>
+<ul class="related-list">${proc.related_docs.map(d => `<li>${d}</li>`).join('')}</ul>
+
+<h2>7. 품질 기록 (Quality Records)</h2>
+<ul class="record-list">${proc.records.map(r => `<li>${r}</li>`).join('')}</ul>
+
+<div class="sign-row">
+  <div class="sign-box"><div class="sign-title">작성자 (서명 / 날짜)</div></div>
+  <div class="sign-box"><div class="sign-title">검토자 (서명 / 날짜)</div></div>
+  <div class="sign-box"><div class="sign-title">승인자 (서명 / 날짜)</div></div>
+</div>
+<div class="footer">
+  <span>${COMPANY} — ${proc.clause}</span>
+  <span>${proc.no} Rev.${proc.rev} | 출력일: ${new Date().toLocaleDateString('ko-KR')}</span>
+</div>
+</body></html>`
+
+  const w = window.open('', '_blank', 'width=1200,height=900')
+  w.document.write(html)
+  w.document.close()
+  w.onload = () => { w.focus(); w.print() }
+}
+
+// ─────────────────────────────────────────────────────────────
+// 절차서 뷰어 컴포넌트
+// ─────────────────────────────────────────────────────────────
+export default function QualityProcedures() {
+  const [selected, setSelected] = useState(null)
+  const [search, setSearch] = useState('')
+
+  const filtered = PROCEDURES.filter(p =>
+    !search || p.no.includes(search) || p.title.includes(search) || p.clause.includes(search)
+  )
+
+  const statusBadge = (s) => {
+    if (s === '승인완료') return <span className="badge badge-green">{s}</span>
+    if (s === '작성중') return <span className="badge badge-amber">{s}</span>
+    return <span className="badge">{s}</span>
+  }
+
+  if (selected) {
+    const p = selected
+    return (
+      <div>
+        <div style={{ display: 'flex', gap: 8, marginBottom: 12, alignItems: 'center' }}>
+          <button className="btn btn-sm btn-outline" onClick={() => setSelected(null)}>← 목록</button>
+          <span style={{ fontWeight: 700, fontSize: 15 }}>{p.no} — {p.title}</span>
+          <div className="spacer" />
+          <button className="btn btn-sm btn-primary" onClick={() => printProcedure(p)}>🖨 절차서 출력</button>
+        </div>
+
+        {/* 문서 메타 */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', border: '1px solid var(--border)', marginBottom: 12 }}>
+          {[['문서번호', p.no], ['개정번호', `Rev.${p.rev}`], ['적용일', p.date], ['작성자', p.author], ['상태', p.status]].map(([l, v]) => (
+            <div key={l} style={{ padding: '6px 10px', borderRight: '1px solid var(--border)' }}>
+              <div style={{ fontSize: 10, color: 'var(--text-sm)' }}>{l}</div>
+              <div style={{ fontWeight: 700, fontSize: 12 }}>{v}</div>
+            </div>
+          ))}
+        </div>
+        <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 4, padding: '6px 12px', marginBottom: 12, fontSize: 11, color: '#1d4ed8' }}>
+          📌 적용 조항: {p.clause}
+        </div>
+
+        {/* 절차 본문 */}
+        {[
+          { title: '1. 목적 (Purpose)', content: <p style={{ padding: '8px 4px', lineHeight: 1.7 }}>{p.purpose}</p> },
+          { title: '2. 적용 범위 (Scope)', content: <p style={{ padding: '8px 4px', lineHeight: 1.7 }}>{p.scope}</p> },
+          {
+            title: '3. 용어 및 정의 (Definitions)',
+            content: (
+              <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: 4 }}>
+                <thead><tr>
+                  <th style={{ width: 140, background: 'var(--bg-hover)', padding: '5px 8px', border: '1px solid var(--border)', textAlign: 'left', fontSize: 11 }}>용어</th>
+                  <th style={{ background: 'var(--bg-hover)', padding: '5px 8px', border: '1px solid var(--border)', textAlign: 'left', fontSize: 11 }}>정의</th>
+                </tr></thead>
+                <tbody>{p.definitions.map(d => (
+                  <tr key={d.term}>
+                    <td style={{ padding: '5px 8px', border: '1px solid var(--border)', fontWeight: 700, fontSize: 12 }}>{d.term}</td>
+                    <td style={{ padding: '5px 8px', border: '1px solid var(--border)', fontSize: 12 }}>{d.def}</td>
+                  </tr>
+                ))}</tbody>
+              </table>
+            )
+          },
+          {
+            title: '4. 책임과 권한 (Responsibilities)',
+            content: (
+              <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: 4 }}>
+                <thead><tr>
+                  <th style={{ width: 160, background: 'var(--bg-hover)', padding: '5px 8px', border: '1px solid var(--border)', textAlign: 'left', fontSize: 11 }}>역할</th>
+                  <th style={{ background: 'var(--bg-hover)', padding: '5px 8px', border: '1px solid var(--border)', textAlign: 'left', fontSize: 11 }}>책임 사항</th>
+                </tr></thead>
+                <tbody>{p.responsibilities.map(r => (
+                  <tr key={r.role}>
+                    <td style={{ padding: '5px 8px', border: '1px solid var(--border)', fontWeight: 700, fontSize: 12 }}>{r.role}</td>
+                    <td style={{ padding: '5px 8px', border: '1px solid var(--border)', fontSize: 12 }}>{r.resp}</td>
+                  </tr>
+                ))}</tbody>
+              </table>
+            )
+          },
+          {
+            title: '5. 절차 (Procedure)',
+            content: (
+              <div>
+                {p.procedure.map((s, si) => (
+                  <div key={si} style={{ marginBottom: 12 }}>
+                    <div style={{ background: '#1e3a5f', color: '#fff', padding: '4px 10px', fontSize: 12, fontWeight: 700, borderRadius: '3px 3px 0 0', marginTop: 8 }}>{s.section}</div>
+                    <ol style={{ padding: '8px 0 4px 24px', background: 'var(--bg-card)', border: '1px solid var(--border)', borderTop: 'none', borderRadius: '0 0 3px 3px' }}>
+                      {s.steps.map((step, i) => (
+                        <li key={i} style={{ padding: '3px 0', fontSize: 12, lineHeight: 1.7 }}>{step}</li>
+                      ))}
+                    </ol>
+                  </div>
+                ))}
+              </div>
+            )
+          },
+          {
+            title: '6. 관련 문서 (Related Documents)',
+            content: (
+              <ul style={{ listStyle: 'none', padding: '4px 0' }}>
+                {p.related_docs.map(d => <li key={d} style={{ padding: '3px 4px', fontSize: 12 }}>▸ {d}</li>)}
+              </ul>
+            )
+          },
+          {
+            title: '7. 품질 기록 (Quality Records)',
+            content: (
+              <ul style={{ listStyle: 'none', padding: '4px 0' }}>
+                {p.records.map(r => <li key={r} style={{ padding: '3px 4px', fontSize: 12 }}>□ {r}</li>)}
+              </ul>
+            )
+          },
+        ].map(section => (
+          <div key={section.title} style={{ marginBottom: 8 }}>
+            <div style={{ background: '#0d1f3c', color: '#fff', padding: '5px 12px', fontWeight: 900, fontSize: 12, letterSpacing: 1 }}>{section.title}</div>
+            <div style={{ border: '1px solid var(--border)', borderTop: 'none', padding: '6px 10px' }}>{section.content}</div>
+          </div>
+        ))}
+      </div>
+    )
+  }
+
+  return (
+    <div>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 12, alignItems: 'center' }}>
+        <input className="form-input" style={{ width: 220, fontSize: 12 }}
+          placeholder="문서번호 / 제목 / 조항 검색..."
+          value={search} onChange={e => setSearch(e.target.value)} />
+        <span style={{ fontSize: 11, color: 'var(--text-sm)' }}>{filtered.length}개 절차서</span>
+      </div>
+
+      {/* 절차서 카테고리별 목록 */}
+      {[
+        { prefix: 'QMS', label: '📋 품질경영시스템 (QMS)', color: '#1e3a5f' },
+        { prefix: 'INS', label: '🔬 검사 및 측정 (INS)', color: '#1e5f3a' },
+        { prefix: 'NCR', label: '⚠️ 부적합 관리 (NCR)', color: '#7f1d1d' },
+        { prefix: 'SUP', label: '🤝 공급업체 관리 (SUP)', color: '#3a1e5f' },
+        { prefix: 'PRD', label: '🏭 생산 관리 (PRD)', color: '#5f4e1e' },
+        { prefix: 'TRC', label: '🔍 식별 및 추적성 (TRC)', color: '#1e5f5a' },
+        { prefix: 'AUD', label: '📊 심사 및 경영검토 (AUD)', color: '#2d1e5f' },
+      ].map(cat => {
+        const procs = filtered.filter(p => p.no.startsWith(cat.prefix) || (cat.prefix === 'AUD' && (p.no.startsWith('AUD') || p.no === 'QMS-P-014')))
+        if (procs.length === 0) return null
+        return (
+          <div key={cat.prefix} style={{ marginBottom: 16 }}>
+            <div style={{ background: cat.color, color: '#fff', padding: '6px 14px', fontSize: 12, fontWeight: 700, borderRadius: '4px 4px 0 0' }}>{cat.label}</div>
+            <div style={{ border: '1px solid var(--border)', borderTop: 'none' }}>
+              {procs.map((p, i) => (
+                <div key={p.no} style={{ display: 'grid', gridTemplateColumns: '110px 1fr 200px 80px 80px 90px', alignItems: 'center', padding: '8px 14px', borderBottom: i < procs.length - 1 ? '1px solid var(--border)' : 'none', cursor: 'pointer', background: 'var(--bg-card)' }}
+                  onClick={() => setSelected(p)}
+                  onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
+                  onMouseLeave={e => e.currentTarget.style.background = 'var(--bg-card)'}>
+                  <span style={{ fontFamily: 'monospace', fontSize: 11, color: '#1d4ed8', fontWeight: 700 }}>{p.no}</span>
+                  <span style={{ fontWeight: 600, fontSize: 13 }}>{p.title}</span>
+                  <span style={{ fontSize: 10, color: 'var(--text-sm)' }}>{p.clause}</span>
+                  <span style={{ fontSize: 11, textAlign: 'center' }}>Rev.{p.rev}</span>
+                  {statusBadge(p.status)}
+                  <div style={{ display: 'flex', gap: 4, justifyContent: 'flex-end' }}>
+                    <button className="btn btn-xs btn-outline" onClick={e => { e.stopPropagation(); setSelected(p) }}>보기</button>
+                    <button className="btn btn-xs btn-primary" onClick={e => { e.stopPropagation(); printProcedure(p) }}>🖨</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
