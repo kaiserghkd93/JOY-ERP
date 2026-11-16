@@ -36,15 +36,22 @@ export default function CostActual() {
     if (tab === 'avg-cost') loadAvgCosts()
     else if (tab === 'monthly') loadMonthly()
     else if (tab === 'variance') loadVariance()
+    else if (tab === 'co-variance') loadCoVariance()
   }, [tab, ym])
 
   useEffect(() => { if (tab === 'avg-cost') loadAvgCosts() }, [itemType])
 
   const [variance, setVariance] = useState(null)
+  const [coVariance, setCoVariance] = useState(null)
 
   const loadVariance = () => {
     const [y,m] = ym.split('-')
     api.get(`/cost/actual/production-variance?year=${y}&month=${m}`).then(r => setVariance(r.data)).catch(()=>setVariance(null))
+  }
+
+  const loadCoVariance = () => {
+    const [y,m] = ym.split('-')
+    api.get(`/cost/actual/co-variance?year=${y}&month=${m}`).then(r => setCoVariance(r.data)).catch(()=>setCoVariance(null))
   }
 
   const TABS = [
@@ -52,6 +59,7 @@ export default function CostActual() {
     ['rollup', '제품별 실원가 롤업'],
     ['monthly', '월별 실원가 집계'],
     ['variance', '생산원가 차이 분석'],
+    ['co-variance', '📊 SAP CO 차이분석'],
   ]
 
   return (
@@ -322,6 +330,106 @@ export default function CostActual() {
             </>
           )}
           {!variance && <div style={{textAlign:'center',color:'#94a3b8',padding:'60px 0',fontSize:14}}>월을 선택하고 조회하세요</div>}
+        </>
+      )}
+
+      {/* SAP CO 표준원가 차이분석 */}
+      {tab === 'co-variance' && (
+        <>
+          <div className="erp-panel" style={{marginBottom:12}}>
+            <div style={{display:'flex',gap:8,alignItems:'center'}}>
+              <span style={{fontSize:12,color:'#64748b'}}>조회 월</span>
+              <input type="month" value={ym} onChange={e=>setYm(e.target.value)}
+                style={{padding:'5px 8px',border:'1px solid var(--border)',borderRadius:4,fontSize:13}}/>
+              <button className="btn btn-sm btn-primary" onClick={loadCoVariance}>조회</button>
+            </div>
+          </div>
+          {coVariance && (
+            <>
+              {/* SAP CO 차이 요약 카드 */}
+              <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(170px,1fr))',gap:10,marginBottom:16}}>
+                {[
+                  {label:'재료 가격차이', val:coVariance.summary.material_price_var, desc:'(실제단가-표준단가)×실제량'},
+                  {label:'재료 수량차이', val:coVariance.summary.material_qty_var,  desc:'(실제투입-표준투입)×표준가'},
+                  {label:'재료비 차이 계', val:coVariance.summary.material_variance, desc:'가격차이+수량차이', bold:true},
+                  {label:'노무 임률차이', val:coVariance.summary.labor_rate_var,  desc:'(실제임률-표준임률)×실제공수'},
+                  {label:'노무 능률차이', val:coVariance.summary.labor_efficiency_var, desc:'(실제공수-표준공수)×표준임률'},
+                  {label:'노무비 차이 계', val:coVariance.summary.labor_variance, desc:'임률차이+능률차이', bold:true},
+                  {label:'총 원가차이', val:coVariance.summary.total_variance, desc:'재료비+노무비 차이', bold:true, big:true},
+                ].map(({label,val,desc,bold,big})=>{
+                  const isOver = val > 0, isUnder = val < 0
+                  return (
+                    <div key={label} style={{
+                      background: isOver ? '#fef2f2' : isUnder ? '#f0fdf4' : '#f8fafc',
+                      border: `1px solid ${isOver?'#fecaca':isUnder?'#bbf7d0':'#e2e8f0'}`,
+                      borderRadius:8, padding:'10px 14px'
+                    }}>
+                      <div style={{fontSize:11,color:'#64748b',fontWeight:600,marginBottom:2}}>{label}</div>
+                      <div style={{fontSize:big?18:bold?15:14, fontWeight:800,
+                        color:isOver?'#dc2626':isUnder?'#15803d':'#475569'}}>
+                        {val > 0 ? '+' : ''}{fmtW(val)}
+                      </div>
+                      <div style={{fontSize:10,color:'#94a3b8',marginTop:2}}>{desc}</div>
+                    </div>
+                  )
+                })}
+              </div>
+
+              {/* CO 차이 의미 설명 */}
+              <div style={{background:'#eff6ff',border:'1px solid #bfdbfe',borderRadius:8,padding:'10px 16px',marginBottom:16,fontSize:12,color:'#1e40af'}}>
+                <strong>차이 해석:</strong>&nbsp;
+                양수(+) = 불리한 차이(실제&gt;표준, 비용 초과) &nbsp;|&nbsp; 음수(−) = 유리한 차이(실제&lt;표준, 비용 절감)
+              </div>
+
+              {/* 작업지시별 CO 차이 테이블 */}
+              {coVariance.items.length === 0 ? (
+                <div style={{textAlign:'center',color:'#94a3b8',padding:'40px 0',fontSize:14}}>해당 월 완료된 작업지시 없음</div>
+              ) : (
+                <div className="table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>작업지시번호</th>
+                        <th>품목명</th>
+                        <th style={{textAlign:'right'}}>완료수량</th>
+                        <th style={{textAlign:'right',background:'#dbeafe'}}>가격차이</th>
+                        <th style={{textAlign:'right',background:'#dbeafe'}}>수량차이</th>
+                        <th style={{textAlign:'right',background:'#dbeafe'}}>재료비차이계</th>
+                        <th style={{textAlign:'right',background:'#dcfce7'}}>임률차이</th>
+                        <th style={{textAlign:'right',background:'#dcfce7'}}>능률차이</th>
+                        <th style={{textAlign:'right',background:'#dcfce7'}}>노무비차이계</th>
+                        <th style={{textAlign:'right',background:'#fef9c3'}}>총차이</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {coVariance.items.map(item => {
+                        const matTotal = (item.price_var||0) + (item.qty_var||0)
+                        const labTotal = (item.rate_var||0) + (item.efficiency_var||0)
+                        const totVar   = matTotal + labTotal
+                        const c = v => v > 0 ? '#dc2626' : v < 0 ? '#16a34a' : '#64748b'
+                        const fv = v => `${v>0?'+':''}${fmtW(v)}`
+                        return (
+                          <tr key={item.pord_no}>
+                            <td style={{fontFamily:'monospace',fontSize:11}}>{item.pord_no}</td>
+                            <td style={{fontWeight:500,fontSize:12}}>{item.part_name}</td>
+                            <td style={{textAlign:'right',fontSize:12}}>{fmt(item.actual_qty)}</td>
+                            <td style={{textAlign:'right',fontSize:12,color:c(item.price_var)}}>{fv(item.price_var||0)}</td>
+                            <td style={{textAlign:'right',fontSize:12,color:c(item.qty_var)}}>{fv(item.qty_var||0)}</td>
+                            <td style={{textAlign:'right',fontSize:12,fontWeight:700,color:c(matTotal)}}>{fv(matTotal)}</td>
+                            <td style={{textAlign:'right',fontSize:12,color:c(item.rate_var)}}>{fv(item.rate_var||0)}</td>
+                            <td style={{textAlign:'right',fontSize:12,color:c(item.efficiency_var)}}>{fv(item.efficiency_var||0)}</td>
+                            <td style={{textAlign:'right',fontSize:12,fontWeight:700,color:c(labTotal)}}>{fv(labTotal)}</td>
+                            <td style={{textAlign:'right',fontSize:12,fontWeight:800,color:c(totVar)}}>{fv(totVar)}</td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </>
+          )}
+          {!coVariance && <div style={{textAlign:'center',color:'#94a3b8',padding:'60px 0',fontSize:14}}>월을 선택하고 조회하세요</div>}
         </>
       )}
     </div>
