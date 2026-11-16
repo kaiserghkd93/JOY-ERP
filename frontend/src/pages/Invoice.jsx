@@ -225,7 +225,7 @@ const addLine = () => setLines(prev => [...prev, { part_no: '', qty: '', unit_pr
 
         <div className="modal-footer">
           <button className="btn btn-outline" onClick={onClose}>취소</button>
-          <button className="btn btn-primary" onClick={submit}>저장 (임시)</button>
+          <button className="btn btn-primary" onClick={submit}>{editInv ? '수정 저장' : '작성 저장'}</button>
         </div>
       </div>
     </div>

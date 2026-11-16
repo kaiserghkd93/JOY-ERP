@@ -121,6 +121,115 @@ export default function HrPayroll() {
     net: acc.net + Number(p.net_pay || 0),
   }), { gross: 0, deduct: 0, net: 0 })
 
+  const printAll = () => {
+    if (payrolls.length === 0) return alert('인쇄할 급여 데이터가 없습니다.')
+    const W = (n) => Math.round(Number(n || 0)).toLocaleString()
+    const fmtTime = (h, m) => (h || m) ? (m ? `${h}h ${m}m` : `${h}h`) : '—'
+    const BL = '1px solid #c8d0d8'
+    const BLUE_BG = '#dce8f5'
+    const BLUE_LABEL = '#c5d8ee'
+
+    const slipHtml = (p) => {
+      const mm = String(p.month).padStart(2, '0')
+      const payItems = [
+        { label: '기본급',      sub: `시급 ${W(p.std_hourly)}×${p.std_hrs||209}h`, val: p.base_pay },
+        { label: '연장근로수당', sub: `${fmtTime(p.pay_ot_hrs, p.pay_ot_min)} × 1.5`, val: p.ot_pay },
+        { label: '심야수당',    sub: `${p.pay_night_hrs||0}h × 0.5`, val: p.night_pay },
+        { label: '휴일근로수당', sub: `${fmtTime(p.pay_holiday_hrs, p.pay_holiday_min)} × 1.5`, val: p.holiday_pay },
+        { label: '반장수당',    sub: '과세', val: p.foreman_allow },
+        { label: '차량유지비',  sub: '비과세', val: p.vehicle_allow },
+        { label: '식대',        sub: '비과세', val: p.meal_allow },
+        { label: '상여',        sub: '', val: p.bonus },
+      ].filter(r => Number(r.val) > 0)
+
+      const deductItems = [
+        { label: '국민연금', val: p.deduct_pension },
+        { label: '건강보험', val: p.deduct_health },
+        { label: '고용보험', val: p.deduct_employ },
+        { label: '장기요양보험료', val: p.deduct_lcare },
+        { label: '소득세', val: p.deduct_income_tax },
+        { label: '지방소득세', val: p.deduct_local_tax },
+      ]
+
+      const payRow = payItems.map(i => `<td style="border:${BL};padding:4px 8px;text-align:center;font-size:11px;background:#eef2f7;font-weight:600">${i.label}</td>`).join('')
+        + Array(Math.max(0,6-payItems.length)).fill(`<td style="border:${BL};background:#eef2f7"></td>`).join('')
+      const payAmt = payItems.map(i => `<td style="border:${BL};padding:4px 10px;font-size:12px;text-align:right">${W(i.val)}</td>`).join('')
+        + Array(Math.max(0,6-payItems.length)).fill(`<td style="border:${BL}"></td>`).join('')
+      const dedRow = deductItems.map(i => `<td style="border:${BL};padding:4px 8px;text-align:center;font-size:11px;background:#eef2f7;font-weight:600">${i.label}</td>`).join('')
+        + Array(Math.max(0,6-deductItems.length)).fill(`<td style="border:${BL};background:#eef2f7"></td>`).join('')
+      const dedAmt = deductItems.map(i => `<td style="border:${BL};padding:4px 10px;font-size:12px;text-align:right">${W(i.val)}</td>`).join('')
+        + Array(Math.max(0,6-deductItems.length)).fill(`<td style="border:${BL}"></td>`).join('')
+
+      return `
+      <div style="page-break-after:always;padding:8mm 12mm;font-family:'맑은 고딕','Malgun Gothic',sans-serif;font-size:11px;line-height:1.5;color:#000;background:#fff">
+        <div style="display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:10px">
+          <div style="font-size:11px;color:#555">회사명 ${p.company || '조이산업'}</div>
+          <div style="font-size:16px;font-weight:700;letter-spacing:2px">${p.year}년 ${mm}월 급상여명세서</div>
+          <div style="font-size:11px;color:#555">지급일 ${p.year}.${mm}.25</div>
+        </div>
+        <table style="width:100%;border-collapse:collapse;margin-bottom:10px;border:${BL}"><tbody>
+          <tr>
+            <td style="border:${BL};padding:4px 8px;background:${BLUE_BG};text-align:center;font-weight:700;font-size:10px;width:10%">사원코드</td><td style="border:${BL};padding:4px 10px;width:23%">${p.emp_id}</td>
+            <td style="border:${BL};padding:4px 8px;background:${BLUE_BG};text-align:center;font-weight:700;font-size:10px;width:10%">사원명</td><td style="border:${BL};padding:4px 10px;width:23%">${p.name}</td>
+            <td style="border:${BL};padding:4px 8px;background:${BLUE_BG};text-align:center;font-weight:700;font-size:10px;width:10%">생년월일</td><td style="border:${BL};padding:4px 10px">${p.birth_date ? p.birth_date.replace(/-/g,'').slice(2) : '—'}</td>
+          </tr>
+          <tr>
+            <td style="border:${BL};padding:4px 8px;background:${BLUE_BG};text-align:center;font-weight:700;font-size:10px">부서</td><td style="border:${BL};padding:4px 10px">${p.dept||'—'}</td>
+            <td style="border:${BL};padding:4px 8px;background:${BLUE_BG};text-align:center;font-weight:700;font-size:10px">직급</td><td style="border:${BL};padding:4px 10px">${p.position||'—'}</td>
+            <td style="border:${BL};padding:4px 8px;background:${BLUE_BG};text-align:center;font-weight:700;font-size:10px">호봉</td><td style="border:${BL};padding:4px 10px">${p.job_grade||'—'}</td>
+          </tr>
+        </tbody></table>
+        <table style="width:100%;border-collapse:collapse;margin-bottom:10px"><thead><tr>
+          ${['연장근로시간','야간근로시간','휴일근로시간','통상시급(원)'].map(h=>`<th style="border:${BL};padding:4px 8px;background:#eef2f7;text-align:center;font-weight:700;font-size:11px">${h}</th>`).join('')}
+        </tr></thead><tbody><tr>
+          <td style="border:${BL};padding:5px 8px;text-align:center">${fmtTime(p.pay_ot_hrs,p.pay_ot_min)}</td>
+          <td style="border:${BL};padding:5px 8px;text-align:center">${p.pay_night_hrs?p.pay_night_hrs+'h':'—'}</td>
+          <td style="border:${BL};padding:5px 8px;text-align:center">${fmtTime(p.pay_holiday_hrs,p.pay_holiday_min)}</td>
+          <td style="border:${BL};padding:5px 8px;text-align:center">${W(p.std_hourly)}</td>
+        </tr></tbody></table>
+        <table style="width:100%;border-collapse:collapse"><tbody>
+          <tr><td rowspan="2" style="border:${BL};padding:4px 8px;background:${BLUE_LABEL};text-align:center;font-weight:700;font-size:13px;letter-spacing:1px;vertical-align:middle;width:10%">지급<br/>내역</td>${payRow}</tr>
+          <tr>${payAmt}</tr>
+        </tbody></table>
+        <table style="width:100%;border-collapse:collapse;border-top:none"><tbody>
+          <tr><td rowspan="2" style="border:${BL};padding:4px 8px;background:${BLUE_LABEL};text-align:center;font-weight:700;font-size:13px;letter-spacing:1px;vertical-align:middle;width:10%">공제<br/>내역</td>${dedRow}</tr>
+          <tr>${dedAmt}</tr>
+        </tbody></table>
+        <table style="width:100%;border-collapse:collapse;margin-bottom:14px"><tbody>
+          <tr>
+            <td style="border:${BL};background:#b8cfe8;text-align:center;font-weight:700;font-size:13px;width:10%;vertical-align:middle">합계</td>
+            <td style="border:${BL};background:#eef2f7" colspan="2"></td>
+            <td style="border:${BL};padding:5px 10px;background:#eef2f7;text-align:center;font-weight:700;font-size:11px">지급총액</td>
+            <td style="border:${BL};padding:5px 10px;background:#eef2f7;text-align:center;font-weight:700;font-size:11px">공제총액</td>
+            <td style="border:${BL};background:#eef2f7"></td>
+            <td style="border:${BL};padding:5px 10px;background:#eef2f7;text-align:center;font-weight:700;font-size:11px">차인지급액</td>
+          </tr>
+          <tr>
+            <td style="border:${BL};background:#b8cfe8"></td>
+            <td style="border:${BL}" colspan="2"></td>
+            <td style="border:${BL};padding:4px 10px;text-align:right;font-weight:700;font-size:13px">${W(p.gross_pay)}</td>
+            <td style="border:${BL};padding:4px 10px;text-align:right;font-size:13px">${W(p.total_deduct)}</td>
+            <td style="border:${BL}"></td>
+            <td style="border:${BL};padding:4px 10px;text-align:right;font-weight:700;font-size:14px;color:#0a2a50">${W(p.net_pay)}</td>
+          </tr>
+        </tbody></table>
+        <div style="text-align:center;font-size:9px;color:#999;border-top:1px solid #ddd;padding-top:6px">
+          본 명세서는 소득세법 시행규칙 제100조에 의거 발행한 급여명세서입니다.
+        </div>
+      </div>`
+    }
+
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${year}년 ${month}월 전체 급여명세서</title>
+      <style>body{margin:0;padding:0;background:#fff} @media print{@page{margin:0;size:A4 portrait} body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}</style>
+    </head><body>${payrolls.map(slipHtml).join('')}</body></html>`
+
+    const w = window.open('', '_blank', 'width=900,height=700')
+    if (!w) return alert('팝업이 차단되었습니다. 팝업 허용 후 다시 시도하세요.')
+    w.document.write(html)
+    w.document.close()
+    w.onload = () => w.print()
+  }
+
   return (
     <div style={{ padding: '16px 20px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
@@ -135,6 +244,10 @@ export default function HrPayroll() {
           <span style={{ fontSize: 13, color: '#64748b' }}>월</span>
           <button className="btn btn-primary" onClick={calculate} disabled={calcLoading}>
             {calcLoading ? '계산중...' : '자동 계산'}
+          </button>
+          <button className="btn" style={{ background: '#7c3aed', color: '#fff', border: 'none', fontSize: 12, whiteSpace: 'nowrap' }}
+            onClick={printAll} disabled={payrolls.length === 0}>
+            🖨️ 전체 명세서 인쇄
           </button>
           <div style={{ display: 'flex', gap: 4, alignItems: 'center', marginLeft: 8, borderLeft: '1px solid #e2e8f0', paddingLeft: 12 }}>
             <select className="form-control" value={excelCompany} onChange={e => setExcelCompany(e.target.value)} style={{ width: 100, fontSize: 12 }}>

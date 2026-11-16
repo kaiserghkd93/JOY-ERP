@@ -108,3 +108,78 @@ def lot_trace(gr_no: str, db: Session = Depends(get_db)):
         } for o in orders],
         "shipments": shipments,
     }
+
+
+@router.get("/reverse-trace/{sh_no}")
+def reverse_trace(sh_no: str, db: Session = Depends(get_db)):
+    """역방향 LOT 추적: 출하번호 → 생산 → 원자재 입고"""
+    from app.models.production import ProductionOrder
+    from app.models.sales import SalesOrder, Shipment, ShipmentStatus
+
+    # sh_no가 sh_no 컬럼에 없을 경우 so_no로도 조회
+    ship = db.query(Shipment).filter(Shipment.sh_no == sh_no).first()
+    if not ship:
+        # 수주번호로 fallback
+        ship = db.query(Shipment).filter(Shipment.so_no == sh_no).first()
+    if not ship:
+        raise HTTPException(404, f"출하 없음: {sh_no}")
+
+    item_map = {i.part_no: i.name for i in db.query(Item).all()}
+    partner_map = {p.partner_id: p.name for p in db.query(Partner).all()}
+
+    so = db.query(SalesOrder).filter(SalesOrder.so_no == ship.so_no).first()
+    customer = partner_map.get(so.partner_id if so else '', so.partner_id if so else '-') if so else '-'
+
+    # 연결 생산 작업지시 (완제품 품번, 출하일 근처)
+    prod = db.query(ProductionOrder).filter(
+        ProductionOrder.part_no == ship.part_no,
+    ).order_by(ProductionOrder.plan_date.desc()).first()
+
+    # 원자재 소모 이력 → 입고 LOT 추적
+    receipts_found = []
+    if prod:
+        consumptions = db.query(StockLedger).filter(
+            StockLedger.ref_no == prod.pord_no,
+            StockLedger.ledger_type == LedgerType.consumption,
+        ).all()
+        gr_set = set()
+        for c in consumptions:
+            if c.ref_no and c.ref_no not in gr_set:
+                # ref_no 가 pord_no — 품번으로 해당 기간 입고 조회
+                pass
+            # 소모된 품번으로 입고 조회
+            recs = db.query(Receipt).filter(
+                Receipt.part_no == c.part_no,
+                Receipt.status == ReceiptStatus.confirmed,
+            ).order_by(Receipt.receipt_date.desc()).limit(5).all()
+            for r in recs:
+                if r.gr_no not in gr_set:
+                    gr_set.add(r.gr_no)
+                    receipts_found.append({
+                        "gr_no": r.gr_no,
+                        "part_no": r.part_no,
+                        "part_name": item_map.get(r.part_no, r.part_no),
+                        "receipt_date": r.receipt_date.isoformat() if r.receipt_date else None,
+                        "qty": r.qty,
+                        "partner": partner_map.get(r.partner_id, r.partner_id or "-"),
+                    })
+
+    return {
+        "sh_no": getattr(ship, 'sh_no', None) or sh_no,
+        "so_no": ship.so_no,
+        "part_no": ship.part_no,
+        "part_name": item_map.get(ship.part_no, ship.part_no),
+        "ship_date": ship.ship_date.isoformat() if ship.ship_date else None,
+        "ship_qty": ship.qty,
+        "customer": customer,
+        "production": {
+            "pord_no": prod.pord_no,
+            "part_no": prod.part_no,
+            "part_name": item_map.get(prod.part_no, prod.part_no),
+            "plan_date": prod.plan_date.isoformat() if prod.plan_date else None,
+            "planned_qty": prod.planned_qty,
+            "actual_qty": prod.actual_qty,
+            "status": prod.status.value if prod.status else None,
+        } if prod else None,
+        "receipts": receipts_found,
+    }

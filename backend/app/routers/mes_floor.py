@@ -282,6 +282,65 @@ def get_wo(wo_no: str, db: Session = Depends(get_db)):
     return _wo_with_qr(wo)
 
 
+class WOStatusUpdate(BaseModel):
+    status: str
+
+
+class WOActualUpdate(BaseModel):
+    good_qty: int = 0
+    defect_qty: int = 0
+
+
+@router.patch("/work-orders/{wo_no}/status")
+def update_wo_status(wo_no: str, body: WOStatusUpdate, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+    """작업지시 상태 변경 (대기 → 진행 → 완료)"""
+    wo = db.get(MesWorkOrder, wo_no)
+    if not wo:
+        raise HTTPException(404, f"작업지시 없음: {wo_no}")
+    allowed = {"대기": "진행", "진행": "완료"}
+    if body.status not in allowed.values():
+        raise HTTPException(400, f"허용되지 않은 상태: {body.status}")
+    if wo.status not in allowed or allowed[wo.status] != body.status:
+        raise HTTPException(400, f"현재 상태 '{wo.status}'에서 '{body.status}'로 변경 불가")
+    wo.status = body.status
+    db.commit()
+    return _wo_with_qr(wo)
+
+
+@router.patch("/work-orders/{wo_no}/actual")
+def update_wo_actual(wo_no: str, body: WOActualUpdate, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+    """작업지시 실적 직접 입력 (세션 없이)"""
+    from app.models.mes import MesProductionLog as ProdLog, MesSession
+    wo = db.get(MesWorkOrder, wo_no)
+    if not wo:
+        raise HTTPException(404, f"작업지시 없음: {wo_no}")
+    # 직접 세션 없이 실적 조정 — 직접 입력 세션 찾거나 새로 생성
+    direct_session = db.query(MesSession).filter(
+        MesSession.wo_no == wo_no,
+        MesSession.worker_id == "direct",
+    ).first()
+    if not direct_session:
+        from app.models.mes import MesSession as Sess
+        from datetime import datetime
+        direct_session = Sess(
+            session_id=f"DS-{wo_no}",
+            wo_no=wo_no,
+            machine_id=wo.machine_id,
+            worker_id="direct",
+            start_time=datetime.now(),
+            good_qty=0,
+            defect_qty=0,
+        )
+        db.add(direct_session)
+        db.flush()
+    direct_session.good_qty = body.good_qty
+    direct_session.defect_qty = body.defect_qty
+    if wo.status == "대기":
+        wo.status = "진행"
+    db.commit()
+    return _wo_with_qr(wo)
+
+
 def _wo_with_qr(wo: MesWorkOrder) -> dict:
     """작업지시서 + QR 인코딩 데이터"""
     qr_data = json.dumps({
