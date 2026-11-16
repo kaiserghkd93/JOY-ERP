@@ -604,7 +604,6 @@ export function printIqcReport(insp) {
   <div style="text-align:right">
     <div style="font-size:7.5pt;color:#555">문서번호: <strong>${docNo}</strong></div>
     <div style="font-size:7.5pt;color:#555">개정번호: 00 &nbsp;|&nbsp; 발행일: ${today()}</div>
-    <div style="font-size:7pt;color:#1d4ed8">참조: IATF 16949:2016 §8.6 / ISO 9001:2015 §8.6 — Incoming Inspection</div>
   </div>
 </div>
 
@@ -668,22 +667,25 @@ export function printOqcReport(r) {
   if (!r) return
   const docNo = `OQC-${(r.defect_date||today().replace(/\./g,'-')).replace(/-/g,'')}-${String(r.id||'001').padStart(3,'0')}`
   const passQty = (r.inspect_qty||0) - (r.defect_qty||0)
-  const judgment = (r.defect_qty||0) === 0 ? '합격 (PASS)' : r.defect_rate > 0 ? `조건부 합격 / 불합격` : '합격 (PASS)'
   const jColor   = (r.defect_qty||0) === 0 ? '#16a34a' : '#dc2626'
 
   const html = `<!DOCTYPE html><html lang="ko"><head><meta charset="UTF-8">
 <title>출하검사 성적서 ${docNo}</title>
 <style>${BASE_CSS}
-  .box2 { display:grid; grid-template-columns:1fr 1fr; border:2px solid #000; }
-  .box3 { display:grid; grid-template-columns:1fr 1fr 1fr; border:2px solid #000; }
+  @page { margin: 8mm; }
   .box4 { display:grid; grid-template-columns:repeat(4,1fr); border:2px solid #000; }
-  .cell { border-right:1px solid #000; border-bottom:1px solid #000; padding:5px 8px; }
+  .cell { border-right:1px solid #000; border-bottom:1px solid #000; padding:3px 7px; }
   .cell:last-child { border-right:none; }
-  .cell-label { font-size:7.5pt; color:#555; font-weight:700; display:block; margin-bottom:2px; }
-  .cell-val { font-size:9.5pt; font-weight:700; }
-  .section-h { background:#0d1f3c; color:#fff; padding:4px 8px; font-size:9pt; font-weight:900; margin:10px 0 0; letter-spacing:1px; }
+  .cell-label { font-size:7pt; color:#555; font-weight:700; display:block; margin-bottom:1px; }
+  .cell-val { font-size:9pt; font-weight:700; }
+  .section-h { background:#0d1f3c; color:#fff; padding:3px 8px; font-size:8.5pt; font-weight:900; margin:7px 0 0; letter-spacing:1px; }
   .iatf-ref { font-size:7pt; color:#1d4ed8; font-style:italic; float:right; font-weight:400; }
-  .judgment { font-size:14pt; font-weight:900; color:${jColor}; border:2px solid ${jColor}; padding:4px 16px; display:inline-block; border-radius:4px; }
+  .judgment { font-size:13pt; font-weight:900; color:${jColor}; border:2px solid ${jColor}; padding:3px 14px; display:inline-block; border-radius:4px; }
+  .sign-row { margin-top:8px; gap:12px; }
+  .sign-box { min-height:32px; padding:5px 10px; }
+  .footer { margin-top:8px; }
+  table { margin-top:4px; }
+  th, td { padding:3px 4px; }
 </style></head><body>
 
 <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px">
@@ -694,7 +696,6 @@ export function printOqcReport(r) {
   <div style="text-align:right">
     <div style="font-size:7.5pt;color:#555">문서번호: <strong>${docNo}</strong></div>
     <div style="font-size:7.5pt;color:#555">개정번호: 00 &nbsp;|&nbsp; 발행일: ${today()}</div>
-    <div style="font-size:7pt;color:#1d4ed8">참조: IATF 16949:2016 §8.6 / ISO 9001:2015 §8.6</div>
   </div>
 </div>
 
@@ -777,13 +778,19 @@ export function printIpqcReport(r) {
   const html = `<!DOCTYPE html><html lang="ko"><head><meta charset="UTF-8">
 <title>공정검사 성적서 ${docNo}</title>
 <style>${BASE_CSS}
+  @page { margin: 8mm; }
   .box4 { display:grid; grid-template-columns:repeat(4,1fr); border:2px solid #000; }
-  .cell { border-right:1px solid #000; border-bottom:1px solid #000; padding:5px 8px; }
+  .cell { border-right:1px solid #000; border-bottom:1px solid #000; padding:3px 7px; }
   .cell:last-child { border-right:none; }
-  .cell-label { font-size:7.5pt; color:#555; font-weight:700; display:block; margin-bottom:2px; }
-  .cell-val { font-size:9.5pt; font-weight:700; }
-  .section-h { background:#0d1f3c; color:#fff; padding:4px 8px; font-size:9pt; font-weight:900; margin:10px 0 0; letter-spacing:1px; }
+  .cell-label { font-size:7pt; color:#555; font-weight:700; display:block; margin-bottom:1px; }
+  .cell-val { font-size:9pt; font-weight:700; }
+  .section-h { background:#0d1f3c; color:#fff; padding:3px 8px; font-size:8.5pt; font-weight:900; margin:7px 0 0; letter-spacing:1px; }
   .iatf-ref { font-size:7pt; color:#93c5fd; float:right; font-weight:400; }
+  .sign-row { margin-top:8px; gap:12px; }
+  .sign-box { min-height:32px; padding:5px 10px; }
+  .footer { margin-top:8px; }
+  table { margin-top:4px; }
+  th, td { padding:3px 4px; }
 </style></head><body>
 
 <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px">
@@ -791,7 +798,6 @@ export function printIpqcReport(r) {
   <div style="text-align:right">
     <div style="font-size:7.5pt;color:#555">문서번호: <strong>${docNo}</strong></div>
     <div style="font-size:7.5pt;color:#555">개정번호: 00 &nbsp;|&nbsp; 발행일: ${today()}</div>
-    <div style="font-size:7pt;color:#1d4ed8">참조: IATF 16949:2016 §8.5.1 / ISO 9001:2015 §8.5.1 — In-Process Inspection</div>
   </div>
 </div>
 
@@ -898,7 +904,6 @@ export function printNcr8D(ncr) {
   <div style="text-align:right">
     <div style="font-size:7.5pt;color:#555">문서번호: <strong>${docNo}</strong></div>
     <div style="font-size:7.5pt;color:#555">발행일: ${today()}</div>
-    <div style="font-size:7pt;color:#1d4ed8">참조: IATF 16949:2016 §8.7 / AIAG 8D Methodology</div>
   </div>
 </div>
 
