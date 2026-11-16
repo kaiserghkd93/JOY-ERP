@@ -546,7 +546,12 @@ function BulkHolidayModal({ year, month, employees, onClose, onSaved }) {
   }, [year, month])
 
   const MGMT_POSITIONS = new Set(['대표','상무이사','전무이사','과장','차장','부장','실장','이사'])
-  const eligibleEmps = employees.filter(e => e.is_active !== false && !MGMT_POSITIONS.has(e.position))
+  const PROD_DEPTS = new Set(['생산','금형','출하'])
+  // 생산·금형·출하 부서는 직급 무관하게 포함 (CAPS 자동생성 직원 보호)
+  const eligibleEmps = employees.filter(e =>
+    e.is_active !== false &&
+    (!MGMT_POSITIONS.has(e.position) || PROD_DEPTS.has(e.dept))
+  )
 
   const getDisplayEmps = (date) => {
     if (showAll) return eligibleEmps
@@ -725,7 +730,11 @@ function OvertimeAppModal({ year, month, employees, onClose }) {
   })()
 
   const MGMT_POSITIONS = new Set(['대표','상무이사','전무이사','과장','차장','부장','실장','이사'])
-  const activeEmps = employees.filter(e => e.is_active !== false && !MGMT_POSITIONS.has(e.position))
+  const PROD_DEPTS = new Set(['생산','금형','출하'])
+  const activeEmps = employees.filter(e =>
+    e.is_active !== false &&
+    (!MGMT_POSITIONS.has(e.position) || PROD_DEPTS.has(e.dept))
+  )
   // { [date]: Set<emp_id> }
   const [appByDate, setAppByDate] = useState({})
   const [nocapsByDate, setNocapsByDate] = useState({}) // 52시간 비캡스 표시용

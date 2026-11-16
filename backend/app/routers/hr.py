@@ -662,7 +662,7 @@ async def upload_caps_excel(
                     emp_id=raw_eid,
                     name=name,
                     dept=meta.get('dept', '생산'),
-                    position=meta.get('position', ''),
+                    position='',  # CAPS 직급은 사용 안 함 (관리직 필터 오탐 방지)
                     is_active=True,
                 )
                 db.add(new_emp)
