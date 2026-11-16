@@ -2099,3 +2099,215 @@ def attendance_matrix(
         })
 
     return {"year": year, "month": month, "num_days": num_days, "dates": dates, "rows": rows}
+
+
+# ── 근태 분석 ─────────────────────────────────────────────────────────
+
+@router.get("/attendance/dept-analysis")
+def attendance_dept_analysis(
+    year: int = Query(...), month: int = Query(...),
+    db: Session = Depends(get_db), _=Depends(get_current_user),
+):
+    """부서별 / 월별 근태 분석 (지각·결근·연차 집계)"""
+    import calendar
+    start = date(year, month, 1)
+    end = date(year, month, calendar.monthrange(year, month)[1])
+
+    emps = {e.emp_id: e for e in db.query(Employee).filter(Employee.is_active.isnot(False)).all()}
+    atts = db.query(Attendance).filter(Attendance.work_date >= start, Attendance.work_date <= end).all()
+
+    dept_map: dict = {}
+    for a in atts:
+        emp = emps.get(a.emp_id)
+        if not emp: continue
+        dept = emp.dept or "미분류"
+        d = dept_map.setdefault(dept, {"dept": dept, "headcount": set(), "work_days": 0, "absent": 0, "late": 0, "leave": 0.0, "ot_hrs": 0.0})
+        d["headcount"].add(a.emp_id)
+        if not a.absent and not (a.leave_type):
+            d["work_days"] += 1
+        if a.absent and not a.leave_type:
+            d["absent"] += 1
+        if a.late:
+            d["late"] += 1
+        if a.leave_type:
+            d["leave"] += 0.5 if a.leave_type == "반차" else 1.0
+        d["ot_hrs"] += (a.ot_hrs or 0) + (a.ot_min or 0) / 60.0
+
+    result = []
+    for dept, d in sorted(dept_map.items()):
+        hc = len(d["headcount"])
+        result.append({
+            "dept": dept, "headcount": hc,
+            "work_days": d["work_days"], "absent": d["absent"],
+            "late": d["late"], "leave": round(d["leave"], 1),
+            "ot_hrs": round(d["ot_hrs"], 1),
+            "absent_rate": round(d["absent"] / max(d["work_days"] + d["absent"], 1) * 100, 1),
+        })
+    return result
+
+
+@router.get("/attendance/trend")
+def attendance_trend(
+    year: int = Query(...),
+    db: Session = Depends(get_db), _=Depends(get_current_user),
+):
+    """월별 근태 추이 (1월~12월)"""
+    import calendar
+    result = []
+    for m in range(1, 13):
+        start = date(year, m, 1)
+        end = date(year, m, calendar.monthrange(year, m)[1])
+        atts = db.query(Attendance).filter(Attendance.work_date >= start, Attendance.work_date <= end).all()
+        total = len(atts)
+        absent = sum(1 for a in atts if a.absent and not a.leave_type)
+        late = sum(1 for a in atts if a.late)
+        leave = sum(0.5 if a.leave_type == "반차" else 1.0 for a in atts if a.leave_type)
+        ot = sum((a.ot_hrs or 0) + (a.ot_min or 0) / 60.0 for a in atts)
+        result.append({"month": m, "total_records": total, "absent": absent, "late": late, "leave": round(leave, 1), "ot_hrs": round(ot, 1)})
+    return result
+
+
+# ── 퇴직금 계산 ───────────────────────────────────────────────────────
+
+@router.get("/payroll/severance/{emp_id}")
+def calc_severance(
+    emp_id: str,
+    retire_date: str = Query(None),
+    db: Session = Depends(get_db), _=Depends(get_current_user),
+):
+    """퇴직금 계산 (근로기준법: 평균임금×30일×근속연수)"""
+    emp = db.get(Employee, emp_id)
+    if not emp:
+        raise HTTPException(404, "직원 없음")
+    if not emp.hire_date:
+        raise HTTPException(400, "입사일 정보 없음")
+
+    rd = date.fromisoformat(retire_date) if retire_date else date.today()
+    hire = emp.hire_date
+
+    # 근속기간
+    total_days = (rd - hire).days
+    years = total_days / 365.25
+    if years < 1.0:
+        return {"emp_id": emp_id, "name": emp.name, "hire_date": str(hire), "retire_date": str(rd),
+                "service_years": round(years, 2), "eligible": False, "reason": "1년 미만 근속 (퇴직금 미발생)"}
+
+    # 최근 3개월 급여 평균
+    recent_payrolls = (
+        db.query(Payroll)
+        .filter(Payroll.emp_id == emp_id, Payroll.status.in_(["확정", "지급완료"]))
+        .order_by(Payroll.year.desc(), Payroll.month.desc())
+        .limit(3).all()
+    )
+
+    if recent_payrolls:
+        avg_monthly = sum(float(p.gross_pay) for p in recent_payrolls) / len(recent_payrolls)
+    else:
+        avg_monthly = float(emp.base_salary or 0)
+
+    avg_daily = avg_monthly * 12 / 365  # 평균임금 (일급)
+    severance_per_year = avg_daily * 30  # 1년당 퇴직금
+    total_severance = severance_per_year * years
+
+    # 연도별 내역
+    yearly = []
+    cur_year = hire.year
+    while cur_year <= rd.year:
+        ys = date(cur_year, 1, 1)
+        ye = date(cur_year, 12, 31)
+        y_start = max(ys, hire)
+        y_end = min(ye, rd)
+        if y_start <= y_end:
+            days = (y_end - y_start).days + 1
+            yp = db.query(func.sum(Payroll.gross_pay)).filter(
+                Payroll.emp_id == emp_id, Payroll.year == cur_year,
+                Payroll.status.in_(["확정", "지급완료"])
+            ).scalar() or 0
+            yearly.append({"year": cur_year, "days": days, "total_pay": float(yp)})
+        cur_year += 1
+
+    return {
+        "emp_id": emp_id, "name": emp.name, "dept": emp.dept, "position": emp.position,
+        "hire_date": str(hire), "retire_date": str(rd),
+        "service_days": total_days, "service_years": round(years, 2),
+        "eligible": True,
+        "avg_monthly_pay": round(avg_monthly),
+        "avg_daily_pay": round(avg_daily, 2),
+        "severance_per_year": round(severance_per_year),
+        "total_severance": round(total_severance),
+        "yearly_breakdown": yearly,
+        "note": f"최근 {len(recent_payrolls)}개월 급여 평균 기준" if recent_payrolls else "기본급 기준 (급여 확정 데이터 없음)",
+    }
+
+
+# ── 4대보험 사업주 부담분 명세 ────────────────────────────────────────
+
+@router.get("/payroll/insurance-summary")
+def insurance_summary(
+    year: int = Query(...), month: int = Query(...),
+    db: Session = Depends(get_db), _=Depends(get_current_user),
+):
+    """4대보험 월별 사업주·근로자 부담분 합계"""
+    payrolls = (
+        db.query(Payroll)
+        .filter(Payroll.year == year, Payroll.month == month, Payroll.status.in_(["확정", "지급완료"]))
+        .all()
+    )
+    emp_map = {e.emp_id: e for e in db.query(Employee).all()}
+
+    rows = []
+    tot_emp = tot_co = 0.0
+
+    # 사업주 부담 요율 (2024년 기준)
+    EMPLOYER_RATES = {
+        "pension": 0.045,    # 국민연금 4.5%
+        "health": 0.03545,   # 건강보험 3.545%
+        "lcare_pct": 0.1295, # 장기요양 (건강보험료의 12.95%)
+        "employ": 0.009,     # 고용보험 0.9%
+        "accident": 0.007,   # 산재보험 0.7% (업종별 상이)
+    }
+
+    for p in payrolls:
+        emp = emp_map.get(p.emp_id)
+        gross = float(p.gross_pay or 0)
+        # 근로자 공제
+        emp_pension = float(p.deduct_pension or 0)
+        emp_health  = float(p.deduct_health or 0)
+        emp_lcare   = float(p.deduct_lcare or 0)
+        emp_employ  = float(p.deduct_employ or 0)
+        emp_total   = emp_pension + emp_health + emp_lcare + emp_employ
+
+        # 사업주 부담 (동율 or 산재)
+        taxable = gross - float(p.meal_allow or 0) - float(p.vehicle_allow or 0)
+        co_pension = round(taxable * EMPLOYER_RATES["pension"])
+        co_health  = round(taxable * EMPLOYER_RATES["health"])
+        co_lcare   = round(co_health * EMPLOYER_RATES["lcare_pct"])
+        co_employ  = round(taxable * EMPLOYER_RATES["employ"])
+        co_accident= round(taxable * EMPLOYER_RATES["accident"])
+        co_total   = co_pension + co_health + co_lcare + co_employ + co_accident
+
+        tot_emp += emp_total
+        tot_co  += co_total
+
+        rows.append({
+            "emp_id": p.emp_id, "name": emp.name if emp else p.emp_id,
+            "dept": emp.dept if emp else "", "position": emp.position if emp else "",
+            "gross_pay": round(gross),
+            "emp_pension": emp_pension, "emp_health": emp_health,
+            "emp_lcare": emp_lcare, "emp_employ": emp_employ, "emp_total": round(emp_total),
+            "co_pension": co_pension, "co_health": co_health,
+            "co_lcare": co_lcare, "co_employ": co_employ, "co_accident": co_accident, "co_total": co_total,
+            "total_insurance": round(emp_total + co_total),
+        })
+
+    return {
+        "year": year, "month": month,
+        "rows": sorted(rows, key=lambda r: r["dept"]),
+        "summary": {
+            "headcount": len(rows),
+            "total_gross": round(sum(r["gross_pay"] for r in rows)),
+            "emp_total": round(tot_emp),
+            "co_total": round(tot_co),
+            "grand_total": round(tot_emp + tot_co),
+        },
+    }

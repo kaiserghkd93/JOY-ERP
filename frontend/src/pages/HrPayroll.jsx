@@ -12,6 +12,7 @@ const STATUS_STYLE = {
 function fmt(n) { return Math.round(Number(n) || 0).toLocaleString() }
 
 export default function HrPayroll() {
+  const [mainTab, setMainTab] = useState('payroll')
   const [year, setYear] = useState(now.getFullYear())
   const [month, setMonth] = useState(now.getMonth() + 1)
   const [payrolls, setPayrolls] = useState([])
@@ -232,8 +233,8 @@ export default function HrPayroll() {
 
   return (
     <div style={{ padding: '16px 20px' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
-        <h2 style={{ margin: 0, fontSize: 18, fontWeight: 800 }}>월급 명세서</h2>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+        <h2 style={{ margin: 0, fontSize: 18, fontWeight: 800 }}>급여 관리</h2>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           <select className="form-control" value={year} onChange={e => setYear(+e.target.value)} style={{ width: 90 }}>
             {[now.getFullYear()-1, now.getFullYear(), now.getFullYear()+1].map(y => <option key={y}>{y}</option>)}
@@ -262,6 +263,21 @@ export default function HrPayroll() {
         </div>
       </div>
 
+      {/* 메인 탭 */}
+      <div style={{ display:'flex', gap:0, marginBottom:16, borderBottom:'2px solid #e2e8f0' }}>
+        {[{ k:'payroll', label:'💰 급여명세서' }, { k:'insurance', label:'🏥 4대보험' }, { k:'severance', label:'📊 퇴직금 계산' }].map(t => (
+          <button key={t.k} onClick={() => setMainTab(t.k)} style={{
+            padding:'8px 20px', fontSize:13, fontWeight:700, border:'none', cursor:'pointer',
+            background:'transparent', color:mainTab===t.k?'#1d4ed8':'#64748b',
+            borderBottom:mainTab===t.k?'2px solid #1d4ed8':'2px solid transparent', marginBottom:-2,
+          }}>{t.label}</button>
+        ))}
+      </div>
+
+      {mainTab === 'insurance' && <InsuranceSummary year={year} month={month} />}
+      {mainTab === 'severance' && <SeveranceCalc />}
+
+      {mainTab === 'payroll' && <>
       {payrolls.length > 0 && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 14 }}>
           {[
@@ -741,6 +757,203 @@ function PayslipModal({ payroll: initialP, onClose, onSaved }) {
           )}
         </div>
       </div>
+      </>}
+    </div>
+  )
+}
+
+/* ── 4대보험 사업주 부담분 명세 ───────────────────────────────── */
+function InsuranceSummary({ year, month }) {
+  const [data, setData] = useState(null)
+  const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    setLoading(true)
+    api.get(`/hr/payroll/insurance-summary?year=${year}&month=${month}`)
+      .then(r => setData(r.data)).catch(() => setData(null)).finally(() => setLoading(false))
+  }, [year, month])
+
+  if (loading) return <div style={{ padding: 32, textAlign: 'center', color: '#94a3b8' }}>로딩 중...</div>
+  if (!data) return <div style={{ padding: 32, textAlign: 'center', color: '#94a3b8' }}>급여 확정 데이터 없음 ({year}년 {month}월)</div>
+
+  const s = data.summary
+  return (
+    <div>
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:10, marginBottom:14 }}>
+        {[
+          { label:'인원수', value:`${s.headcount}명`, color:'#1d4ed8' },
+          { label:'근로자 부담', value:`${fmt(s.emp_total)}원`, color:'#dc2626' },
+          { label:'사업주 부담', value:`${fmt(s.co_total)}원`, color:'#d97706' },
+          { label:'합계 납부액', value:`${fmt(s.grand_total)}원`, color:'#7c3aed' },
+        ].map(k => (
+          <div key={k.label} style={{ background:'#fff', border:'1px solid #e2e8f0', borderRadius:8, padding:'10px 14px', textAlign:'center' }}>
+            <div style={{ fontSize:11, color:'#64748b' }}>{k.label}</div>
+            <div style={{ fontSize:16, fontWeight:800, color:k.color }}>{k.value}</div>
+          </div>
+        ))}
+      </div>
+      <table className="table" style={{ fontSize:11 }}>
+        <thead>
+          <tr>
+            <th>이름</th><th>부서</th>
+            <th colSpan={4} style={{ textAlign:'center', background:'#eff6ff', color:'#1d4ed8' }}>근로자 부담</th>
+            <th colSpan={5} style={{ textAlign:'center', background:'#fefce8', color:'#92400e' }}>사업주 부담</th>
+            <th style={{ textAlign:'right' }}>합계</th>
+          </tr>
+          <tr style={{ fontSize:10, color:'#64748b' }}>
+            <th></th><th></th>
+            <th style={{ textAlign:'right' }}>국민연금</th>
+            <th style={{ textAlign:'right' }}>건강보험</th>
+            <th style={{ textAlign:'right' }}>장기요양</th>
+            <th style={{ textAlign:'right', borderRight:'1px solid #e2e8f0' }}>고용보험</th>
+            <th style={{ textAlign:'right' }}>국민연금</th>
+            <th style={{ textAlign:'right' }}>건강보험</th>
+            <th style={{ textAlign:'right' }}>장기요양</th>
+            <th style={{ textAlign:'right' }}>고용보험</th>
+            <th style={{ textAlign:'right', borderRight:'1px solid #e2e8f0' }}>산재보험</th>
+            <th style={{ textAlign:'right' }}></th>
+          </tr>
+        </thead>
+        <tbody>
+          {data.rows.map(r => (
+            <tr key={r.emp_id}>
+              <td style={{ fontWeight:600 }}>{r.name}</td>
+              <td style={{ color:'#64748b' }}>{r.dept}</td>
+              <td style={{ textAlign:'right' }}>{fmt(r.emp_pension)}</td>
+              <td style={{ textAlign:'right' }}>{fmt(r.emp_health)}</td>
+              <td style={{ textAlign:'right' }}>{fmt(r.emp_lcare)}</td>
+              <td style={{ textAlign:'right', borderRight:'1px solid #e2e8f0', color:'#1d4ed8' }}>{fmt(r.emp_total)}</td>
+              <td style={{ textAlign:'right' }}>{fmt(r.co_pension)}</td>
+              <td style={{ textAlign:'right' }}>{fmt(r.co_health)}</td>
+              <td style={{ textAlign:'right' }}>{fmt(r.co_lcare)}</td>
+              <td style={{ textAlign:'right' }}>{fmt(r.co_employ)}</td>
+              <td style={{ textAlign:'right', borderRight:'1px solid #e2e8f0' }}>{fmt(r.co_accident)}</td>
+              <td style={{ textAlign:'right', fontWeight:700, color:'#7c3aed' }}>{fmt(r.total_insurance)}</td>
+            </tr>
+          ))}
+        </tbody>
+        <tfoot>
+          <tr style={{ fontWeight:800, background:'#f8fafc' }}>
+            <td colSpan={2}>합계</td>
+            <td colSpan={3} style={{ textAlign:'right', color:'#1d4ed8' }}>{fmt(s.emp_total)}</td>
+            <td style={{ borderRight:'1px solid #e2e8f0' }}></td>
+            <td colSpan={4} style={{ textAlign:'right', color:'#d97706' }}>{fmt(s.co_total)}</td>
+            <td style={{ borderRight:'1px solid #e2e8f0' }}></td>
+            <td style={{ textAlign:'right', color:'#7c3aed' }}>{fmt(s.grand_total)}</td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  )
+}
+
+/* ── 퇴직금 계산기 ──────────────────────────────────────────── */
+function SeveranceCalc() {
+  const [employees, setEmployees] = useState([])
+  const [empId, setEmpId] = useState('')
+  const [retireDate, setRetireDate] = useState(() => {
+    const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
+  })
+  const [result, setResult] = useState(null)
+  const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    api.get('/hr/employees').then(r => setEmployees(r.data)).catch(() => {})
+  }, [])
+
+  const calc = async () => {
+    if (!empId) return alert('직원을 선택하세요')
+    setLoading(true)
+    try {
+      const r = await api.get(`/hr/payroll/severance/${empId}?retire_date=${retireDate}`)
+      setResult(r.data)
+    } catch (e) {
+      alert('계산 실패: ' + (e.response?.data?.detail || e.message))
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const oeeColor = (v) => v >= 100 ? '#16a34a' : '#d97706'
+
+  return (
+    <div style={{ maxWidth: 700 }}>
+      <div style={{ background:'#fff', border:'1px solid #e2e8f0', borderRadius:10, padding:20, marginBottom:16 }}>
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr auto', gap:12, alignItems:'end' }}>
+          <div>
+            <label style={{ fontSize:12, fontWeight:600, display:'block', marginBottom:4 }}>직원 선택</label>
+            <select className="form-control" value={empId} onChange={e => setEmpId(e.target.value)}>
+              <option value="">— 직원 선택 —</option>
+              {employees.filter(e => e.is_active !== false).map(e => (
+                <option key={e.emp_id} value={e.emp_id}>{e.name} ({e.dept})</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label style={{ fontSize:12, fontWeight:600, display:'block', marginBottom:4 }}>퇴직예정일 (기준일)</label>
+            <input type="date" className="form-control" value={retireDate} onChange={e => setRetireDate(e.target.value)} />
+          </div>
+          <button onClick={calc} disabled={loading} className="btn btn-primary">
+            {loading ? '계산중...' : '퇴직금 계산'}
+          </button>
+        </div>
+      </div>
+
+      {result && (
+        result.eligible === false ? (
+          <div style={{ background:'#fef3c7', border:'1px solid #fbbf24', borderRadius:8, padding:16, color:'#92400e' }}>
+            ⚠️ {result.reason}
+          </div>
+        ) : (
+          <div>
+            {/* 요약 카드 */}
+            <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:10, marginBottom:16 }}>
+              {[
+                { label:'근속기간', value:`${result.service_years}년`, sub:`(${result.service_days.toLocaleString()}일)`, color:'#1d4ed8' },
+                { label:'평균 월급여', value:`${fmt(result.avg_monthly_pay)}원`, sub:result.note, color:'#64748b' },
+                { label:'1년당 퇴직금', value:`${fmt(result.severance_per_year)}원`, sub:`평균임금 ${result.avg_daily_pay.toLocaleString()}원/일 × 30일`, color:'#d97706' },
+                { label:'예상 퇴직금', value:`${fmt(result.total_severance)}원`, sub:'세전', color:'#dc2626' },
+              ].map(k => (
+                <div key={k.label} style={{ background:'#fff', border:'1px solid #e2e8f0', borderRadius:8, padding:'12px 14px', textAlign:'center' }}>
+                  <div style={{ fontSize:11, color:'#64748b' }}>{k.label}</div>
+                  <div style={{ fontSize:16, fontWeight:800, color:k.color }}>{k.value}</div>
+                  {k.sub && <div style={{ fontSize:10, color:'#94a3b8', marginTop:2 }}>{k.sub}</div>}
+                </div>
+              ))}
+            </div>
+
+            {/* 기본 정보 */}
+            <div style={{ background:'#f8fafc', borderRadius:8, padding:'10px 16px', marginBottom:14, fontSize:12, display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:8 }}>
+              <span><strong>사번:</strong> {result.emp_id}</span>
+              <span><strong>이름:</strong> {result.name}</span>
+              <span><strong>입사일:</strong> {result.hire_date}</span>
+              <span><strong>퇴직기준일:</strong> {result.retire_date}</span>
+            </div>
+
+            {/* 연도별 급여 내역 */}
+            <div style={{ fontSize:13, fontWeight:700, marginBottom:8 }}>연도별 급여 지급 내역</div>
+            <table className="table" style={{ fontSize:12 }}>
+              <thead>
+                <tr><th>연도</th><th style={{ textAlign:'right' }}>근무일수</th><th style={{ textAlign:'right' }}>급여 합계</th></tr>
+              </thead>
+              <tbody>
+                {result.yearly_breakdown.map(y => (
+                  <tr key={y.year}>
+                    <td>{y.year}년</td>
+                    <td style={{ textAlign:'right' }}>{y.days.toLocaleString()}일</td>
+                    <td style={{ textAlign:'right', fontWeight:600 }}>{fmt(y.total_pay)}원</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+
+            <div style={{ background:'#fef3c7', borderRadius:8, padding:'10px 14px', fontSize:11, color:'#92400e', marginTop:12 }}>
+              ※ 퇴직금은 근로기준법 제8조에 따라 계속 근무 1년에 대해 30일분 평균임금을 지급합니다.<br/>
+              ※ 실제 퇴직금은 퇴직소득세 과세 후 지급됩니다 (본 계산은 세전 금액입니다).
+            </div>
+          </div>
+        )
+      )}
     </div>
   )
 }

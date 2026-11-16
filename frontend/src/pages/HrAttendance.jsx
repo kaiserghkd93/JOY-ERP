@@ -174,7 +174,7 @@ export default function HrAttendance() {
       {/* 뷰 전환 + 수기 등록 */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 12, alignItems: 'center', flexWrap: 'wrap' }}>
         <div className="qdate-bar">
-          {[['summary','월간 집계'],['detail','일별 상세'],['matrix','출근부'],['annual','연차 현황']].map(([v,l]) => (
+          {[['summary','월간 집계'],['detail','일별 상세'],['matrix','출근부'],['annual','연차 현황'],['analysis','📊 근태 분석']].map(([v,l]) => (
             <button key={v} className={`qdate-btn${viewMode===v?' active':''}`} onClick={() => { setViewMode(v); setSearchQuery('') }}>{l}</button>
           ))}
         </div>
@@ -335,6 +335,9 @@ export default function HrAttendance() {
 
       {/* 연차 현황 */}
       {viewMode === 'annual' && <AnnualLeaveTable data={annualLeave} onRefresh={loadAnnualLeave} searchQuery={searchQuery} />}
+
+      {/* 근태 분석 */}
+      {viewMode === 'analysis' && <AttendanceAnalysis year={year} month={month} />}
 
       {/* 수기 등록 모달 */}
       {modal !== null && (
@@ -1153,6 +1156,156 @@ function AnnualLeaveTable({ data, onRefresh, searchQuery }) {
           </tbody>
         </table>
       </div>
+    </div>
+  )
+}
+
+/* ── 근태 분석 ─────────────────────────────────────────────────── */
+function AttendanceAnalysis({ year, month }) {
+  const [deptData, setDeptData] = useState([])
+  const [trendData, setTrendData] = useState([])
+  const [subTab, setSubTab] = useState('dept')
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    setLoading(true)
+    Promise.all([
+      api.get(`/hr/attendance/dept-analysis?year=${year}&month=${month}`).then(r => setDeptData(r.data)).catch(() => {}),
+      api.get(`/hr/attendance/trend?year=${year}`).then(r => setTrendData(r.data)).catch(() => {}),
+    ]).finally(() => setLoading(false))
+  }, [year, month])
+
+  if (loading) return <div style={{ padding: 32, textAlign: 'center', color: '#94a3b8' }}>로딩 중...</div>
+
+  const maxAbsent = Math.max(...trendData.map(d => d.absent), 1)
+  const maxOt = Math.max(...trendData.map(d => d.ot_hrs), 1)
+
+  return (
+    <div>
+      <div style={{ display:'flex', gap:0, marginBottom:16, border:'1px solid #e2e8f0', borderRadius:8, overflow:'hidden', width:'fit-content' }}>
+        {[{ k:'dept', label:'🏢 부서별 현황' }, { k:'trend', label:'📈 월별 추이' }].map(t => (
+          <button key={t.k} onClick={() => setSubTab(t.k)} style={{
+            padding:'7px 18px', fontSize:12, fontWeight:600, border:'none', cursor:'pointer',
+            background:subTab===t.k?'#1d4ed8':'#fff', color:subTab===t.k?'#fff':'#64748b',
+          }}>{t.label}</button>
+        ))}
+      </div>
+
+      {subTab === 'dept' && (
+        <div>
+          <div style={{ fontSize:13, fontWeight:700, marginBottom:10 }}>{year}년 {month}월 부서별 근태 현황</div>
+          {deptData.length === 0 ? (
+            <div style={{ padding:32, textAlign:'center', color:'#94a3b8' }}>데이터 없음</div>
+          ) : (
+            <>
+              <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:8, marginBottom:12 }}>
+                {[
+                  { label:'총 인원', value:`${deptData.reduce((s,d)=>s+d.headcount,0)}명`, color:'#1d4ed8' },
+                  { label:'총 결근', value:`${deptData.reduce((s,d)=>s+d.absent,0)}건`, color:'#dc2626' },
+                  { label:'총 지각', value:`${deptData.reduce((s,d)=>s+d.late,0)}건`, color:'#d97706' },
+                  { label:'총 연차', value:`${deptData.reduce((s,d)=>s+d.leave,0).toFixed(1)}일`, color:'#7c3aed' },
+                ].map(k => (
+                  <div key={k.label} style={{ background:'#fff', border:'1px solid #e2e8f0', borderRadius:8, padding:'10px 14px', textAlign:'center' }}>
+                    <div style={{ fontSize:11, color:'#64748b' }}>{k.label}</div>
+                    <div style={{ fontSize:16, fontWeight:800, color:k.color }}>{k.value}</div>
+                  </div>
+                ))}
+              </div>
+              <table className="table" style={{ fontSize:12 }}>
+                <thead>
+                  <tr>
+                    <th>부서</th><th style={{ textAlign:'right' }}>인원</th><th style={{ textAlign:'right' }}>근무일수</th>
+                    <th style={{ textAlign:'right', color:'#dc2626' }}>결근</th><th style={{ textAlign:'right', color:'#d97706' }}>지각</th>
+                    <th style={{ textAlign:'right', color:'#7c3aed' }}>연차</th><th style={{ textAlign:'right' }}>연장(h)</th>
+                    <th style={{ minWidth:120 }}>결근률</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {deptData.map(d => (
+                    <tr key={d.dept}>
+                      <td style={{ fontWeight:600 }}>{d.dept}</td>
+                      <td style={{ textAlign:'right' }}>{d.headcount}</td>
+                      <td style={{ textAlign:'right' }}>{d.work_days}</td>
+                      <td style={{ textAlign:'right', color:d.absent>0?'#dc2626':undefined, fontWeight:d.absent>0?700:undefined }}>{d.absent}</td>
+                      <td style={{ textAlign:'right', color:d.late>0?'#d97706':undefined }}>{d.late}</td>
+                      <td style={{ textAlign:'right', color:'#7c3aed' }}>{d.leave}</td>
+                      <td style={{ textAlign:'right' }}>{d.ot_hrs}</td>
+                      <td>
+                        <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+                          <div style={{ flex:1, height:6, background:'#e5e7eb', borderRadius:3 }}>
+                            <div style={{ width:`${Math.min(100,d.absent_rate*5)}%`, height:'100%', background:d.absent_rate>5?'#dc2626':d.absent_rate>2?'#d97706':'#16a34a', borderRadius:3 }} />
+                          </div>
+                          <span style={{ fontSize:11, fontWeight:700, color:d.absent_rate>5?'#dc2626':d.absent_rate>2?'#d97706':'#64748b', minWidth:36 }}>{d.absent_rate}%</span>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </>
+          )}
+        </div>
+      )}
+
+      {subTab === 'trend' && (
+        <div>
+          <div style={{ fontSize:13, fontWeight:700, marginBottom:12 }}>{year}년 월별 근태 추이</div>
+          <div style={{ background:'#fff', border:'1px solid #e2e8f0', borderRadius:10, padding:'16px 16px 8px', marginBottom:12 }}>
+            <div style={{ fontSize:12, fontWeight:600, color:'#64748b', marginBottom:10 }}>월별 결근/지각 현황</div>
+            <div style={{ display:'flex', alignItems:'flex-end', gap:4, height:100 }}>
+              {trendData.map(d => {
+                const aH = d.absent > 0 ? Math.max(d.absent / maxAbsent * 90, 3) : 0
+                const lH = d.late > 0 ? Math.max(d.late / maxAbsent * 90, 2) : 0
+                return (
+                  <div key={d.month} style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', gap:1 }}>
+                    <div style={{ width:'100%', display:'flex', flexDirection:'column-reverse', gap:1 }}>
+                      {aH > 0 && <div style={{ width:'60%', margin:'0 auto', height:`${aH}px`, background:'#dc2626', borderRadius:'2px 2px 0 0' }} />}
+                      {lH > 0 && <div style={{ width:'60%', margin:'0 auto', height:`${lH}px`, background:'#f59e0b', borderRadius:'2px 2px 0 0' }} />}
+                    </div>
+                    <div style={{ fontSize:9, color:'#94a3b8' }}>{d.month}월</div>
+                  </div>
+                )
+              })}
+            </div>
+            <div style={{ display:'flex', gap:16, justifyContent:'center', marginTop:6, fontSize:11 }}>
+              <span><span style={{ width:10, height:10, background:'#dc2626', display:'inline-block', borderRadius:2, marginRight:4 }} />결근</span>
+              <span><span style={{ width:10, height:10, background:'#f59e0b', display:'inline-block', borderRadius:2, marginRight:4 }} />지각</span>
+            </div>
+          </div>
+          <div style={{ background:'#fff', border:'1px solid #e2e8f0', borderRadius:10, padding:'16px 16px 8px' }}>
+            <div style={{ fontSize:12, fontWeight:600, color:'#64748b', marginBottom:10 }}>월별 연장근무 (h)</div>
+            <div style={{ display:'flex', alignItems:'flex-end', gap:4, height:80 }}>
+              {trendData.map(d => {
+                const h = d.ot_hrs > 0 ? Math.max(d.ot_hrs / maxOt * 70, 3) : 0
+                return (
+                  <div key={d.month} style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', gap:2 }}>
+                    {h > 0 && <div style={{ fontSize:9, color:'#1d4ed8' }}>{d.ot_hrs}</div>}
+                    <div style={{ width:'70%', height:`${h}px`, background:'#3b82f6', borderRadius:'2px 2px 0 0', minHeight:h>0?3:0 }} />
+                    <div style={{ fontSize:9, color:'#94a3b8' }}>{d.month}월</div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+          <table className="table" style={{ fontSize:12, marginTop:12 }}>
+            <thead>
+              <tr><th>월</th><th style={{ textAlign:'right' }}>기록수</th><th style={{ textAlign:'right' }}>결근</th><th style={{ textAlign:'right' }}>지각</th><th style={{ textAlign:'right' }}>연차</th><th style={{ textAlign:'right' }}>연장(h)</th></tr>
+            </thead>
+            <tbody>
+              {trendData.map(d => (
+                <tr key={d.month}>
+                  <td>{d.month}월</td>
+                  <td style={{ textAlign:'right', color:'#64748b' }}>{d.total_records}</td>
+                  <td style={{ textAlign:'right', color:d.absent>0?'#dc2626':undefined, fontWeight:d.absent>0?700:undefined }}>{d.absent || '—'}</td>
+                  <td style={{ textAlign:'right', color:d.late>0?'#d97706':undefined }}>{d.late || '—'}</td>
+                  <td style={{ textAlign:'right', color:'#7c3aed' }}>{d.leave || '—'}</td>
+                  <td style={{ textAlign:'right', color:'#1d4ed8', fontWeight:600 }}>{d.ot_hrs || '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   )
 }

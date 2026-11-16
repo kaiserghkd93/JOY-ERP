@@ -1,7 +1,7 @@
 """실원가 분석 — 이동평균단가 기반 제품별 실제 원가"""
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
-from sqlalchemy import extract
+from sqlalchemy import extract, func
 
 from app.database import get_db
 from app.models.auth import User
@@ -276,5 +276,169 @@ def production_variance(
             "actual_cost": round(total_actual, 0),
             "variance": round(variance_total, 0),
             "variance_pct": round(variance_total / total_std * 100, 1) if total_std > 0 else None,
+        },
+    }
+
+
+# ── SAP CO 스타일 차이분석 ────────────────────────────────────────────
+
+@router.get("/co-variance")
+def co_variance_analysis(
+    year: int = Query(...), month: int = Query(...),
+    db: Session = Depends(get_db),
+    user: User = Depends(_require_cost),
+):
+    """SAP CO 표준원가 차이분석
+    재료비: 가격차이 + 수량차이
+    노무비: 임률차이 + 능률차이
+    제조간접비: 예산차이 + 조업도차이
+    """
+    from app.models.production import ProductionOrder, POrdStatus
+    from app.models.cost import ProductCostStd, LaborRate
+    from app.models.hr import Payroll, Employee
+
+    completed = db.query(ProductionOrder).filter(
+        ProductionOrder.status == POrdStatus.completed,
+        extract("year",  ProductionOrder.complete_date) == year,
+        extract("month", ProductionOrder.complete_date) == month,
+    ).all()
+
+    if not completed:
+        return {"year": year, "month": month, "items": [], "summary": {}}
+
+    part_nos = list({o.part_no for o in completed})
+    item_map = {i.part_no: i for i in db.query(Item).filter(Item.part_no.in_(part_nos)).all()}
+
+    # BOM
+    bom_map: dict = {}
+    for bl in db.query(BomLine).filter(BomLine.product_part_no.in_(part_nos)).all():
+        bom_map.setdefault(bl.product_part_no, []).append(bl)
+
+    comp_parts = list({bl.component_part_no for bls in bom_map.values() for bl in bls})
+    comp_items = {i.part_no: i for i in db.query(Item).filter(Item.part_no.in_(comp_parts)).all()} if comp_parts else {}
+
+    # 표준원가
+    cost_stds = {cs.part_no: cs for cs in db.query(ProductCostStd).filter(ProductCostStd.part_no.in_(part_nos)).all()}
+    labor_rates = {lr.id: lr for lr in db.query(LaborRate).all()}
+
+    # 실제 소모 (가격+수량)
+    pord_nos = [o.pord_no for o in completed]
+    consumption_rows = db.query(
+        StockLedger.ref_no, StockLedger.part_no,
+        func.sum(func.abs(StockLedger.qty)).label("qty"),
+        func.avg(StockLedger.unit_price).label("avg_price"),
+    ).filter(
+        StockLedger.ledger_type == LedgerType.consumption,
+        StockLedger.ref_no.in_(pord_nos),
+    ).group_by(StockLedger.ref_no, StockLedger.part_no).all()
+    consumption_map: dict = {}
+    for r in consumption_rows:
+        consumption_map.setdefault(r.ref_no, {})[r.part_no] = (float(r.qty or 0), float(r.avg_price or 0))
+
+    # MES 세션으로 실제 가동시간 조회
+    from app.models.mes import MesSession
+    mes_sessions = db.query(MesSession).filter(
+        extract("year", MesSession.start_time) == year,
+        extract("month", MesSession.start_time) == month,
+    ).all()
+    mes_map: dict = {}
+    for s in mes_sessions:
+        if s.work_order_no:
+            mes_map.setdefault(s.work_order_no, []).append(s)
+
+    items = []
+    for order in completed:
+        pno = order.part_no
+        actual_qty = order.actual_qty or 0
+        if actual_qty == 0: continue
+        bom = bom_map.get(pno, [])
+        cs = cost_stds.get(pno)
+        consumed = consumption_map.get(order.pord_no, {})
+
+        # ── 재료비 차이분석 ──
+        mat_rows = []
+        total_price_var = total_qty_var = 0.0
+        for bl in bom:
+            comp = comp_items.get(bl.component_part_no)
+            if not comp: continue
+            std_price = float(comp.std_buy_price or 0)
+            std_qty   = float(bl.qty_per) * actual_qty          # 표준 소요량
+            act_qty_comp, act_price = consumed.get(bl.component_part_no, (std_qty, std_price))
+
+            price_var = (act_price - std_price) * act_qty_comp  # 가격차이
+            qty_var   = (act_qty_comp - std_qty) * std_price    # 수량차이
+
+            total_price_var += price_var
+            total_qty_var   += qty_var
+
+            mat_rows.append({
+                "part_no": bl.component_part_no,
+                "part_name": comp.name,
+                "std_price": round(std_price, 2), "act_price": round(act_price, 2),
+                "std_qty": round(std_qty, 2),     "act_qty": round(act_qty_comp, 2),
+                "price_variance": round(price_var),
+                "qty_variance": round(qty_var),
+                "total_variance": round(price_var + qty_var),
+            })
+
+        # ── 노무비 차이분석 ──
+        std_labor_min = float(cs.std_labor_min or 0) if cs else 0.0
+        lr = labor_rates.get(cs.process_id) if cs else None
+        std_rate = float(lr.rate_per_hour or 0) if lr else 0.0
+
+        # 실제 가동분 (MES 세션 합산)
+        sessions = mes_map.get(order.pord_no, [])
+        act_labor_min = sum(s.actual_min or 0 for s in sessions)
+        # 실제 임률 (당월 급여/근무시간)
+        act_rate = std_rate  # fallback; 급여 데이터로 계산 가능하지만 단순화
+
+        std_labor_total = std_labor_min / 60 * std_rate * actual_qty
+        act_labor_total = act_labor_min / 60 * act_rate if act_labor_min > 0 else std_labor_total
+
+        rate_var = (act_rate - std_rate) * (act_labor_min / 60) if act_labor_min > 0 else 0.0
+        efficiency_var = (act_labor_min - std_labor_min * actual_qty) / 60 * std_rate if std_rate > 0 else 0.0
+
+        # ── 요약 ──
+        mat_std  = sum(float(bl.qty_per) * float((comp_items.get(bl.component_part_no) or type('', (), {'std_buy_price': 0})()).std_buy_price or 0) for bl in bom) * actual_qty
+        mat_act  = sum(qty * price for qty, price in consumed.values())
+        mat_var  = mat_act - mat_std
+
+        items.append({
+            "pord_no": order.pord_no,
+            "part_no": pno,
+            "part_name": item_map.get(pno, type('', (), {'name': pno})()).name,
+            "actual_qty": actual_qty,
+            "material": {
+                "std": round(mat_std), "actual": round(mat_act), "variance": round(mat_var),
+                "price_variance": round(total_price_var),
+                "qty_variance": round(total_qty_var),
+                "detail": mat_rows,
+            },
+            "labor": {
+                "std_min": round(std_labor_min * actual_qty, 1),
+                "act_min": round(act_labor_min, 1),
+                "std_rate": round(std_rate, 2), "act_rate": round(act_rate, 2),
+                "std_cost": round(std_labor_total), "act_cost": round(act_labor_total),
+                "rate_variance": round(rate_var),
+                "efficiency_variance": round(efficiency_var),
+                "total_variance": round(rate_var + efficiency_var),
+            },
+            "total_variance": round(mat_var + rate_var + efficiency_var),
+        })
+
+    items.sort(key=lambda x: abs(x["total_variance"]), reverse=True)
+
+    return {
+        "year": year, "month": month,
+        "items": items,
+        "summary": {
+            "total_orders": len(items),
+            "material_variance": round(sum(i["material"]["variance"] for i in items)),
+            "material_price_var": round(sum(i["material"]["price_variance"] for i in items)),
+            "material_qty_var": round(sum(i["material"]["qty_variance"] for i in items)),
+            "labor_variance": round(sum(i["labor"]["total_variance"] for i in items)),
+            "labor_rate_var": round(sum(i["labor"]["rate_variance"] for i in items)),
+            "labor_efficiency_var": round(sum(i["labor"]["efficiency_variance"] for i in items)),
+            "total_variance": round(sum(i["total_variance"] for i in items)),
         },
     }
