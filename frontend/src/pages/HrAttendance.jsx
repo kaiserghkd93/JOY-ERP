@@ -653,7 +653,7 @@ function BulkHolidayModal({ year, month, employees, onClose, onSaved }) {
                     </div>
                   </div>
 
-                  <div style={{ padding: '8px 12px', maxHeight: 150, overflowY: 'auto', minHeight: 44 }}>
+                  <div style={{ padding: '8px 12px', minHeight: 44 }}>
                     {dispEmps.length === 0 ? (
                       <span style={{ fontSize: 12, color: '#94a3b8' }}>
                         {showAll ? '직원 없음' : '특근신청 없음 · 위 "전체직원" 체크 시 수동 선택 가능'}
@@ -848,8 +848,7 @@ function OvertimeAppModal({ year, month, employees, onClose }) {
                     </div>
                   </div>
 
-                  {/* 직원 선택 — 날짜별 고정 높이 + 개별 스크롤 (flex와 scroll 컨테이너 분리) */}
-                  <div style={{ padding: '8px 12px', maxHeight: 150, overflowY: 'auto' }}>
+                  <div style={{ padding: '8px 12px' }}>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
                     {activeEmps.map(e => {
                       const on = apps.has(e.emp_id)
