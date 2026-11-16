@@ -1050,3 +1050,74 @@ def daily_report(target_date: Optional[date] = None, db: Session = Depends(get_d
         },
         "rows": rows,
     }
+
+
+@router.get("/oee-trend")
+def oee_trend(days: int = 7, db: Session = Depends(get_db)):
+    """최근 N일 OEE 트렌드 — 날짜별 집계"""
+    from datetime import timedelta
+    today = date.today()
+    result = []
+    for i in range(days - 1, -1, -1):
+        d = today - timedelta(days=i)
+        sessions = db.query(WorkerSession).filter(
+            WorkerSession.start_time >= datetime.combine(d, datetime.min.time()),
+            WorkerSession.start_time <= datetime.combine(d, datetime.max.time()),
+        ).all()
+        if not sessions:
+            result.append({
+                "date": str(d), "avg_oee": 0, "total_good": 0, "total_defect": 0,
+                "defect_rate": 0, "active_machines": 0,
+            })
+            continue
+        oees, goods, defects, m_set = [], 0, 0, set()
+        for s in sessions:
+            detail = _session_detail(db, s)
+            oees.append(detail["oee"])
+            goods += s.good_qty
+            defects += s.defect_qty
+            m_set.add(s.machine_id)
+        total = goods + defects
+        result.append({
+            "date": str(d),
+            "avg_oee": round(sum(oees) / len(oees), 1) if oees else 0,
+            "total_good": goods,
+            "total_defect": defects,
+            "defect_rate": round(defects / total * 100, 2) if total > 0 else 0,
+            "active_machines": len(m_set),
+        })
+    return result
+
+
+@router.get("/machine-oee-summary")
+def machine_oee_summary(days: int = 7, db: Session = Depends(get_db)):
+    """최근 N일 호기별 OEE 집계"""
+    from datetime import timedelta
+    from app.models.mes import Machine
+    start = datetime.combine(date.today() - timedelta(days=days-1), datetime.min.time())
+    sessions = db.query(WorkerSession).filter(WorkerSession.start_time >= start).all()
+    by_machine: dict = {}
+    for s in sessions:
+        mid = s.machine_id
+        if mid not in by_machine:
+            by_machine[mid] = {"oees": [], "goods": 0, "defects": 0, "sessions": 0}
+        d = _session_detail(db, s)
+        by_machine[mid]["oees"].append(d["oee"])
+        by_machine[mid]["goods"] += s.good_qty
+        by_machine[mid]["defects"] += s.defect_qty
+        by_machine[mid]["sessions"] += 1
+    result = []
+    for mid, v in by_machine.items():
+        m = db.get(Machine, mid)
+        total = v["goods"] + v["defects"]
+        result.append({
+            "machine_id": mid,
+            "machine_name": m.name if m else mid,
+            "avg_oee": round(sum(v["oees"]) / len(v["oees"]), 1) if v["oees"] else 0,
+            "total_good": v["goods"],
+            "total_defect": v["defects"],
+            "defect_rate": round(v["defects"] / total * 100, 2) if total > 0 else 0,
+            "sessions": v["sessions"],
+        })
+    result.sort(key=lambda x: x["avg_oee"], reverse=True)
+    return result

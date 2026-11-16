@@ -476,6 +476,42 @@ def register_mold(body: MoldRegisterReq, user: User = Depends(get_current_user),
     return {"ok": True, "mold_no": mold.mold_no}
 
 
+class DeliveryAckBody(BaseModel):
+    ack_status: str           # 'possible' | 'impossible' | 'partial'
+    ack_date: date_type | None = None
+    ack_note: str | None = None
+
+
+@router.post("/orders/{po_no}/ack")
+def ack_order(po_no: str, body: DeliveryAckBody,
+              user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """협력사 납기 회신 (발주번호별)"""
+    partner_id = _supplier_partner(user)
+    po = db.get(PurchaseOrder, po_no)
+    if not po:
+        raise HTTPException(404, f"발주번호 없음: {po_no}")
+    if po.partner_id != partner_id:
+        raise HTTPException(403, "본인 업체 발주만 회신 가능합니다")
+    label = {'possible': '납기가능', 'impossible': '납기불가', 'partial': '부분납기'}.get(body.ack_status, body.ack_status)
+    ack_text = f"[협력사회신] {label}"
+    if body.ack_date:
+        ack_text += f" / 예정일:{body.ack_date}"
+    if body.ack_note:
+        ack_text += f" / {body.ack_note}"
+    # 기존 회신 덮어쓰기 — note 필드에 태그 방식으로 보존
+    existing = po.note or ""
+    # 이전 [협력사회신] 태그 제거
+    import re
+    existing = re.sub(r'\[협력사회신\][^\n]*', '', existing).strip()
+    po.note = f"{ack_text}\n{existing}".strip() if existing else ack_text
+    db.commit()
+    return {
+        "ok": True, "po_no": po_no,
+        "ack_status": body.ack_status, "ack_date": str(body.ack_date) if body.ack_date else None,
+        "note": po.note,
+    }
+
+
 @router.delete("/my-molds/{mold_no}")
 def return_mold(mold_no: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """협력사가 금형 반납 처리"""

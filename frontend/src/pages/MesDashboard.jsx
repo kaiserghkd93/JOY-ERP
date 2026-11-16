@@ -3,6 +3,240 @@ import api from '../api'
 
 const REFRESH_MS = 5000
 
+/* ── OEE 분석 탭 ──────────────────────────────────────────────── */
+function OeeAnalysis() {
+  const [trend, setTrend] = useState([])
+  const [machineStats, setMachineStats] = useState([])
+  const [dailyReport, setDailyReport] = useState(null)
+  const [reportDate, setReportDate] = useState(() => {
+    const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
+  })
+  const [activeTab, setActiveTab] = useState('trend')
+  const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    setLoading(true)
+    Promise.all([
+      api.get('/mes-floor/oee-trend?days=14').then(r => setTrend(r.data)).catch(() => {}),
+      api.get('/mes-floor/machine-oee-summary?days=14').then(r => setMachineStats(r.data)).catch(() => {}),
+    ]).finally(() => setLoading(false))
+  }, [])
+
+  useEffect(() => {
+    if (activeTab === 'report') {
+      api.get(`/mes-floor/daily-report?target_date=${reportDate}`).then(r => setDailyReport(r.data)).catch(() => {})
+    }
+  }, [activeTab, reportDate])
+
+  const maxOee = Math.max(...trend.map(d => d.avg_oee), 1)
+  const maxGood = Math.max(...trend.map(d => d.total_good), 1)
+
+  const oeeColor = (v) => v >= 85 ? '#16a34a' : v >= 70 ? '#d97706' : '#dc2626'
+
+  if (loading) return <div style={{ padding: 40, textAlign:'center', color:'#94a3b8' }}>로딩 중...</div>
+
+  return (
+    <div>
+      {/* 서브 탭 */}
+      <div style={{ display:'flex', gap:0, marginBottom:18, border:'1px solid #e2e8f0', borderRadius:8, overflow:'hidden', width:'fit-content' }}>
+        {[{ k:'trend', label:'📈 주간 OEE 트렌드' }, { k:'machine', label:'🔧 호기별 OEE' }, { k:'report', label:'📋 일보' }].map(t => (
+          <button key={t.k} onClick={() => setActiveTab(t.k)} style={{
+            padding:'7px 20px', fontSize:12, fontWeight:600, border:'none', cursor:'pointer',
+            background:activeTab===t.k?'#1d4ed8':'#fff', color:activeTab===t.k?'#fff':'#64748b',
+          }}>{t.label}</button>
+        ))}
+      </div>
+
+      {activeTab === 'trend' && (
+        <div>
+          <div style={{ fontSize:13, fontWeight:700, marginBottom:12 }}>최근 14일 OEE 트렌드</div>
+          {trend.length === 0 ? (
+            <div style={{ padding:32, textAlign:'center', color:'#94a3b8' }}>MES 세션 데이터 없음</div>
+          ) : (
+            <>
+              {/* OEE 바 차트 */}
+              <div style={{ background:'#fff', border:'1px solid #e2e8f0', borderRadius:10, padding:'16px 16px 8px', marginBottom:12 }}>
+                <div style={{ fontSize:12, fontWeight:600, color:'#64748b', marginBottom:10 }}>평균 OEE (%)</div>
+                <div style={{ display:'flex', alignItems:'flex-end', gap:4, height:120 }}>
+                  {trend.map(d => {
+                    const h = d.avg_oee > 0 ? Math.max((d.avg_oee / 100) * 100, 4) : 2
+                    const color = oeeColor(d.avg_oee)
+                    const shortDate = d.date.slice(5)
+                    return (
+                      <div key={d.date} style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', gap:2 }}>
+                        <div style={{ fontSize:9, color, fontWeight:700 }}>{d.avg_oee > 0 ? d.avg_oee+'%' : ''}</div>
+                        <div style={{ width:'100%', height:`${h}px`, background:color, borderRadius:'3px 3px 0 0', minHeight:2 }} />
+                        <div style={{ fontSize:9, color:'#94a3b8', textAlign:'center' }}>{shortDate}</div>
+                      </div>
+                    )
+                  })}
+                </div>
+                <div style={{ display:'flex', gap:16, justifyContent:'center', marginTop:8, fontSize:11 }}>
+                  {[{ color:'#16a34a', label:'85% 이상 (우수)' }, { color:'#d97706', label:'70~85% (보통)' }, { color:'#dc2626', label:'70% 미만 (불량)' }].map(l => (
+                    <span key={l.label} style={{ display:'flex', alignItems:'center', gap:4 }}>
+                      <span style={{ width:10, height:10, borderRadius:2, background:l.color, display:'inline-block' }} />
+                      {l.label}
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              {/* 양품/불량 차트 */}
+              <div style={{ background:'#fff', border:'1px solid #e2e8f0', borderRadius:10, padding:'16px 16px 8px', marginBottom:12 }}>
+                <div style={{ fontSize:12, fontWeight:600, color:'#64748b', marginBottom:10 }}>일별 생산수량</div>
+                <div style={{ display:'flex', alignItems:'flex-end', gap:4, height:100 }}>
+                  {trend.map(d => {
+                    const goodH = d.total_good > 0 ? Math.max((d.total_good / maxGood) * 90, 3) : 0
+                    const defH = d.total_defect > 0 ? Math.max((d.total_defect / maxGood) * 90, 2) : 0
+                    return (
+                      <div key={d.date} style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', gap:1 }}>
+                        {d.total_good > 0 && <div style={{ fontSize:8, color:'#1d4ed8' }}>{d.total_good}</div>}
+                        <div style={{ width:'100%', display:'flex', flexDirection:'column-reverse' }}>
+                          <div style={{ width:'100%', height:`${goodH}px`, background:'#3b82f6', borderRadius:'0' }} />
+                          {defH > 0 && <div style={{ width:'100%', height:`${defH}px`, background:'#f87171', borderRadius:'2px 2px 0 0' }} />}
+                        </div>
+                        <div style={{ fontSize:9, color:'#94a3b8' }}>{d.date.slice(5)}</div>
+                      </div>
+                    )
+                  })}
+                </div>
+                <div style={{ display:'flex', gap:16, justifyContent:'center', marginTop:6, fontSize:11 }}>
+                  <span style={{ display:'flex', alignItems:'center', gap:4 }}><span style={{ width:10, height:10, background:'#3b82f6', display:'inline-block', borderRadius:2 }} />양품</span>
+                  <span style={{ display:'flex', alignItems:'center', gap:4 }}><span style={{ width:10, height:10, background:'#f87171', display:'inline-block', borderRadius:2 }} />불량</span>
+                </div>
+              </div>
+
+              {/* 요약 통계 */}
+              <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:10 }}>
+                {[
+                  { label:'평균 OEE', value:`${trend.filter(d=>d.avg_oee>0).reduce((s,d)=>s+d.avg_oee,0) / (trend.filter(d=>d.avg_oee>0).length||1) | 0}%`, color:'#1d4ed8' },
+                  { label:'총 양품', value:(trend.reduce((s,d)=>s+d.total_good,0)).toLocaleString()+'개', color:'#16a34a' },
+                  { label:'총 불량', value:(trend.reduce((s,d)=>s+d.total_defect,0)).toLocaleString()+'개', color:'#dc2626' },
+                  { label:'평균 불량률', value:`${(trend.filter(d=>d.defect_rate>0).reduce((s,d)=>s+d.defect_rate,0) / (trend.filter(d=>d.defect_rate>0).length||1)).toFixed(2)}%`, color:'#d97706' },
+                ].map(k => (
+                  <div key={k.label} style={{ background:'#fff', border:'1px solid #e2e8f0', borderRadius:8, padding:'10px 14px', textAlign:'center' }}>
+                    <div style={{ fontSize:11, color:'#64748b' }}>{k.label}</div>
+                    <div style={{ fontSize:18, fontWeight:800, color:k.color }}>{k.value}</div>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
+      {activeTab === 'machine' && (
+        <div>
+          <div style={{ fontSize:13, fontWeight:700, marginBottom:12 }}>호기별 OEE 순위 (최근 14일)</div>
+          {machineStats.length === 0 ? (
+            <div style={{ padding:32, textAlign:'center', color:'#94a3b8' }}>데이터 없음</div>
+          ) : (
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>순위</th><th>호기</th>
+                  <th style={{ minWidth:160 }}>평균 OEE</th>
+                  <th style={{ textAlign:'right' }}>양품</th>
+                  <th style={{ textAlign:'right' }}>불량</th>
+                  <th style={{ textAlign:'right' }}>불량률</th>
+                  <th style={{ textAlign:'right' }}>세션수</th>
+                </tr>
+              </thead>
+              <tbody>
+                {machineStats.map((m, i) => {
+                  const color = oeeColor(m.avg_oee)
+                  return (
+                    <tr key={m.machine_id}>
+                      <td style={{ textAlign:'center' }}>
+                        <span style={{ fontWeight:800, color: i===0?'#d97706':i===1?'#94a3b8':i===2?'#b45309':'#64748b' }}>
+                          {i===0?'🥇':i===1?'🥈':i===2?'🥉':`${i+1}`}
+                        </span>
+                      </td>
+                      <td style={{ fontWeight:600 }}>{m.machine_name}</td>
+                      <td>
+                        <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                          <div style={{ flex:1, height:8, background:'#e5e7eb', borderRadius:4 }}>
+                            <div style={{ width:`${Math.min(100,m.avg_oee)}%`, height:'100%', background:color, borderRadius:4 }} />
+                          </div>
+                          <span style={{ fontSize:12, fontWeight:800, color, minWidth:36, textAlign:'right' }}>{m.avg_oee}%</span>
+                        </div>
+                      </td>
+                      <td style={{ textAlign:'right', color:'#1d4ed8', fontWeight:600 }}>{m.total_good.toLocaleString()}</td>
+                      <td style={{ textAlign:'right', color:m.total_defect>0?'#dc2626':undefined }}>{m.total_defect.toLocaleString()}</td>
+                      <td style={{ textAlign:'right', color:m.defect_rate>5?'#dc2626':m.defect_rate>2?'#d97706':'#16a34a', fontWeight:600 }}>
+                        {m.defect_rate}%
+                      </td>
+                      <td style={{ textAlign:'right', color:'#64748b' }}>{m.sessions}</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          )}
+        </div>
+      )}
+
+      {activeTab === 'report' && (
+        <div>
+          <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:14 }}>
+            <span style={{ fontSize:13, fontWeight:700 }}>일보 조회:</span>
+            <input type="date" className="form-control" value={reportDate}
+              onChange={e => setReportDate(e.target.value)} style={{ width:160 }} />
+          </div>
+          {dailyReport ? (
+            <>
+              <div style={{ display:'grid', gridTemplateColumns:'repeat(5,1fr)', gap:10, marginBottom:14 }}>
+                {[
+                  { label:'가동 호기수', value:`${dailyReport.summary.active_machines}대`, color:'#1d4ed8' },
+                  { label:'평균 OEE', value:`${dailyReport.summary.avg_oee}%`, color:oeeColor(dailyReport.summary.avg_oee) },
+                  { label:'총 양품', value:`${dailyReport.summary.total_good.toLocaleString()}개`, color:'#16a34a' },
+                  { label:'총 불량', value:`${dailyReport.summary.total_defect.toLocaleString()}개`, color:'#dc2626' },
+                  { label:'불량률', value:`${dailyReport.summary.defect_rate}%`, color:'#d97706' },
+                ].map(k => (
+                  <div key={k.label} style={{ background:'#fff', border:'1px solid #e2e8f0', borderRadius:8, padding:'10px 14px', textAlign:'center' }}>
+                    <div style={{ fontSize:11, color:'#64748b' }}>{k.label}</div>
+                    <div style={{ fontSize:16, fontWeight:800, color:k.color }}>{k.value}</div>
+                  </div>
+                ))}
+              </div>
+              <table className="table" style={{ fontSize:12 }}>
+                <thead>
+                  <tr><th>호기</th><th>품번</th><th>품명</th><th>작업자</th><th style={{ textAlign:'right' }}>목표</th><th style={{ textAlign:'right' }}>양품</th><th style={{ textAlign:'right' }}>불량</th><th style={{ textAlign:'center' }}>OEE</th><th style={{ textAlign:'right' }}>가동(분)</th><th>상태</th></tr>
+                </thead>
+                <tbody>
+                  {dailyReport.rows.length === 0 ? (
+                    <tr><td colSpan={10} style={{ textAlign:'center', color:'#94a3b8', padding:24 }}>해당일 데이터 없음</td></tr>
+                  ) : dailyReport.rows.map((r, i) => (
+                    <tr key={i}>
+                      <td style={{ fontWeight:600 }}>{r.machine_name}</td>
+                      <td style={{ fontSize:11, fontFamily:'monospace' }}>{r.part_no}</td>
+                      <td>{r.part_name}</td>
+                      <td style={{ fontSize:11 }}>{r.worker_id || '—'}</td>
+                      <td style={{ textAlign:'right' }}>{(r.target_qty||0).toLocaleString()}</td>
+                      <td style={{ textAlign:'right', color:'#1d4ed8', fontWeight:700 }}>{(r.good_qty||0).toLocaleString()}</td>
+                      <td style={{ textAlign:'right', color:r.defect_qty>0?'#dc2626':undefined }}>{(r.defect_qty||0).toLocaleString()}</td>
+                      <td style={{ textAlign:'center' }}>
+                        <span style={{ fontWeight:700, fontSize:12, color:oeeColor(r.oee||0) }}>{r.oee||0}%</span>
+                      </td>
+                      <td style={{ textAlign:'right', color:'#64748b' }}>{Math.round(r.working_min||0)}</td>
+                      <td><span style={{ fontSize:10, padding:'2px 6px', borderRadius:20, fontWeight:600,
+                        background:r.status==='completed'?'#dcfce7':r.status==='active'?'#dbeafe':'#f1f5f9',
+                        color:r.status==='completed'?'#15803d':r.status==='active'?'#1d4ed8':'#64748b',
+                      }}>{r.status}</span></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </>
+          ) : (
+            <div style={{ padding:32, textAlign:'center', color:'#94a3b8' }}>일보 로딩 중...</div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 const STATUS_COLOR = {
   '가동':  { bg: '#dcfce7', border: '#16a34a', text: '#15803d', dot: '#16a34a' },
   '비가동': { bg: '#fee2e2', border: '#dc2626', text: '#dc2626', dot: '#dc2626' },
@@ -107,6 +341,7 @@ function MachineCard({ m, onAndon }) {
 }
 
 export default function MesDashboard() {
+  const [mainTab, setMainTab] = useState('andon')
   const [machines, setMachines] = useState([])
   const [andons, setAndons] = useState([])
   const [loading, setLoading] = useState(true)
@@ -180,9 +415,9 @@ export default function MesDashboard() {
       `}</style>
 
       {/* 헤더 */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
         <div>
-          <h2 style={{ margin: 0, fontSize: 20, fontWeight: 800 }}>NEXGEM — 안돈 보드</h2>
+          <h2 style={{ margin: 0, fontSize: 20, fontWeight: 800 }}>NEXGEM — MES 대시보드</h2>
           <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>
             갱신: {lastUpdated ? lastUpdated.toLocaleTimeString('ko-KR') : '-'} · {REFRESH_MS / 1000}초 자동갱신
           </div>
@@ -190,6 +425,21 @@ export default function MesDashboard() {
         <button className="btn btn-outline" onClick={refresh} style={{ fontSize: 12 }}>↻ 새로고침</button>
       </div>
 
+      {/* 메인 탭 */}
+      <div style={{ display:'flex', gap:0, marginBottom:16, borderBottom:'2px solid #e2e8f0' }}>
+        {[{ k:'andon', label:'🏭 안돈 보드' }, { k:'oee', label:'📊 OEE 분석' }].map(t => (
+          <button key={t.k} onClick={() => setMainTab(t.k)} style={{
+            padding:'8px 20px', fontSize:13, fontWeight:700, border:'none', cursor:'pointer',
+            background:'transparent', color:mainTab===t.k?'#1d4ed8':'#64748b',
+            borderBottom:mainTab===t.k?'2px solid #1d4ed8':'2px solid transparent',
+            marginBottom:-2,
+          }}>{t.label}</button>
+        ))}
+      </div>
+
+      {mainTab === 'oee' && <OeeAnalysis />}
+
+      {mainTab === 'andon' && <>
       {/* KPI 요약 */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 10, marginBottom: 16 }}>
         {[
@@ -307,6 +557,7 @@ export default function MesDashboard() {
           </div>
         </div>
       )}
+      </>}
     </div>
   )
 }

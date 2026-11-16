@@ -34,7 +34,8 @@ const InvAdjust      = lazy(() => import('./pages/InvAdjust'))
 const Management     = lazy(() => import('./pages/Management'))
 const ProductionGantt = lazy(() => import('./pages/ProductionGantt'))
 const Exceptions     = lazy(() => import('./pages/Exceptions'))
-const LotTrace       = lazy(() => import('./pages/LotTrace'))
+const LotTrace        = lazy(() => import('./pages/LotTrace'))
+const SupplierPortal  = lazy(() => import('./pages/SupplierPortal'))
 
 // GNB: 대분류 / LNB: 소분류
 const allMenus = [
@@ -155,7 +156,16 @@ export default function App() {
   const navigate = useNavigate()
 
   if (!user) {
-    return <Login onLogin={() => setUser(getUser())} />
+    return <Login onLogin={() => {
+      const u = getUser()
+      setUser(u)
+      if (u?.role === 'supplier') navigate('/portal')
+    }} />
+  }
+
+  // supplier 역할은 포털 전용
+  if (user.role === 'supplier' && loc.pathname !== '/portal') {
+    return <Navigate to="/portal" replace />
   }
 
   // 현재 경로로 활성 GNB 그룹 판별
@@ -331,6 +341,7 @@ export default function App() {
               <ProtectedRoute path="/hr-payroll"><HrPayroll /></ProtectedRoute>
             } />
             <Route path="/worker" element={<WorkerScreen />} />
+            <Route path="/portal" element={<SupplierPortal />} />
           </Routes>
         </Suspense>
       </div>
