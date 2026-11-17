@@ -211,6 +211,45 @@ class MaterialRequisition(Base):
     item: Mapped["Item"] = relationship(foreign_keys=[part_no])
 
 
+class ArticleInspection(Base):
+    """초·중·종물 검사 (IATF §8.5.1 공정 중 검사)"""
+    __tablename__ = "mes_article_inspection"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    session_id: Mapped[int] = mapped_column(ForeignKey("worker_session.id"), nullable=False)
+    wo_no: Mapped[str] = mapped_column(ForeignKey("mes_work_order.wo_no"), nullable=False)
+    machine_id: Mapped[str] = mapped_column(String(20), nullable=False)
+    worker_id: Mapped[str] = mapped_column(String(50), nullable=False)
+    insp_type: Mapped[str] = mapped_column(String(10), nullable=False)  # 초물/중간/종물
+    result: Mapped[str] = mapped_column(String(5), nullable=False)       # OK/NG
+    dim1_spec: Mapped[float | None] = mapped_column(Float, nullable=True)
+    dim1_actual: Mapped[float | None] = mapped_column(Float, nullable=True)
+    dim2_spec: Mapped[float | None] = mapped_column(Float, nullable=True)
+    dim2_actual: Mapped[float | None] = mapped_column(Float, nullable=True)
+    dim3_spec: Mapped[float | None] = mapped_column(Float, nullable=True)
+    dim3_actual: Mapped[float | None] = mapped_column(Float, nullable=True)
+    appearance: Mapped[str | None] = mapped_column(String(5))
+    note: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+
+
+class WorkerSessionCost(Base):
+    """세션 완료 시 자동 계산 실원가"""
+    __tablename__ = "mes_session_cost"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    session_id: Mapped[int] = mapped_column(ForeignKey("worker_session.id"), unique=True, nullable=False)
+    wo_no: Mapped[str] = mapped_column(String(30), nullable=False)
+    part_no: Mapped[str] = mapped_column(String(50), nullable=False)
+    good_qty: Mapped[int] = mapped_column(Integer, default=0)
+    material_cost: Mapped[float] = mapped_column(Float, default=0)
+    labor_cost: Mapped[float] = mapped_column(Float, default=0)
+    total_cost: Mapped[float] = mapped_column(Float, default=0)
+    unit_cost: Mapped[float] = mapped_column(Float, default=0)
+    calc_note: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+
+
 class SetupChecklist(Base):
     """작업 준비 체크리스트 — IATF 16949 §8.5.1 4M 변경점 관리"""
     __tablename__ = "mes_setup_checklist"

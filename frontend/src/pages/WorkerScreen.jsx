@@ -52,6 +52,8 @@ export default function WorkerScreen() {
   // 자재 출고 요청 모달
   const [matReqModal, setMatReqModal] = useState(false)
   const [matReqForm, setMatReqForm] = useState({ part_no: '', req_qty: '', reason: '' })
+  const [inspModal, setInspModal] = useState(null) // { type: '초물'|'중간'|'종물' }
+  const [inspForm, setInspForm] = useState({ result: 'OK', appearance: 'OK', dim1_spec: '', dim1_actual: '', dim2_spec: '', dim2_actual: '', note: '' })
   const [items, setItems] = useState([])
   const [myReqs, setMyReqs] = useState([])
 
@@ -453,6 +455,10 @@ export default function WorkerScreen() {
                 style={{ padding: '11px', borderRadius: 8, border: '1px solid #475569', background: 'transparent', color: '#94a3b8', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
                 📦 자재 출고 요청
               </button>
+              <button onClick={() => setInspModal({ type: '초물' })} disabled={loading}
+                style={{ padding: '11px', borderRadius: 8, border: '1px solid #0ea5e9', background: 'transparent', color: '#38bdf8', fontSize: 12, fontWeight: 600, cursor: 'pointer', gridColumn: 'span 2' }}>
+                🔍 초·중·종물 검사
+              </button>
             </div>
 
             <button onClick={endSession} disabled={loading}
@@ -723,6 +729,93 @@ export default function WorkerScreen() {
                 출고 요청
               </button>
               <button onClick={() => setMatReqModal(false)}
+                style={{ flex: 1, padding: '12px', borderRadius: 10, border: '1px solid #334155', background: 'transparent', color: '#94a3b8', fontSize: 13, cursor: 'pointer' }}>
+                닫기
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── 초·중·종물 검사 모달 ── */}
+      {inspModal && session && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50 }}>
+          <div style={{ background: '#1e293b', borderRadius: 16, padding: 24, width: '90%', maxWidth: 420 }}>
+            <div style={{ fontSize: 15, fontWeight: 800, marginBottom: 4, color: '#e2e8f0' }}>🔍 초·중·종물 검사</div>
+            <div style={{ fontSize: 12, color: '#64748b', marginBottom: 16 }}>공정 중 품질 확인 (IATF §8.5.1)</div>
+
+            {/* 검사 유형 선택 */}
+            <div style={{ marginBottom: 12 }}>
+              <div style={{ fontSize: 11, color: '#94a3b8', marginBottom: 6 }}>검사 유형</div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                {['초물', '중간', '종물'].map(t => (
+                  <button key={t} onClick={() => setInspModal({ type: t })}
+                    style={{ flex: 1, padding: '8px', borderRadius: 8, border: `2px solid ${inspModal.type === t ? '#0ea5e9' : '#334155'}`, background: inspModal.type === t ? '#0c4a6e' : 'transparent', color: inspModal.type === t ? '#38bdf8' : '#94a3b8', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
+                    {t}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* 판정 */}
+            <div style={{ marginBottom: 12 }}>
+              <div style={{ fontSize: 11, color: '#94a3b8', marginBottom: 6 }}>외관 판정</div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                {['OK', 'NG'].map(v => (
+                  <button key={v} onClick={() => setInspForm(f => ({ ...f, appearance: v }))}
+                    style={{ flex: 1, padding: '8px', borderRadius: 8, border: `2px solid ${inspForm.appearance === v ? (v === 'OK' ? '#16a34a' : '#dc2626') : '#334155'}`, background: inspForm.appearance === v ? (v === 'OK' ? '#14532d' : '#450a0a') : 'transparent', color: inspForm.appearance === v ? (v === 'OK' ? '#4ade80' : '#f87171') : '#94a3b8', fontSize: 14, fontWeight: 800, cursor: 'pointer' }}>
+                    {v}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* 치수 */}
+            <div style={{ marginBottom: 12 }}>
+              <div style={{ fontSize: 11, color: '#94a3b8', marginBottom: 6 }}>치수 1 (규격 / 실측)</div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <input type="number" placeholder="규격" value={inspForm.dim1_spec} onChange={e => setInspForm(f => ({ ...f, dim1_spec: e.target.value }))}
+                  style={{ flex: 1, padding: '9px', borderRadius: 8, border: '1px solid #334155', background: '#0f172a', color: '#e2e8f0', fontSize: 13 }} />
+                <input type="number" placeholder="실측" value={inspForm.dim1_actual} onChange={e => setInspForm(f => ({ ...f, dim1_actual: e.target.value }))}
+                  style={{ flex: 1, padding: '9px', borderRadius: 8, border: '1px solid #334155', background: '#0f172a', color: '#e2e8f0', fontSize: 13 }} />
+              </div>
+            </div>
+
+            <div style={{ marginBottom: 12 }}>
+              <div style={{ fontSize: 11, color: '#94a3b8', marginBottom: 6 }}>비고</div>
+              <input value={inspForm.note} onChange={e => setInspForm(f => ({ ...f, note: e.target.value }))} placeholder="특이사항"
+                style={{ width: '100%', padding: '9px', borderRadius: 8, border: '1px solid #334155', background: '#0f172a', color: '#e2e8f0', fontSize: 13, boxSizing: 'border-box' }} />
+            </div>
+
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button onClick={async () => {
+                const result = inspForm.appearance === 'NG' ? 'NG' : 'OK'
+                try {
+                  await fetch(`/api/mes-floor/article-inspection`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('token')}` },
+                    body: JSON.stringify({
+                      session_id: session.session_id,
+                      wo_no: session.wo_no,
+                      machine_id: session.machine_id,
+                      worker_id: session.worker_id,
+                      insp_type: inspModal.type,
+                      result,
+                      appearance: inspForm.appearance,
+                      dim1_spec: inspForm.dim1_spec ? parseFloat(inspForm.dim1_spec) : null,
+                      dim1_actual: inspForm.dim1_actual ? parseFloat(inspForm.dim1_actual) : null,
+                      note: inspForm.note,
+                    })
+                  })
+                  flash(`${inspModal.type} 검사 ${result} 등록`)
+                  setInspModal(null)
+                  setInspForm({ result: 'OK', appearance: 'OK', dim1_spec: '', dim1_actual: '', dim2_spec: '', dim2_actual: '', note: '' })
+                } catch { flash('검사 등록 실패', true) }
+              }} disabled={loading}
+                style={{ flex: 2, padding: '12px', borderRadius: 10, border: 'none', background: '#0369a1', color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
+                등록
+              </button>
+              <button onClick={() => setInspModal(null)}
                 style={{ flex: 1, padding: '12px', borderRadius: 10, border: '1px solid #334155', background: 'transparent', color: '#94a3b8', fontSize: 13, cursor: 'pointer' }}>
                 닫기
               </button>

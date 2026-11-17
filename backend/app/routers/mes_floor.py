@@ -32,6 +32,7 @@ from app.models.auth import User
 from app.models.mes_floor import (
     Machine, MesWorkOrder, WorkerSession, ProdLog, DowntimeLog,
     WOStatus, SessionStatus, DowntimeReason, MachineStatus, AndonCall, MesPallet,
+    ArticleInspection, WorkerSessionCost,
 )
 from app.models.master import Item, BomLine
 from app.models.ledger import StockLedger, LedgerType
@@ -506,6 +507,28 @@ def add_prod_log(session_id: int, body: ProdInput, db: Session = Depends(get_db)
     db.add(entry)
     session.good_qty += body.good_qty
     session.defect_qty += body.defect_qty
+
+    # ⑤ 표준 CT 이상 경보
+    total_qty = session.good_qty + session.defect_qty
+    if total_qty > 0:
+        elapsed_sec = (datetime.now() - session.start_time).total_seconds()
+        actual_ct = elapsed_sec / total_qty
+        machine = db.get(Machine, session.machine_id)
+        std_ct = machine.std_cycle_sec if machine and machine.std_cycle_sec else 0
+        if std_ct > 0 and actual_ct > std_ct * 1.2:
+            existing = db.query(AndonCall).filter(
+                AndonCall.machine_id == session.machine_id,
+                AndonCall.caller_id == "SYSTEM_CT",
+                AndonCall.is_resolved == False,
+            ).first()
+            if not existing:
+                db.add(AndonCall(
+                    machine_id=session.machine_id,
+                    caller_id="SYSTEM_CT",
+                    andon_type="품질이상",
+                    note=f"CT 이상: 실제 {actual_ct:.1f}초 / 표준 {std_ct:.1f}초 ({((actual_ct/std_ct-1)*100):.0f}% 초과)",
+                ))
+
     db.commit()
     return _session_detail(db, session)
 
@@ -578,7 +601,7 @@ def complete_session(session_id: int, db: Session = Depends(get_db)):
             note=f"MES생산입고 {session.machine_id}",
         )
 
-    # ② 금형 샷수 자동 누적
+    # ② 금형 샷수 자동 누적 + ③ PM Andon 자동 생성
     if wo.mold_no:
         from app.models.mold import MoldOrder
         mold = db.get(MoldOrder, wo.mold_no)
@@ -586,7 +609,42 @@ def complete_session(session_id: int, db: Session = Depends(get_db)):
             mold.production_shot_count = (mold.production_shot_count or 0) + session.shot_count
             since_pm = mold.production_shot_count - (mold.last_pm_shot or 0)
             if since_pm >= (mold.pm_cycle_shot or 500000):
-                pass  # 알림 플래그 → Andon or 별도 로직으로 확장 가능
+                existing_pm = db.query(AndonCall).filter(
+                    AndonCall.machine_id == session.machine_id,
+                    AndonCall.caller_id == "SYSTEM_PM",
+                    AndonCall.is_resolved == False,
+                ).first()
+                if not existing_pm:
+                    db.add(AndonCall(
+                        machine_id=session.machine_id,
+                        caller_id="SYSTEM_PM",
+                        andon_type="설비고장",
+                        note=f"금형 PM 주기 도달: {wo.mold_no} (누적 {mold.production_shot_count:,}샷 / 주기 {mold.pm_cycle_shot:,}샷)",
+                    ))
+
+    # ④ 실원가 자동 계산
+    from app.models.ledger import StockLedger as _SL
+    consumed = db.query(_SL).filter(
+        _SL.ref_no == session.wo_no,
+        _SL.ref_type == "WO",
+        _SL.ledger_type == LedgerType.consumption,
+    ).all()
+    material_cost = sum(abs(float(c.qty)) * float(c.unit_price or 0) for c in consumed)
+    elapsed_min = (session.end_time - session.start_time).total_seconds() / 60 if session.end_time else 0
+    labor_cost = round(elapsed_min / 60 * 15000, 2)  # 시간당 15,000원 기준
+    total_cost = material_cost + labor_cost
+    unit_cost = round(total_cost / session.good_qty, 2) if session.good_qty > 0 else 0
+    db.add(WorkerSessionCost(
+        session_id=session.id,
+        wo_no=session.wo_no,
+        part_no=wo.part_no,
+        good_qty=session.good_qty,
+        material_cost=material_cost,
+        labor_cost=labor_cost,
+        total_cost=total_cost,
+        unit_cost=unit_cost,
+        calc_note=f"재료비:{material_cost:,.0f} 노무비:{labor_cost:,.0f} ({elapsed_min:.0f}분×15,000원/h)",
+    ))
 
     db.commit()
     return _session_detail(db, session)
@@ -1460,4 +1518,145 @@ def get_checklist(wo_no: str, db: Session = Depends(get_db)):
         "tool_ok": cl.tool_ok, "cleaning_ok": cl.cleaning_ok,
         "note": cl.note, "is_complete": cl.is_complete,
         "created_at": cl.created_at.isoformat(),
+    }
+
+
+# ═══════════════════════════════════════════════════════════════════
+# ① 초·중·종물 검사
+# ═══════════════════════════════════════════════════════════════════
+
+class ArticleInspIn(BaseModel):
+    session_id: int
+    wo_no: str
+    machine_id: str
+    worker_id: str
+    insp_type: str                       # 초물 / 중간 / 종물
+    result: str                          # OK / NG
+    dim1_spec: Optional[float] = None
+    dim1_actual: Optional[float] = None
+    dim2_spec: Optional[float] = None
+    dim2_actual: Optional[float] = None
+    dim3_spec: Optional[float] = None
+    dim3_actual: Optional[float] = None
+    appearance: Optional[str] = None
+    note: Optional[str] = None
+
+
+@router.post("/article-inspection")
+def create_article_inspection(body: ArticleInspIn, db: Session = Depends(get_db)):
+    insp = ArticleInspection(**body.model_dump())
+    db.add(insp)
+    # NG면 Andon 품질이상 자동 호출
+    if body.result == "NG":
+        db.add(AndonCall(
+            machine_id=body.machine_id,
+            caller_id=body.worker_id,
+            andon_type="품질이상",
+            note=f"{body.insp_type} 검사 NG — WO:{body.wo_no}",
+        ))
+    db.commit()
+    db.refresh(insp)
+    return {"id": insp.id, "result": insp.result}
+
+
+@router.get("/article-inspection")
+def list_article_inspections(
+    session_id: Optional[int] = None,
+    wo_no: Optional[str] = None,
+    limit: int = 50,
+    db: Session = Depends(get_db),
+):
+    q = db.query(ArticleInspection).order_by(ArticleInspection.created_at.desc())
+    if session_id:
+        q = q.filter(ArticleInspection.session_id == session_id)
+    if wo_no:
+        q = q.filter(ArticleInspection.wo_no == wo_no)
+    rows = q.limit(limit).all()
+    return [
+        {
+            "id": r.id, "session_id": r.session_id, "wo_no": r.wo_no,
+            "machine_id": r.machine_id, "worker_id": r.worker_id,
+            "insp_type": r.insp_type, "result": r.result,
+            "dim1_spec": r.dim1_spec, "dim1_actual": r.dim1_actual,
+            "dim2_spec": r.dim2_spec, "dim2_actual": r.dim2_actual,
+            "dim3_spec": r.dim3_spec, "dim3_actual": r.dim3_actual,
+            "appearance": r.appearance, "note": r.note,
+            "created_at": r.created_at.isoformat(),
+        }
+        for r in rows
+    ]
+
+
+# ═══════════════════════════════════════════════════════════════════
+# ② 계획 대비 실적 대시보드
+# ═══════════════════════════════════════════════════════════════════
+
+@router.get("/plan-vs-actual")
+def plan_vs_actual(
+    year: int,
+    month: int,
+    db: Session = Depends(get_db),
+):
+    """주별 계획 대비 실적 (WeeklyPlan vs WorkerSession)"""
+    from app.models.production import WeeklyPlan
+    from sqlalchemy import func as sqlfunc
+
+    plans = db.query(WeeklyPlan).filter(
+        WeeklyPlan.year == year,
+        WeeklyPlan.month == month,
+    ).all()
+
+    # 해당 월 세션 실적 집계 (part_no 기준)
+    month_start = date(year, month, 1)
+    if month == 12:
+        month_end = date(year + 1, 1, 1)
+    else:
+        month_end = date(year, month + 1, 1)
+
+    actual_rows = db.query(
+        MesWorkOrder.part_no,
+        sqlfunc.sum(WorkerSession.good_qty).label("actual_qty"),
+    ).join(WorkerSession, WorkerSession.wo_no == MesWorkOrder.wo_no).filter(
+        MesWorkOrder.plan_date >= month_start,
+        MesWorkOrder.plan_date < month_end,
+        WorkerSession.status == SessionStatus.completed,
+    ).group_by(MesWorkOrder.part_no).all()
+
+    actual_map: dict[str, int] = {r.part_no: int(r.actual_qty or 0) for r in actual_rows}
+
+    # 계획 집계 (part_no + week_no)
+    result: dict[str, dict] = {}
+    for p in plans:
+        key = p.part_no
+        if key not in result:
+            item = db.query(Item).get(key)
+            result[key] = {
+                "part_no": key,
+                "part_name": item.name if item else key,
+                "planned_qty": 0,
+                "actual_qty": actual_map.get(key, 0),
+                "weeks": {},
+            }
+        result[key]["planned_qty"] += p.planned_qty
+        result[key]["weeks"][p.week_no] = p.planned_qty
+
+    rows = list(result.values())
+    for r in rows:
+        r["achievement_pct"] = round(r["actual_qty"] / r["planned_qty"] * 100, 1) if r["planned_qty"] > 0 else 0
+
+    rows.sort(key=lambda x: x["part_no"])
+    return {"year": year, "month": month, "items": rows}
+
+
+@router.get("/session-cost")
+def get_session_cost(session_id: int, db: Session = Depends(get_db)):
+    cost = db.query(WorkerSessionCost).filter(WorkerSessionCost.session_id == session_id).first()
+    if not cost:
+        raise HTTPException(404, "원가 데이터 없음")
+    return {
+        "session_id": cost.session_id, "wo_no": cost.wo_no, "part_no": cost.part_no,
+        "good_qty": cost.good_qty, "material_cost": cost.material_cost,
+        "labor_cost": cost.labor_cost, "total_cost": cost.total_cost,
+        "unit_cost": cost.unit_cost, "calc_note": cost.calc_note,
+        "created_at": cost.created_at.isoformat(),
     }

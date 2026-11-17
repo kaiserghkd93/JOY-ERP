@@ -243,6 +243,99 @@ const STATUS_COLOR = {
   '대기':  { bg: '#f1f5f9', border: '#cbd5e1', text: '#64748b', dot: '#94a3b8' },
 }
 
+/* ── 계획 대비 실적 탭 ─────────────────────────────────────────── */
+function PlanVsActual() {
+  const now = new Date()
+  const [year, setYear] = useState(now.getFullYear())
+  const [month, setMonth] = useState(now.getMonth() + 1)
+  const [data, setData] = useState(null)
+  const [loading, setLoading] = useState(false)
+
+  const load = useCallback(() => {
+    setLoading(true)
+    api.get(`/mes-floor/plan-vs-actual?year=${year}&month=${month}`)
+      .then(r => setData(r.data)).catch(() => setData(null))
+      .finally(() => setLoading(false))
+  }, [year, month])
+
+  useEffect(() => { load() }, [load])
+
+  const achColor = (pct) => pct >= 100 ? '#16a34a' : pct >= 80 ? '#d97706' : '#dc2626'
+
+  return (
+    <div>
+      <div style={{ display:'flex', gap:10, marginBottom:16, alignItems:'center' }}>
+        <select value={year} onChange={e => setYear(+e.target.value)}
+          style={{ padding:'6px 10px', borderRadius:6, border:'1px solid #d1d5db', fontSize:13 }}>
+          {[now.getFullYear()-1, now.getFullYear(), now.getFullYear()+1].map(y => <option key={y} value={y}>{y}년</option>)}
+        </select>
+        <select value={month} onChange={e => setMonth(+e.target.value)}
+          style={{ padding:'6px 10px', borderRadius:6, border:'1px solid #d1d5db', fontSize:13 }}>
+          {Array.from({length:12},(_,i)=>i+1).map(m => <option key={m} value={m}>{m}월</option>)}
+        </select>
+        <button onClick={load} style={{ padding:'6px 14px', borderRadius:6, background:'#1d4ed8', color:'#fff', border:'none', fontSize:13, cursor:'pointer' }}>조회</button>
+      </div>
+
+      {loading && <div style={{ padding:40, textAlign:'center', color:'#94a3b8' }}>로딩 중...</div>}
+
+      {data && (
+        <div style={{ overflowX:'auto' }}>
+          <table style={{ width:'100%', borderCollapse:'collapse', fontSize:13 }}>
+            <thead>
+              <tr style={{ background:'#f8fafc' }}>
+                {['품번', '품명', '계획수량', '실적수량', '달성률', '달성 현황'].map(h => (
+                  <th key={h} style={{ padding:'8px 12px', textAlign:'left', borderBottom:'2px solid #e2e8f0', fontWeight:700, color:'#374151', whiteSpace:'nowrap' }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {data.items.length === 0 && (
+                <tr><td colSpan={6} style={{ padding:30, textAlign:'center', color:'#94a3b8' }}>계획 데이터 없음</td></tr>
+              )}
+              {data.items.map(row => {
+                const pct = row.achievement_pct
+                const barW = Math.min(pct, 100)
+                return (
+                  <tr key={row.part_no} style={{ borderBottom:'1px solid #f1f5f9' }}>
+                    <td style={{ padding:'8px 12px', fontFamily:'monospace', color:'#374151' }}>{row.part_no}</td>
+                    <td style={{ padding:'8px 12px', color:'#374151' }}>{row.part_name}</td>
+                    <td style={{ padding:'8px 12px', textAlign:'right', color:'#374151' }}>{row.planned_qty.toLocaleString()}</td>
+                    <td style={{ padding:'8px 12px', textAlign:'right', color:'#374151', fontWeight:700 }}>{row.actual_qty.toLocaleString()}</td>
+                    <td style={{ padding:'8px 12px', textAlign:'right', fontWeight:800, color: achColor(pct) }}>{pct.toFixed(1)}%</td>
+                    <td style={{ padding:'8px 12px', minWidth:120 }}>
+                      <div style={{ background:'#f1f5f9', borderRadius:4, height:10, overflow:'hidden' }}>
+                        <div style={{ width:`${barW}%`, height:'100%', background: achColor(pct), borderRadius:4 }} />
+                      </div>
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+            {data.items.length > 0 && (
+              <tfoot>
+                <tr style={{ background:'#f8fafc', fontWeight:800 }}>
+                  <td colSpan={2} style={{ padding:'8px 12px', color:'#374151' }}>합계</td>
+                  <td style={{ padding:'8px 12px', textAlign:'right', color:'#374151' }}>{data.items.reduce((s,r)=>s+r.planned_qty,0).toLocaleString()}</td>
+                  <td style={{ padding:'8px 12px', textAlign:'right', color:'#374151' }}>{data.items.reduce((s,r)=>s+r.actual_qty,0).toLocaleString()}</td>
+                  <td colSpan={2} style={{ padding:'8px 12px', color:'#374151' }}>
+                    {(() => {
+                      const p = data.items.reduce((s,r)=>s+r.planned_qty,0)
+                      const a = data.items.reduce((s,r)=>s+r.actual_qty,0)
+                      const pct = p > 0 ? (a/p*100).toFixed(1) : 0
+                      return <span style={{ color: achColor(+pct) }}>{pct}%</span>
+                    })()}
+                  </td>
+                </tr>
+              </tfoot>
+            )}
+          </table>
+        </div>
+      )}
+    </div>
+  )
+}
+
+
 /* ── 불량 파레토 탭 ───────────────────────────────────────────── */
 function DefectPareto() {
   const fmtDate = (d) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
@@ -541,7 +634,7 @@ export default function MesDashboard() {
 
       {/* 메인 탭 */}
       <div style={{ display:'flex', gap:0, marginBottom:16, borderBottom:'2px solid #e2e8f0' }}>
-        {[{ k:'andon', label:'🏭 안돈 보드' }, { k:'oee', label:'📊 OEE 분석' }, { k:'pareto', label:'📉 불량 파레토' }].map(t => (
+        {[{ k:'andon', label:'🏭 안돈 보드' }, { k:'oee', label:'📊 OEE 분석' }, { k:'pareto', label:'📉 불량 파레토' }, { k:'planact', label:'📋 계획 대비 실적' }].map(t => (
           <button key={t.k} onClick={() => setMainTab(t.k)} style={{
             padding:'8px 20px', fontSize:13, fontWeight:700, border:'none', cursor:'pointer',
             background:'transparent', color:mainTab===t.k?'#1d4ed8':'#64748b',
@@ -553,6 +646,7 @@ export default function MesDashboard() {
 
       {mainTab === 'oee' && <OeeAnalysis />}
       {mainTab === 'pareto' && <DefectPareto />}
+      {mainTab === 'planact' && <PlanVsActual />}
 
       {mainTab === 'andon' && <>
       {/* KPI 요약 */}
