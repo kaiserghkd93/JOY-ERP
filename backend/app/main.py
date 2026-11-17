@@ -219,6 +219,22 @@ with engine.connect() as _conn:
         "ALTER TABLE mold_order ADD COLUMN IF NOT EXISTS production_shot_count INTEGER DEFAULT 0",
         "ALTER TABLE mold_order ADD COLUMN IF NOT EXISTS pm_cycle_shot INTEGER DEFAULT 500000",
         "ALTER TABLE mold_order ADD COLUMN IF NOT EXISTS last_pm_shot INTEGER DEFAULT 0",
+        # 작업지시 상태 — native PostgreSQL enum → VARCHAR 변환 (한국어 값 저장 가능하도록)
+        "ALTER TABLE mes_work_order DROP CONSTRAINT IF EXISTS mes_work_order_status_check",
+        "ALTER TABLE mes_work_order ALTER COLUMN status TYPE VARCHAR(20) USING status::TEXT",
+        "UPDATE mes_work_order SET status = '대기'    WHERE status = 'pending'",
+        "UPDATE mes_work_order SET status = '자재확인' WHERE status = 'material_check'",
+        "UPDATE mes_work_order SET status = '발행'    WHERE status = 'issued'",
+        "UPDATE mes_work_order SET status = '진행'    WHERE status = 'running'",
+        "UPDATE mes_work_order SET status = '완료'    WHERE status = 'completed'",
+        "UPDATE mes_work_order SET status = '마감'    WHERE status = 'closed'",
+        "UPDATE mes_work_order SET status = '취소'    WHERE status = 'cancelled'",
+        # 작업세션 상태 — native PostgreSQL enum → VARCHAR 변환
+        "ALTER TABLE worker_session DROP CONSTRAINT IF EXISTS worker_session_status_check",
+        "ALTER TABLE worker_session ALTER COLUMN status TYPE VARCHAR(20) USING status::TEXT",
+        "UPDATE worker_session SET status = '진행'  WHERE status = 'running'",
+        "UPDATE worker_session SET status = '완료'  WHERE status = 'completed'",
+        "UPDATE worker_session SET status = '중단'  WHERE status = 'stopped'",
     ]:
         try:
             _conn.execute(_text(_sql))
