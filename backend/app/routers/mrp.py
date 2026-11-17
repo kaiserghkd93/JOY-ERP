@@ -19,7 +19,7 @@ router = APIRouter(prefix="/mrp", tags=["MRP"])
 
 MRP_ROLES = {"admin", "material", "manager", "executive", "manufacturing"}
 MAKE_TYPES = {"semi", "finished"}   # 생산오더 대상
-BUY_TYPES  = {"raw", "sub", "outsourced"}  # 구매발주 대상
+BUY_TYPES  = {"raw", "sub"}  # 구매발주 대상 (outsourced 외주품은 외주관리에서 별도 처리)
 
 
 def _require_mrp(user: User = Depends(get_current_user)) -> User:

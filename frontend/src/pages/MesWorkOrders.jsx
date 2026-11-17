@@ -29,7 +29,7 @@ export default function MesWorkOrders() {
   const [machines, setMachines] = useState([])
   const [items, setItems] = useState([])
   const [workers, setWorkers] = useState([])
-  const [filters, setFilters] = useState({ plan_date: today(), machine_id: '', status: '' })
+  const [filters, setFilters] = useState({ plan_date: '', machine_id: '', status: '' })
 
   // 단건 발행 모달
   const [showForm, setShowForm] = useState(false)
@@ -273,8 +273,12 @@ export default function MesWorkOrders() {
       <div style={{ display:'flex', gap:10, marginBottom:12, flexWrap:'wrap', alignItems:'flex-end' }}>
         <div className="form-group" style={{ margin:0 }}>
           <label style={{ fontSize:11 }}>계획일</label>
-          <input type="date" className="form-control" value={filters.plan_date}
-            onChange={e => setFilters(f=>({...f, plan_date:e.target.value}))} style={{ width:140 }} />
+          <div style={{ display:'flex', gap:4, alignItems:'center' }}>
+            <input type="date" className="form-control" value={filters.plan_date}
+              onChange={e => setFilters(f=>({...f, plan_date:e.target.value}))} style={{ width:140 }} />
+            <button className="btn btn-sm btn-outline" onClick={() => setFilters(f=>({...f, plan_date:today()}))} style={{ padding:'3px 8px', fontSize:11 }}>오늘</button>
+            {filters.plan_date && <button className="btn btn-sm btn-outline" onClick={() => setFilters(f=>({...f, plan_date:''}))} style={{ padding:'3px 8px', fontSize:11 }}>전체</button>}
+          </div>
         </div>
         <div className="form-group" style={{ margin:0 }}>
           <label style={{ fontSize:11 }}>호기</label>

@@ -718,12 +718,15 @@ function ProductionReportPanel() {
       api.get(`/tps/oee/summary?year=${y}&month=${m}`).then(r => setOee(r.data)).catch(() => setOee([])),
       api.get('/kaizen/summary').then(r => setKaizen(r.data)).catch(() => setKaizen(null)),
       api.get(`/tps/machine-analysis?year=${y}&month=${m}`).then(r => setMachineData(r.data)).catch(() => setMachineData(null)),
-      api.get(`/tps/loss-analysis?year=${y}&month=${m}`).then(r => setLossData(r.data)).catch(() => setLossData(null)),
+      // MES 비가동 우선, TPS fallback
+      api.get(`/production/mes-downtime?year=${y}&month=${m}`)
+        .then(r => setLossData(r.data))
+        .catch(() => api.get(`/tps/loss-analysis?year=${y}&month=${m}`).then(r => setLossData(r.data)).catch(() => setLossData(null))),
     ]).finally(() => setLoading(false))
   }, [ym])
 
-  const totalPlan = plans.reduce((s, p) => s + (p.planned_qty || 0), 0)
-  const totalActual = plans.reduce((s, p) => s + (p.total_actual || p.actuals?.reduce((a, d) => a + d.actual_qty, 0) || 0), 0)
+  const totalPlan   = plans.reduce((s, p) => s + (p.planned_qty   || 0), 0)
+  const totalActual = plans.reduce((s, p) => s + (p.total_actual  || 0), 0)
   const achieveRate = totalPlan > 0 ? Math.round(totalActual / totalPlan * 100) : 0
 
   const KPI = ({ label, value, color, sub }) => (
@@ -772,19 +775,28 @@ function ProductionReportPanel() {
       <div style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: 10, padding: 16, marginBottom: 20 }}>
         <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 12 }}>품번별 생산 실적 vs 계획</div>
         {plans.length === 0 ? (
-          <div style={{ textAlign: 'center', color: '#94a3b8', padding: 24 }}>월간 계획 없음</div>
+          <div style={{ textAlign: 'center', color: '#94a3b8', padding: 24 }}>월간 계획 없음 (MES 작업지시 등록 후 실적이 반영됩니다)</div>
         ) : (
           <div style={{ display: 'grid', gap: 10 }}>
             {plans.map(p => {
               const actual = p.total_actual || 0
-              const rate = p.planned_qty > 0 ? Math.round(actual / p.planned_qty * 100) : 0
+              const mesActual = p.mes_actual || 0
+              const rate = p.planned_qty > 0 ? Math.round(actual / p.planned_qty * 100) : (mesActual > 0 ? null : 0)
               return (
-                <div key={p.id}>
+                <div key={p.part_no || p.id}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 3 }}>
-                    <span style={{ fontWeight: 600 }}>{p.part_no} <span style={{ color: '#94a3b8', fontWeight: 400 }}>{p.item?.name}</span></span>
-                    <span style={{ color: '#374151' }}>{actual.toLocaleString()} / {p.planned_qty.toLocaleString()} EA</span>
+                    <span style={{ fontWeight: 600 }}>
+                      {p.part_no}
+                      <span style={{ color: '#94a3b8', fontWeight: 400 }}> {p.part_name}</span>
+                      {mesActual > 0 && p.actual_qty === 0 && (
+                        <span style={{ marginLeft: 6, fontSize: 10, color: '#1d4ed8', background: '#eff6ff', borderRadius: 4, padding: '1px 5px' }}>MES</span>
+                      )}
+                    </span>
+                    <span style={{ color: '#374151' }}>
+                      {actual.toLocaleString()} / {p.planned_qty ? p.planned_qty.toLocaleString() : '—'} EA
+                    </span>
                   </div>
-                  <BarKPI label="" value={rate} />
+                  {rate !== null && <BarKPI label="" value={rate} />}
                 </div>
               )
             })}

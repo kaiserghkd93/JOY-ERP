@@ -311,17 +311,100 @@ def list_monthly_plans(year: int, month: int, db: Session = Depends(get_db)):
     plans = db.query(MonthlyPlan).filter(
         MonthlyPlan.year == year, MonthlyPlan.month == month
     ).all()
+
+    # MES WorkerSession 실적 — part_no 별 집계
+    try:
+        from app.models.mes_floor import MesWorkOrder as MWO, WorkerSession as WS
+        from sqlalchemy import extract
+        mes_rows = db.query(
+            MWO.part_no,
+            func.coalesce(func.sum(WS.good_qty), 0).label("good"),
+            func.coalesce(func.sum(WS.defect_qty), 0).label("defect"),
+        ).join(WS, WS.wo_no == MWO.wo_no).filter(
+            extract("year",  MWO.plan_date) == year,
+            extract("month", MWO.plan_date) == month,
+        ).group_by(MWO.part_no).all()
+        mes_map = {r.part_no: {"good": int(r.good), "defect": int(r.defect)} for r in mes_rows}
+    except Exception:
+        mes_map = {}
+
     result = []
     for p in plans:
-        actual = sum(a.actual_qty for a in p.actuals)
-        rate = round(actual / p.planned_qty * 100, 1) if p.planned_qty else 0.0
+        daily_actual = sum(a.actual_qty for a in p.actuals)
+        m = mes_map.pop(p.part_no, {"good": 0, "defect": 0})
+        total_actual = daily_actual or m["good"]          # DailyActual 우선, 없으면 MES
+        rate = round(total_actual / p.planned_qty * 100, 1) if p.planned_qty else 0.0
         item = db.get(Item, p.part_no)
         result.append({
             "id": p.id, "year": p.year, "month": p.month,
             "part_no": p.part_no, "part_name": item.name if item else p.part_no,
-            "planned_qty": p.planned_qty, "actual_qty": actual, "achieve_rate": rate,
+            "planned_qty": p.planned_qty,
+            "total_actual": total_actual,     # Production.jsx KPI 사용
+            "actual_qty": daily_actual,       # DailyActual (수기 입력)
+            "mes_actual": m["good"],          # MES 실적
+            "mes_defect": m["defect"],
+            "achieve_rate": rate,
         })
+
+    # MonthlyPlan 없는 품번도 MES 데이터가 있으면 추가
+    for part_no, m in mes_map.items():
+        if m["good"] > 0:
+            item = db.get(Item, part_no)
+            result.append({
+                "id": None, "year": year, "month": month,
+                "part_no": part_no, "part_name": item.name if item else part_no,
+                "planned_qty": 0,
+                "total_actual": m["good"],
+                "actual_qty": 0,
+                "mes_actual": m["good"],
+                "mes_defect": m["defect"],
+                "achieve_rate": None,
+            })
     return result
+
+
+@router.get("/mes-downtime")
+def mes_downtime(year: int, month: int, db: Session = Depends(get_db)):
+    """MES DowntimeLog 기반 비가동 원인별 집계 — 월간"""
+    from app.models.mes_floor import DowntimeLog, WorkerSession
+    from sqlalchemy import extract, case
+    REASON_MAP = {
+        "설비고장": ("breakdown",   "설비고장"),
+        "금형교체": ("mold_change", "금형교체"),
+        "재료교체": ("material",    "재료교체"),
+        "품질이슈": ("defect",      "품질이슈"),
+        "휴식":    ("rest",        "휴식"),
+        "미팅":    ("meeting",     "미팅"),
+        "초기세팅": ("startup",     "초기세팅"),
+        "기타":    ("other",       "기타"),
+    }
+    rows = db.query(
+        DowntimeLog.reason,
+        func.count(DowntimeLog.id).label("cnt"),
+        func.sum(
+            func.extract("epoch",
+                func.coalesce(DowntimeLog.end_time, func.now()) - DowntimeLog.start_time
+            ) / 60
+        ).label("total_min"),
+    ).join(WorkerSession, WorkerSession.id == DowntimeLog.session_id).filter(
+        extract("year",  DowntimeLog.start_time) == year,
+        extract("month", DowntimeLog.start_time) == month,
+    ).group_by(DowntimeLog.reason).all()
+
+    total_min = sum(float(r.total_min or 0) for r in rows)
+    summary = []
+    for r in sorted(rows, key=lambda x: -(float(x.total_min or 0))):
+        reason_str = r.reason.value if hasattr(r.reason, "value") else str(r.reason)
+        code, label = REASON_MAP.get(reason_str, ("other", reason_str))
+        mins = round(float(r.total_min or 0))
+        summary.append({
+            "loss_code":  code,
+            "label":      label,
+            "count":      int(r.cnt),
+            "total_min":  mins,
+            "share_pct":  round(mins / total_min * 100, 1) if total_min > 0 else 0,
+        })
+    return {"summary": summary, "total_stop_min": round(float(total_min))}
 
 
 @router.post("/monthly-plans")
