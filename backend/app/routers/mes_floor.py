@@ -307,20 +307,30 @@ STATUS_FLOW = {
 @router.patch("/work-orders/{wo_no}/status")
 def update_wo_status(wo_no: str, body: WOStatusUpdate, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     """작업지시 상태 변경 (대기→자재확인→발행→진행→완료→마감)"""
-    wo = db.get(MesWorkOrder, wo_no)
-    if not wo:
-        raise HTTPException(404, f"작업지시 없음: {wo_no}")
-    current = wo.status.value if hasattr(wo.status, 'value') else str(wo.status)
-    next_allowed = STATUS_FLOW.get(current)
-    if next_allowed != body.status:
-        raise HTTPException(400, f"현재 상태 '{current}'에서 '{body.status}'로 변경 불가 (다음: {next_allowed})")
     try:
-        wo.status = WOStatus(body.status)
-    except ValueError:
-        raise HTTPException(400, f"유효하지 않은 상태값: {body.status}")
-    db.commit()
-    db.refresh(wo)
-    return _wo_with_qr(wo)
+        wo = db.get(MesWorkOrder, wo_no)
+        if not wo:
+            raise HTTPException(404, f"작업지시 없음: {wo_no}")
+        current = wo.status.value if hasattr(wo.status, 'value') else str(wo.status)
+        next_allowed = STATUS_FLOW.get(current)
+        if next_allowed != body.status:
+            raise HTTPException(400, f"현재 상태 '{current}'에서 '{body.status}'로 변경 불가 (다음: {next_allowed})")
+        try:
+            wo.status = WOStatus(body.status)
+        except ValueError:
+            raise HTTPException(400, f"유효하지 않은 상태값: {body.status}")
+        try:
+            db.commit()
+        except Exception as commit_err:
+            db.rollback()
+            raise HTTPException(500, f"DB 커밋 오류: {type(commit_err).__name__}: {commit_err}")
+        db.refresh(wo)
+        return _wo_with_qr(wo)
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(500, f"상태변경 처리 오류: {type(e).__name__}: {e}")
 
 
 @router.patch("/work-orders/{wo_no}/actual")
