@@ -932,6 +932,212 @@ function DirectReceiptModal({ onClose, onSaved }) {
 const STATUS_BADGE = { '대기': 'badge-amber', '확정': 'badge-green', '취소': 'badge-red' }
 const STATUS_LABEL = { '대기': '검사대기', '확정': '입고확정', '취소': '취소' }
 
+/* ── QR 스캔 → 입고확정 모달 ──────────────────────────────────── */
+function QrScanConfirmModal({ onClose, onConfirmed }) {
+  const videoRef = useRef(null)
+  const canvasRef = useRef(null)
+  const rafRef = useRef(null)
+  const streamRef = useRef(null)
+  const [phase, setPhase] = useState('scan')  // scan | info | done | error
+  const [camError, setCamError] = useState('')
+  const [receipt, setReceipt] = useState(null)
+  const [confirming, setConfirming] = useState(false)
+
+  const extractGrNo = (text) => {
+    // URL 형태: .../api/portal/receipt/GR-YYYYMMDD-NNN/view
+    const urlMatch = text.match(/\/receipt\/(GR-[\w-]+)\/view/)
+    if (urlMatch) return urlMatch[1]
+    // 직접 GR 번호 형태
+    const directMatch = text.match(/^(GR-\d{8}-\d+)$/)
+    if (directMatch) return directMatch[1]
+    return null
+  }
+
+  const stopCamera = () => {
+    if (rafRef.current) cancelAnimationFrame(rafRef.current)
+    if (streamRef.current) streamRef.current.getTracks().forEach(t => t.stop())
+  }
+
+  const startScan = async () => {
+    try {
+      // jsQR 동적 로드
+      if (!window.jsQR) {
+        await new Promise((res, rej) => {
+          const s = document.createElement('script')
+          s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jsqr/1.4.0/jsQR.min.js'
+          s.onload = res; s.onerror = rej
+          document.head.appendChild(s)
+        })
+      }
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 } }
+      })
+      streamRef.current = stream
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream
+        await videoRef.current.play()
+        scanFrame()
+      }
+    } catch (e) {
+      setCamError('카메라를 열 수 없습니다. 브라우저 카메라 권한을 허용해 주세요.\n(' + e.message + ')')
+      setPhase('error')
+    }
+  }
+
+  const scanFrame = () => {
+    const video = videoRef.current
+    const canvas = canvasRef.current
+    if (!video || !canvas || !window.jsQR) return
+    if (video.readyState === video.HAVE_ENOUGH_DATA) {
+      canvas.width = video.videoWidth
+      canvas.height = video.videoHeight
+      const ctx = canvas.getContext('2d')
+      ctx.drawImage(video, 0, 0)
+      const img = ctx.getImageData(0, 0, canvas.width, canvas.height)
+      const code = window.jsQR(img.data, img.width, img.height, { inversionAttempts: 'dontInvert' })
+      if (code?.data) {
+        const grNo = extractGrNo(code.data)
+        if (grNo) {
+          stopCamera()
+          loadReceipt(grNo)
+          return
+        }
+      }
+    }
+    rafRef.current = requestAnimationFrame(scanFrame)
+  }
+
+  const loadReceipt = async (grNo) => {
+    setPhase('loading')
+    try {
+      const r = await api.get(`/portal/receipt/${grNo}`)
+      setReceipt(r.data)
+      setPhase('info')
+    } catch (e) {
+      setCamError(`입고 기록 없음: ${grNo}`)
+      setPhase('error')
+    }
+  }
+
+  const doConfirm = async () => {
+    setConfirming(true)
+    try {
+      await api.post(`/purchase/receipts/${receipt.gr_no}/confirm`)
+      setPhase('done')
+      onConfirmed()
+    } catch (e) {
+      alert('확정 실패: ' + (e.response?.data?.detail || e.message))
+    } finally {
+      setConfirming(false)
+    }
+  }
+
+  useEffect(() => {
+    startScan()
+    return () => stopCamera()
+  }, [])  // eslint-disable-line
+
+  const close = () => { stopCamera(); onClose() }
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+      <div style={{ background: '#fff', borderRadius: 14, width: '100%', maxWidth: 420, overflow: 'hidden', boxShadow: '0 20px 60px rgba(0,0,0,.35)' }}>
+        {/* 헤더 */}
+        <div style={{ background: '#1d4ed8', color: '#fff', padding: '14px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span style={{ fontWeight: 800, fontSize: 15 }}>
+            {phase === 'scan' ? '📷 QR 스캔 — 입고확정' : phase === 'info' ? '📋 명세서 확인' : phase === 'done' ? '✅ 입고확정 완료' : '⚠ 오류'}
+          </span>
+          <button onClick={close} style={{ background: 'none', border: 'none', color: '#fff', fontSize: 20, cursor: 'pointer' }}>✕</button>
+        </div>
+
+        {/* 스캔 화면 */}
+        {phase === 'scan' && (
+          <div style={{ position: 'relative', background: '#000', aspectRatio: '4/3', overflow: 'hidden' }}>
+            <video ref={videoRef} autoPlay muted playsInline style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            <canvas ref={canvasRef} style={{ display: 'none' }} />
+            {/* 스캔 가이드 */}
+            <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
+              <div style={{ width: 200, height: 200, border: '3px solid rgba(255,255,255,0.8)', borderRadius: 12, boxShadow: '0 0 0 9999px rgba(0,0,0,0.4)' }} />
+            </div>
+            <div style={{ position: 'absolute', bottom: 12, left: 0, right: 0, textAlign: 'center', color: '#fff', fontSize: 12, textShadow: '0 1px 3px #000' }}>
+              QR 코드를 네모 안에 맞춰 주세요
+            </div>
+          </div>
+        )}
+
+        {phase === 'loading' && (
+          <div style={{ padding: 40, textAlign: 'center', color: '#64748b', fontSize: 13 }}>GR 정보 불러오는 중...</div>
+        )}
+
+        {/* 명세서 정보 + 확정 */}
+        {phase === 'info' && receipt && (
+          <div style={{ padding: 16 }}>
+            <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 8, padding: '10px 14px', marginBottom: 12 }}>
+              <div style={{ fontSize: 11, color: '#3b82f6', fontWeight: 700 }}>입고번호</div>
+              <div style={{ fontSize: 18, fontWeight: 800, fontFamily: 'monospace', color: '#1d4ed8' }}>{receipt.gr_no}</div>
+              {receipt.lot_no && <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>LOT: {receipt.lot_no}</div>}
+            </div>
+            {[
+              ['협력사', receipt.partner],
+              ['품번', receipt.part_no],
+              ['품명', receipt.part_name],
+              ['납품수량', `${(receipt.qty||0).toLocaleString()} ${receipt.item_unit || 'EA'}`],
+              ['납품일', receipt.receipt_date],
+              ['금액', `₩${(receipt.amount||0).toLocaleString()}`],
+            ].map(([label, val]) => (
+              <div key={label} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid #f1f5f9', fontSize: 13 }}>
+                <span style={{ color: '#64748b' }}>{label}</span>
+                <span style={{ fontWeight: 600 }}>{val}</span>
+              </div>
+            ))}
+            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', fontSize: 13 }}>
+              <span style={{ color: '#64748b' }}>현재 상태</span>
+              <span style={{ padding: '2px 10px', borderRadius: 20, fontSize: 11, fontWeight: 700,
+                background: receipt.status === '입고확정' ? '#dcfce7' : '#fef3c7',
+                color: receipt.status === '입고확정' ? '#15803d' : '#92400e' }}>
+                {receipt.status}
+              </span>
+            </div>
+            {receipt.status === '입고확정' ? (
+              <div style={{ marginTop: 12, padding: 12, background: '#f0fdf4', borderRadius: 8, textAlign: 'center', fontSize: 13, color: '#15803d', fontWeight: 600 }}>
+                이미 입고확정된 건입니다
+              </div>
+            ) : (
+              <button disabled={confirming} onClick={doConfirm}
+                style={{ width: '100%', marginTop: 14, background: '#16a34a', color: '#fff', border: 'none', borderRadius: 8, padding: '12px', fontWeight: 800, fontSize: 15, cursor: 'pointer', opacity: confirming ? 0.7 : 1 }}>
+                {confirming ? '처리 중...' : '✅ 입고 확정'}
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* 완료 */}
+        {phase === 'done' && (
+          <div style={{ padding: 32, textAlign: 'center' }}>
+            <div style={{ fontSize: 48, marginBottom: 12 }}>✅</div>
+            <div style={{ fontSize: 16, fontWeight: 800, color: '#15803d', marginBottom: 6 }}>입고 확정 완료</div>
+            <div style={{ fontSize: 13, color: '#64748b', marginBottom: 20 }}>{receipt?.gr_no} 재고에 반영되었습니다</div>
+            <button onClick={close} style={{ background: '#1d4ed8', color: '#fff', border: 'none', borderRadius: 8, padding: '10px 32px', fontWeight: 700, cursor: 'pointer' }}>닫기</button>
+          </div>
+        )}
+
+        {/* 에러 */}
+        {phase === 'error' && (
+          <div style={{ padding: 24 }}>
+            <div style={{ background: '#fee2e2', borderRadius: 8, padding: 14, marginBottom: 16, fontSize: 13, color: '#dc2626', whiteSpace: 'pre-line' }}>{camError}</div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={() => { setCamError(''); setPhase('scan'); startScan() }}
+                style={{ flex: 1, background: '#1d4ed8', color: '#fff', border: 'none', borderRadius: 8, padding: '10px', fontWeight: 700, cursor: 'pointer' }}>다시 시도</button>
+              <button onClick={close}
+                style={{ flex: 1, background: '#f1f5f9', color: '#475569', border: '1px solid #e2e8f0', borderRadius: 8, padding: '10px', fontWeight: 600, cursor: 'pointer' }}>닫기</button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 export default function Receipt() {
   const [receipts, setReceipts] = useState([])
   const [inspections, setInspections] = useState([])
@@ -945,6 +1151,7 @@ export default function Receipt() {
   const [showModal, setShowModal] = useState(false)
   const [showDirectModal, setShowDirectModal] = useState(false)
   const [showOutsourceModal, setShowOutsourceModal] = useState(false)
+  const [showQrScan, setShowQrScan] = useState(false)
   const [inspectGr, setInspectGr] = useState(null)
 
   const load = useCallback(() => {
@@ -1029,6 +1236,7 @@ export default function Receipt() {
           </div>
           <div className="spacer"/>
           {tab==='receipts' && <>
+            <button className="btn btn-sm btn-outline" style={{borderColor:'#7c3aed',color:'#7c3aed',fontWeight:700}} onClick={()=>setShowQrScan(true)}>📷 QR 스캔 입고</button>
             <button className="btn btn-sm btn-outline" style={{borderColor:'#16a34a',color:'#16a34a'}} onClick={()=>setShowOutsourceModal(true)}>외주 입고</button>
             <button className="btn btn-sm btn-outline" style={{borderColor:'#0f766e',color:'#0f766e'}} onClick={()=>setShowDirectModal(true)}>직접 입고</button>
             <button className="btn btn-sm btn-primary" onClick={()=>setShowModal(true)}>＋ 입고 등록</button>
@@ -1169,6 +1377,7 @@ export default function Receipt() {
       )}
       {showOutsourceModal && <OutsourceReceiptModal onClose={() => setShowOutsourceModal(false)} onSaved={() => { setShowOutsourceModal(false); load() }} />}
       {inspectGr && <InspectModal gr={inspectGr} itemMap={itemMap} partnerMap={partnerMap} onClose={() => setInspectGr(null)} onSaved={() => { setInspectGr(null); load() }} />}
+      {showQrScan && <QrScanConfirmModal onClose={() => setShowQrScan(false)} onConfirmed={() => { setShowQrScan(false); load() }} />}
     </div>
   )
 }
