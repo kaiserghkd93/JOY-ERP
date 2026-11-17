@@ -37,6 +37,7 @@ const ProductionGantt = lazy(() => import('./pages/ProductionGantt'))
 const Exceptions     = lazy(() => import('./pages/Exceptions'))
 const LotTrace        = lazy(() => import('./pages/LotTrace'))
 const SupplierPortal  = lazy(() => import('./pages/SupplierPortal'))
+const AdminPortal     = lazy(() => import('./pages/AdminPortal'))
 
 // GNB: 대분류 / LNB: 소분류
 const allMenus = [
@@ -93,6 +94,9 @@ const allMenus = [
   ]},
   { id: 'traceability', label: '추적', items: [
     { to: '/lot-trace', label: 'LOT / 배치 추적' },
+  ]},
+  { id: 'outsource-admin', label: '외주포탈', items: [
+    { to: '/admin-portal', label: '관리자 포탈' },
   ]},
   { id: 'master', label: '기준정보', items: [
     { to: '/master',     label: '품목·거래처' },
@@ -345,6 +349,9 @@ export default function App() {
             <Route path="/worker" element={<WorkerScreen />} />
             <Route path="/mes-floor-tv" element={<MesFloorTV />} />
             <Route path="/portal" element={<SupplierPortal />} />
+            <Route path="/admin-portal" element={
+              <ProtectedRoute path="/admin-portal"><AdminPortal /></ProtectedRoute>
+            } />
           </Routes>
         </Suspense>
       </div>

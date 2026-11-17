@@ -11,7 +11,7 @@ from app.models.master import Partner, Item
 from app.models.ledger import LedgerType
 from app.models.quality import NonConformance, NcrAppeal, AppealStatus
 from app.models.production import Mold
-from app.routers.auth import get_current_user
+from app.routers.auth import get_current_user, require_admin
 from app.services.doc_no import next_doc_no
 from app.services.ledger_service import post_ledger
 
@@ -660,3 +660,228 @@ def return_mold(mold_no: str, user: User = Depends(get_current_user), db: Sessio
     mold.lent_date = None
     db.commit()
     return {"ok": True}
+
+
+# ══════════════════════════════════════════════════════════════════
+# 관리자 전용 — 모든 협력사 통합 관리
+# ══════════════════════════════════════════════════════════════════
+
+@router.get("/admin/partners")
+def admin_partners(user: User = Depends(require_admin), db: Session = Depends(get_db)):
+    """모든 외주 협력사 현황 요약 (관리자 전용)"""
+    from sqlalchemy import func
+    partners = db.query(Partner).filter(Partner.partner_id.isnot(None)).all()
+    item_map = {i.part_no: i for i in db.query(Item).all()}
+
+    result = []
+    for p in partners:
+        # 미납 발주
+        open_pos = db.query(PurchaseOrder).filter(
+            PurchaseOrder.partner_id == p.partner_id,
+            PurchaseOrder.status.in_([POStatus.open, POStatus.partial]),
+            PurchaseOrder.po_type == "outsource",
+        ).all()
+        pending_po_count = len(open_pos)
+        pending_po_qty = sum(
+            po.qty - sum(r.qty for r in po.receipts if r.status == ReceiptStatus.confirmed)
+            for po in open_pos
+        )
+
+        # 최근 30일 납품
+        from datetime import date as date_cls, timedelta
+        cutoff = date_cls.today() - timedelta(days=30)
+        recent_receipts = db.query(Receipt).filter(
+            Receipt.partner_id == p.partner_id,
+            Receipt.receipt_date >= cutoff,
+        ).all()
+        pending_receipts = [r for r in recent_receipts if str(r.status).endswith("pending")]
+        confirmed_receipts = [r for r in recent_receipts if str(r.status).endswith("confirmed")]
+
+        result.append({
+            "partner_id": p.partner_id,
+            "partner_name": p.name,
+            "pending_po_count": pending_po_count,
+            "pending_po_qty": pending_po_qty,
+            "recent_receipt_count": len(recent_receipts),
+            "pending_receipt_count": len(pending_receipts),
+            "confirmed_receipt_count": len(confirmed_receipts),
+        })
+
+    result.sort(key=lambda x: (-x["pending_po_count"], x["partner_name"]))
+    return result
+
+
+@router.get("/admin/orders")
+def admin_all_orders(
+    partner_id: str | None = None,
+    status: str | None = None,
+    user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """모든 협력사 발주 목록 (관리자 전용)"""
+    from datetime import date as date_cls
+    cutoff = date_cls(2026, 10, 1)
+    q = db.query(PurchaseOrder).filter(
+        PurchaseOrder.po_type == "outsource",
+        PurchaseOrder.due_date >= cutoff,
+    )
+    if partner_id:
+        q = q.filter(PurchaseOrder.partner_id == partner_id)
+    if status:
+        q = q.filter(PurchaseOrder.status == status)
+    orders = q.order_by(PurchaseOrder.due_date).limit(500).all()
+
+    partner_map = {p.partner_id: p.name for p in db.query(Partner).all()}
+    item_map = {i.part_no: i for i in db.query(Item).all()}
+
+    result = []
+    for po in orders:
+        item = item_map.get(po.part_no)
+        confirmed_qty = sum(r.qty for r in po.receipts if str(r.status).endswith("confirmed"))
+        remaining = po.qty - confirmed_qty
+        result.append({
+            "po_no": po.po_no,
+            "partner_id": po.partner_id,
+            "partner_name": partner_map.get(po.partner_id, po.partner_id or "—"),
+            "part_no": po.part_no,
+            "item_name": item.name if item else po.part_no,
+            "item_unit": item.unit if item else "EA",
+            "qty": po.qty,
+            "confirmed_qty": confirmed_qty,
+            "remaining_qty": remaining,
+            "unit_price": float(po.unit_price or 0),
+            "order_date": str(po.order_date),
+            "due_date": str(po.due_date),
+            "status": str(po.status),
+            "note": po.note,
+        })
+    return result
+
+
+@router.get("/admin/receipts")
+def admin_all_receipts(
+    partner_id: str | None = None,
+    status: str | None = None,
+    limit: int = 200,
+    user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """모든 협력사 납품 이력 (관리자 전용)"""
+    q = db.query(Receipt).filter(Receipt.partner_id.isnot(None))
+    if partner_id:
+        q = q.filter(Receipt.partner_id == partner_id)
+    if status:
+        q = q.filter(Receipt.status == status)
+    receipts = q.order_by(Receipt.receipt_date.desc(), Receipt.gr_no.desc()).limit(limit).all()
+
+    partner_map = {p.partner_id: p.name for p in db.query(Partner).all()}
+    item_map = {i.part_no: i for i in db.query(Item).all()}
+
+    result = []
+    for r in receipts:
+        item = item_map.get(r.part_no)
+        result.append({
+            "gr_no": r.gr_no,
+            "lot_no": r.lot_no,
+            "po_no": r.po_no,
+            "partner_id": r.partner_id,
+            "partner_name": partner_map.get(r.partner_id, r.partner_id or "—"),
+            "part_no": r.part_no,
+            "item_name": item.name if item else r.part_no,
+            "item_unit": item.unit if item else "EA",
+            "qty": r.qty,
+            "unit_price": float(r.unit_price or 0),
+            "amount": r.qty * float(r.unit_price or 0),
+            "receipt_date": str(r.receipt_date),
+            "status": str(r.status).replace("ReceiptStatus.", ""),
+            "note": r.note,
+        })
+    return result
+
+
+class AdminDeliveryReq(BaseModel):
+    partner_id: str
+    delivery_date: date_type
+    lines: list[DeliveryLineReq]
+    note: str | None = None
+
+
+@router.post("/admin/deliver")
+def admin_deliver(body: AdminDeliveryReq, user: User = Depends(require_admin), db: Session = Depends(get_db)):
+    """관리자가 협력사 대신 납품명세서 발행 (관리자 전용)"""
+    partner = db.get(Partner, body.partner_id)
+    if not partner:
+        raise HTTPException(404, f"협력사 없음: {body.partner_id}")
+    if not body.lines:
+        raise HTTPException(400, "납품 품목을 입력해주세요")
+
+    created = []
+    for line in body.lines:
+        if line.qty <= 0:
+            raise HTTPException(400, "납품 수량은 0보다 커야 합니다")
+
+        if line.po_no:
+            po = db.get(PurchaseOrder, line.po_no)
+            if not po:
+                raise HTTPException(404, f"발주번호 {line.po_no}를 찾을 수 없습니다")
+            if po.partner_id != body.partner_id:
+                raise HTTPException(403, f"{line.po_no}는 해당 협력사의 발주가 아닙니다")
+            actual_part_no = po.part_no
+            unit_price = line.unit_price if line.unit_price else float(po.unit_price or 0)
+        else:
+            if not line.item_name:
+                raise HTTPException(400, "발주 없는 품목은 품목명을 입력해주세요")
+            actual_part_no = line.part_no or "MANUAL"
+            unit_price = line.unit_price or 0
+            po = None
+
+        gr_no = next_doc_no(db, "GR", "receipt", "gr_no")
+        lot_no = gr_no.replace("GR-", "LOT-")
+        note_text = f"[관리자등록] {user.username} {body.note or ''}".strip()
+        receipt = Receipt(
+            gr_no=gr_no,
+            po_no=line.po_no,
+            part_no=actual_part_no,
+            qty=line.qty,
+            delivered_qty=line.qty,
+            receipt_date=body.delivery_date,
+            unit_price=unit_price,
+            lot_no=lot_no,
+            status=ReceiptStatus.pending,
+            partner_id=body.partner_id,
+            note=note_text,
+        )
+        db.add(receipt)
+        db.flush()
+
+        from app.models.quality import Inspection, InspectionResult, DisposalType, ApprovalStatus
+        existing_insp = db.query(Inspection).filter(Inspection.gr_no == gr_no).first()
+        if not existing_insp:
+            auto_insp = Inspection(
+                gr_no=gr_no,
+                inspect_date=body.delivery_date,
+                inspect_qty=line.qty,
+                pass_qty=0, fail_qty=0,
+                result=InspectionResult.pending_insp,
+                disposal=DisposalType.pending,
+                defect_note="관리자 등록 — 수입검사 결과 입력 필요",
+                approval_status=ApprovalStatus.draft,
+            )
+            db.add(auto_insp)
+
+        item_obj = db.get(Item, actual_part_no)
+        created.append({
+            "gr_no": gr_no,
+            "lot_no": lot_no,
+            "po_no": line.po_no,
+            "part_no": actual_part_no,
+            "item_name": item_obj.name if item_obj else (line.item_name or actual_part_no),
+            "item_unit": item_obj.unit if item_obj else "EA",
+            "qty": line.qty,
+            "unit_price": unit_price,
+            "amount": line.qty * unit_price,
+            "receipt_date": str(body.delivery_date),
+        })
+
+    db.commit()
+    return {"ok": True, "receipts": created}
