@@ -75,7 +75,8 @@ export default function WorkerScreen() {
     const today = new Date().toISOString().slice(0, 10)
     api.get(`/mes-floor/work-orders?plan_date=${today}`).then(r => {
       setMyWos(r.data.filter(w =>
-        w.assigned_worker_id === workerId && w.status !== '취소' && w.status !== '완료'
+        w.status !== '취소' && w.status !== '완료' &&
+        (w.assigned_worker_id === workerId || !w.assigned_worker_id)
       ))
     }).catch(() => {})
   }, [workerId])
@@ -490,13 +491,17 @@ export default function WorkerScreen() {
                   <div style={{ fontSize: 11, color: '#334155', marginTop: 6 }}>관리자에게 문의하세요</div>
                 </div>
               ) : myWos.map(w => (
-                <div key={w.wo_no} style={{ background: '#0f172a', borderRadius: 10, padding: 16, marginBottom: 10 }}>
+                <div key={w.wo_no} style={{ background: '#0f172a', borderRadius: 10, padding: 16, marginBottom: 10, borderLeft: `3px solid ${w.assigned_worker_id === workerId ? '#1d4ed8' : '#334155'}` }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
                     <div>
                       <div style={{ fontWeight: 700, fontSize: 15 }}>{w.part_name}</div>
                       <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>{w.part_no} · {w.machine_name}</div>
                     </div>
-                    <span style={{ padding: '2px 10px', borderRadius: 20, fontSize: 11, fontWeight: 700, background: '#dbeafe', color: '#1d4ed8' }}>{w.status}</span>
+                    <div style={{ display: 'flex', gap: 6, flexDirection: 'column', alignItems: 'flex-end' }}>
+                      <span style={{ padding: '2px 10px', borderRadius: 20, fontSize: 11, fontWeight: 700, background: '#dbeafe', color: '#1d4ed8' }}>{w.status}</span>
+                      {w.assigned_worker_id === workerId && <span style={{ fontSize: 10, color: '#4ade80' }}>✓ 담당자 지정</span>}
+                      {!w.assigned_worker_id && <span style={{ fontSize: 10, color: '#94a3b8' }}>담당자 미지정</span>}
+                    </div>
                   </div>
                   <div style={{ display: 'flex', gap: 16, marginBottom: 12, fontSize: 13 }}>
                     <span style={{ color: '#94a3b8' }}>목표: <strong style={{ color: '#f8fafc' }}>{fmt(w.target_qty)}</strong></span>
