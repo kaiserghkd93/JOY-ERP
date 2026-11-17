@@ -7,12 +7,22 @@ const today = () => {
 }
 
 const STATUS_BADGE = {
-  '대기':   { bg: '#f1f5f9', color: '#475569' },
-  '진행':   { bg: '#dbeafe', color: '#1d4ed8' },
-  '완료':   { bg: '#dcfce7', color: '#15803d' },
-  '취소':   { bg: '#fee2e2', color: '#dc2626' },
+  '대기':     { bg: '#f1f5f9', color: '#475569' },
+  '자재확인': { bg: '#fef9c3', color: '#a16207' },
+  '발행':     { bg: '#ede9fe', color: '#6d28d9' },
+  '진행':     { bg: '#dbeafe', color: '#1d4ed8' },
+  '완료':     { bg: '#dcfce7', color: '#15803d' },
+  '마감':     { bg: '#f3f4f6', color: '#374151' },
+  '취소':     { bg: '#fee2e2', color: '#dc2626' },
 }
-const STATUS_NEXT = { '대기': '진행', '진행': '완료' }
+const STATUS_FLOW = {
+  '대기': '자재확인', '자재확인': '발행', '발행': '진행', '진행': '완료', '완료': '마감',
+}
+const STATUS_NEXT = STATUS_FLOW  // backward compat alias
+
+const STATUS_LABEL = {
+  '대기': '계획', '자재확인': '자재확인', '발행': '발행', '진행': '진행', '완료': '완료', '마감': '마감', '취소': '취소',
+}
 
 export default function MesWorkOrders() {
   const [wos, setWos] = useState([])
@@ -79,13 +89,83 @@ export default function MesWorkOrders() {
 
   // ── 상태 토글 ──
   const toggleStatus = async (wo) => {
-    const next = STATUS_NEXT[wo.status]
+    const next = STATUS_FLOW[wo.status]
     if (!next) return
     if (!window.confirm(`${wo.wo_no} 상태를 "${wo.status}" → "${next}"으로 변경하시겠습니까?`)) return
     try {
       await api.patch(`/mes-floor/work-orders/${wo.wo_no}/status`, { status: next })
       load()
     } catch (e) { alert('변경 실패: ' + (e.response?.data?.detail || e.message)) }
+  }
+
+  // ── 작업표 프린트 ──
+  const printWO = (wo) => {
+    const w = window.open('', '_blank', 'width=800,height=900')
+    w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8">
+<title>작업표 ${wo.wo_no}</title>
+<style>
+  body{font-family:Arial,sans-serif;margin:0;padding:24px;color:#111;font-size:13px}
+  h1{font-size:20px;margin:0 0 4px;font-weight:800;letter-spacing:1px}
+  .subtitle{color:#64748b;font-size:12px;margin:0 0 20px}
+  table{width:100%;border-collapse:collapse;margin-bottom:16px}
+  th,td{border:1px solid #94a3b8;padding:7px 10px;font-size:12px}
+  th{background:#f1f5f9;font-weight:700;text-align:left;width:30%}
+  .header-row{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px}
+  .qr-box{width:90px;height:90px;border:2px solid #e2e8f0;display:flex;align-items:center;justify-content:center;font-size:9px;text-align:center;padding:4px;line-height:1.3;color:#475569;word-break:break-all}
+  .section-title{font-size:13px;font-weight:700;margin:16px 0 6px;padding-left:4px;border-left:3px solid #3b82f6}
+  .status-pill{display:inline-block;padding:3px 12px;border-radius:20px;font-size:12px;font-weight:700;background:#dbeafe;color:#1d4ed8}
+  .footer{margin-top:32px;border-top:1px solid #e2e8f0;padding-top:12px;display:flex;gap:40px;font-size:12px}
+  .sign-box{text-align:center;min-width:80px}
+  .sign-line{border-bottom:1px solid #111;margin-bottom:4px;height:36px}
+  @media print{body{margin:0;padding:12px}}
+</style>
+</head><body>
+<div class="header-row">
+  <div>
+    <h1>작업지시서</h1>
+    <div class="subtitle">Work Order</div>
+  </div>
+  <div class="qr-box">QR<br/>${wo.wo_no}<br/>${wo.part_no}</div>
+</div>
+
+<table>
+  <tr><th>WO 번호</th><td><strong>${wo.wo_no}</strong></td><th>계획일</th><td>${wo.plan_date}</td></tr>
+  <tr><th>품번</th><td>${wo.part_no}</td><th>품명</th><td>${wo.part_name || ''}</td></tr>
+  <tr><th>호기</th><td>${wo.machine_name || wo.machine_id}</td><th>금형번호</th><td>${wo.mold_no || '—'}</td></tr>
+  <tr><th>목표수량</th><td><strong style="font-size:16px">${(wo.target_qty||0).toLocaleString()}</strong> EA</td><th>담당자</th><td>${wo.assigned_worker_id || '—'}</td></tr>
+  <tr><th>상태</th><td colspan="3"><span class="status-pill">${wo.status}</span></td></tr>
+  ${wo.note ? `<tr><th>지시사항</th><td colspan="3">${wo.note}</td></tr>` : ''}
+</table>
+
+<div class="section-title">소요 자재 (BOM 기준)</div>
+<table id="bom-table">
+  <thead><tr><th style="width:35%">자재 품번</th><th style="width:35%">자재명</th><th style="width:15%;text-align:right">단위소요</th><th style="width:15%;text-align:right">총소요량</th></tr></thead>
+  <tbody id="bom-body"><tr><td colspan="4" style="text-align:center;color:#94a3b8">BOM 데이터 없음</td></tr></tbody>
+</table>
+
+<div class="footer">
+  <div class="sign-box"><div class="sign-line"></div>작성자</div>
+  <div class="sign-box"><div class="sign-line"></div>확인자</div>
+  <div class="sign-box"><div class="sign-line"></div>작업자</div>
+  <div style="flex:1;text-align:right;color:#94a3b8;font-size:11px">인쇄일시: ${new Date().toLocaleString('ko-KR')}</div>
+</div>
+<script>
+  // BOM 로드 후 테이블 채우기
+  fetch('/api/bom/${wo.part_no}')
+    .then(r=>r.ok?r.json():[]).then(rows=>{
+      if(!rows||rows.length===0)return
+      const tbody=document.getElementById('bom-body')
+      tbody.innerHTML=rows.map(b=>\`<tr>
+        <td>\${b.component_part_no||''}</td>
+        <td>\${b.component_name||''}</td>
+        <td style="text-align:right">\${Number(b.qty_per||0).toFixed(4)}</td>
+        <td style="text-align:right"><strong>\${Math.round(Number(b.qty_per||0)*${wo.target_qty})}</strong></td>
+      </tr>\`).join('')
+    }).catch(()=>{})
+  setTimeout(()=>window.print(),600)
+</script>
+</body></html>`)
+    w.document.close()
   }
 
   // ── 실적 입력 저장 ──
@@ -199,7 +279,7 @@ export default function MesWorkOrders() {
           <select className="form-control" value={filters.status}
             onChange={e => setFilters(f=>({...f, status:e.target.value}))} style={{ width:100 }}>
             <option value="">전체</option>
-            {['대기','진행','완료','취소'].map(s => <option key={s} value={s}>{s}</option>)}
+            {['대기','자재확인','발행','진행','완료','마감','취소'].map(s => <option key={s} value={s}>{s}</option>)}
           </select>
         </div>
         <button className="btn btn-sm btn-outline" onClick={load} style={{ alignSelf:'flex-end' }}>새로고침</button>
@@ -255,7 +335,7 @@ export default function MesWorkOrders() {
               const ach = w.target_qty>0 ? Math.round((w.good_qty||0)/w.target_qty*100) : 0
               const sc  = STATUS_BADGE[w.status] || STATUS_BADGE['대기']
               const workerName = workers.find(u=>u.username===w.assigned_worker_id)?.name || w.assigned_worker_id || '—'
-              const canChange = !!STATUS_NEXT[w.status]
+              const canChange = !!STATUS_FLOW[w.status]
               return (
                 <tr key={w.wo_no}>
                   <td><code style={{ fontSize:11 }}>{w.wo_no}</code></td>
@@ -284,7 +364,7 @@ export default function MesWorkOrders() {
                   <td>
                     <button
                       onClick={() => canChange && toggleStatus(w)}
-                      title={canChange ? `클릭 → ${STATUS_NEXT[w.status]}` : ''}
+                      title={canChange ? `클릭 → ${STATUS_FLOW[w.status]}` : ''}
                       style={{
                         padding:'2px 10px', borderRadius:20, fontSize:11, fontWeight:700,
                         background:sc.bg, color:sc.color, border:`1px solid ${sc.color}30`,
@@ -294,10 +374,14 @@ export default function MesWorkOrders() {
                       {w.status}{canChange && ' →'}
                     </button>
                   </td>
-                  <td>
+                  <td style={{ display:'flex', gap:4 }}>
                     <button className="btn btn-sm btn-outline" style={{ fontSize:11 }}
                       onClick={() => { setActualModal(w.wo_no); setActualForm({ good_qty:w.good_qty||'', defect_qty:w.defect_qty||'' }) }}>
                       실적
+                    </button>
+                    <button className="btn btn-sm btn-outline" style={{ fontSize:11 }}
+                      title="작업표 출력" onClick={() => printWO(w)}>
+                      🖨
                     </button>
                   </td>
                 </tr>

@@ -21,10 +21,13 @@ class MachineStatus(str, enum.Enum):
 
 
 class WOStatus(str, enum.Enum):
-    pending   = "대기"
-    running   = "진행"
-    completed = "완료"
-    cancelled = "취소"
+    pending        = "대기"      # 계획 (초기)
+    material_check = "자재확인"
+    issued         = "발행"
+    running        = "진행"
+    completed      = "완료"
+    closed         = "마감"
+    cancelled      = "취소"
 
 
 class SessionStatus(str, enum.Enum):
@@ -165,3 +168,67 @@ class AndonCall(Base):
     is_resolved: Mapped[bool] = mapped_column(Boolean, default=False)
 
     machine: Mapped["Machine"] = relationship(foreign_keys=[machine_id])
+
+
+class ShiftHandover(Base):
+    """교대 인수인계 기록 — IATF §8.5.1 작업전환 관리"""
+    __tablename__ = "mes_shift_handover"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    shift_date: Mapped[date] = mapped_column(Date, nullable=False)
+    from_shift: Mapped[str] = mapped_column(String(10), nullable=False)
+    to_shift: Mapped[str] = mapped_column(String(10), nullable=False)
+    machine_id: Mapped[str | None] = mapped_column(ForeignKey("machine.machine_id"), nullable=True)
+    outgoing_worker: Mapped[str] = mapped_column(String(50), nullable=False)
+    incoming_worker: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    good_qty: Mapped[int] = mapped_column(Integer, default=0)
+    defect_qty: Mapped[int] = mapped_column(Integer, default=0)
+    issues: Mapped[str | None] = mapped_column(Text)
+    pending_work: Mapped[str | None] = mapped_column(Text)
+    special_note: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+    acknowledged_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
+class MaterialRequisition(Base):
+    """자재 출고 요청 — 현장에서 창고로 요청"""
+    __tablename__ = "mes_material_req"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    req_no: Mapped[str] = mapped_column(String(30), unique=True, nullable=False)
+    wo_no: Mapped[str | None] = mapped_column(ForeignKey("mes_work_order.wo_no"), nullable=True)
+    machine_id: Mapped[str | None] = mapped_column(ForeignKey("machine.machine_id"), nullable=True)
+    requester_id: Mapped[str] = mapped_column(String(50), nullable=False)
+    part_no: Mapped[str] = mapped_column(ForeignKey("item.part_no"), nullable=False)
+    req_qty: Mapped[float] = mapped_column(Float, nullable=False)
+    reason: Mapped[str | None] = mapped_column(String(200))
+    status: Mapped[str] = mapped_column(String(20), default="요청")
+    note: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+    handled_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    handled_by: Mapped[str | None] = mapped_column(String(50), nullable=True)
+
+    item: Mapped["Item"] = relationship(foreign_keys=[part_no])
+
+
+class SetupChecklist(Base):
+    """작업 준비 체크리스트 — IATF 16949 §8.5.1 4M 변경점 관리"""
+    __tablename__ = "mes_setup_checklist"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    wo_no: Mapped[str] = mapped_column(ForeignKey("mes_work_order.wo_no"), nullable=False)
+    machine_id: Mapped[str] = mapped_column(ForeignKey("machine.machine_id"), nullable=False)
+    worker_id: Mapped[str] = mapped_column(String(50), nullable=False)
+    shift: Mapped[str] = mapped_column(String(10), nullable=False)
+    mold_ok: Mapped[str | None] = mapped_column(String(1))
+    material_ok: Mapped[str | None] = mapped_column(String(1))
+    temp_ok: Mapped[str | None] = mapped_column(String(1))
+    pressure_ok: Mapped[str | None] = mapped_column(String(1))
+    safety_ok: Mapped[str | None] = mapped_column(String(1))
+    first_ok: Mapped[str | None] = mapped_column(String(1))
+    tool_ok: Mapped[str | None] = mapped_column(String(1))
+    cleaning_ok: Mapped[str | None] = mapped_column(String(1))
+    note: Mapped[str | None] = mapped_column(Text)
+    is_complete: Mapped[bool] = mapped_column(Boolean, default=False)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)

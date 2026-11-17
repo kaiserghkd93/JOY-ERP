@@ -6,7 +6,16 @@ import { getUser } from '../auth'
 const BIG = { fontSize: 28, fontWeight: 800 }
 const LABEL = { fontSize: 11, color: '#94a3b8', marginBottom: 2 }
 
+// 사출 불량 유형 프리셋
+const DEFECT_TYPES = ['치수불량', '외관불량', '충진불량', '플래시', '웰드라인', '싱크마크', '수축', '변색', '버', '기타']
+
 function fmt(n) { return Number(n || 0).toLocaleString() }
+
+function getShiftLabel() {
+  const h = new Date().getHours(), m = new Date().getMinutes()
+  const mins = h * 60 + m
+  return mins >= 8 * 60 + 30 && mins < 20 * 60 + 30 ? '주간' : '야간'
+}
 
 export default function WorkerScreen() {
   const me = getUser()
@@ -23,8 +32,28 @@ export default function WorkerScreen() {
   const [defectType, setDefectType] = useState('')
   const [msg, setMsg] = useState('')
   const [loading, setLoading] = useState(false)
-  const [palletModal, setPalletModal] = useState(null)  // { pallet_id, qr_text, qty, part_name, ... }
+  const [palletModal, setPalletModal] = useState(null)
   const qrCanvasRef = useRef(null)
+
+  // 작업 준비 체크리스트 모달 (작업 시작 전)
+  const [checklistModal, setChecklistModal] = useState(null) // { wo } pending work order
+  const [checklist, setChecklist] = useState({
+    mold_ok: null, material_ok: null, temp_ok: null, pressure_ok: null,
+    safety_ok: null, first_ok: null, tool_ok: null, cleaning_ok: null, note: '',
+  })
+
+  // 교대 인수인계 모달
+  const [handoverModal, setHandoverModal] = useState(false)
+  const [handoverForm, setHandoverForm] = useState({
+    good_qty: '', defect_qty: '', issues: '', pending_work: '', special_note: '',
+  })
+  const [recentHandovers, setRecentHandovers] = useState([])
+
+  // 자재 출고 요청 모달
+  const [matReqModal, setMatReqModal] = useState(false)
+  const [matReqForm, setMatReqForm] = useState({ part_no: '', req_qty: '', reason: '' })
+  const [items, setItems] = useState([])
+  const [myReqs, setMyReqs] = useState([])
 
   const flash = (m) => { setMsg(m); setTimeout(() => setMsg(''), 3000) }
 
@@ -64,14 +93,118 @@ export default function WorkerScreen() {
     return () => clearInterval(t)
   }, [loadMyWos, loadSession, loadKpi])
 
+  // 아이템 목록 (자재요청용)
+  useEffect(() => {
+    api.get('/items').then(r => setItems(Array.isArray(r.data) ? r.data : [])).catch(() => {})
+  }, [])
+
+  const loadMyReqs = useCallback(() => {
+    if (!workerId) return
+    api.get(`/mes-floor/material-req?requester_id=${workerId}&limit=10`).then(r => setMyReqs(r.data)).catch(() => {})
+  }, [workerId])
+
+  const loadHandovers = useCallback(() => {
+    const today = new Date().toISOString().slice(0, 10)
+    api.get(`/mes-floor/handover?shift_date=${today}&limit=5`).then(r => setRecentHandovers(r.data)).catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    loadMyReqs()
+    loadHandovers()
+  }, [loadMyReqs, loadHandovers])
+
   const startSession = async (wo) => {
+    // 작업 준비 체크리스트 먼저
+    setChecklist({ mold_ok: null, material_ok: null, temp_ok: null, pressure_ok: null, safety_ok: null, first_ok: null, tool_ok: null, cleaning_ok: null, note: '' })
+    setChecklistModal(wo)
+  }
+
+  const confirmStartWithChecklist = async () => {
+    const wo = checklistModal
     setLoading(true)
     try {
+      // 체크리스트 저장
+      await api.post('/mes-floor/setup-checklist', {
+        wo_no: wo.wo_no,
+        machine_id: wo.machine_id,
+        worker_id: workerId,
+        shift: getShiftLabel(),
+        ...checklist,
+      })
+      // 세션 시작
       await api.post('/mes-floor/sessions/start', { wo_no: wo.wo_no, worker_id: workerId })
       flash('작업 시작!')
+      setChecklistModal(null)
       loadSession()
     } catch (e) {
       flash('시작 실패: ' + (e.response?.data?.detail || e.message))
+    } finally { setLoading(false) }
+  }
+
+  const submitHandover = async () => {
+    if (!handoverForm.issues && !handoverForm.pending_work && !handoverForm.special_note) {
+      return flash('내용을 하나 이상 입력하세요')
+    }
+    setLoading(true)
+    try {
+      const shift = getShiftLabel()
+      const toShift = shift === '주간' ? '야간' : '주간'
+      await api.post('/mes-floor/handover', {
+        shift_date: new Date().toISOString().slice(0, 10),
+        from_shift: shift,
+        to_shift: toShift,
+        machine_id: session?.machine_id || null,
+        outgoing_worker: workerId,
+        good_qty: +handoverForm.good_qty || (session?.good_qty || 0),
+        defect_qty: +handoverForm.defect_qty || (session?.defect_qty || 0),
+        issues: handoverForm.issues,
+        pending_work: handoverForm.pending_work,
+        special_note: handoverForm.special_note,
+      })
+      flash('인수인계 등록 완료!')
+      setHandoverModal(false)
+      setHandoverForm({ good_qty: '', defect_qty: '', issues: '', pending_work: '', special_note: '' })
+      loadHandovers()
+    } catch (e) {
+      flash('등록 실패: ' + (e.response?.data?.detail || e.message))
+    } finally { setLoading(false) }
+  }
+
+  const submitMatReq = async () => {
+    if (!matReqForm.part_no || !matReqForm.req_qty) return flash('품번과 수량을 입력하세요')
+    setLoading(true)
+    try {
+      await api.post('/mes-floor/material-req', {
+        wo_no: session?.wo_no || null,
+        machine_id: session?.machine_id || null,
+        requester_id: workerId,
+        part_no: matReqForm.part_no,
+        req_qty: +matReqForm.req_qty,
+        reason: matReqForm.reason,
+      })
+      flash('자재 출고 요청 완료!')
+      setMatReqModal(false)
+      setMatReqForm({ part_no: '', req_qty: '', reason: '' })
+      loadMyReqs()
+    } catch (e) {
+      flash('요청 실패: ' + (e.response?.data?.detail || e.message))
+    } finally { setLoading(false) }
+  }
+
+  // 불량 즉시 등록: 타입 선택 + 수량 1 세팅
+  const quickDefect = async (dtype) => {
+    if (!session) return
+    setLoading(true)
+    try {
+      await api.post(`/mes-floor/sessions/${session.session_id}/log`, {
+        good_qty: 0,
+        defect_qty: 1,
+        defect_type: dtype,
+      })
+      flash(`불량 1EA 등록: ${dtype}`)
+      loadSession()
+    } catch (e) {
+      flash('등록 실패: ' + (e.response?.data?.detail || e.message))
     } finally { setLoading(false) }
   }
 
@@ -263,9 +396,22 @@ export default function WorkerScreen() {
               </div>
             )}
 
-            {/* 실적 입력 */}
-            <div style={{ borderTop: '1px solid #334155', paddingTop: 16, marginBottom: 16 }}>
-              <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 12 }}>실적 입력</div>
+            {/* 불량 즉시 등록 버튼 */}
+            <div style={{ borderTop: '1px solid #334155', paddingTop: 14, marginBottom: 14 }}>
+              <div style={{ fontSize: 12, color: '#f87171', fontWeight: 700, marginBottom: 8 }}>⚡ 불량 즉시 등록 (1EA)</div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                {DEFECT_TYPES.map(dt => (
+                  <button key={dt} onClick={() => quickDefect(dt)} disabled={loading}
+                    style={{ padding: '7px 12px', borderRadius: 20, border: '1px solid #dc2626', background: 'rgba(220,38,38,0.1)', color: '#fca5a5', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+                    {dt}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* 실적 입력 (일괄) */}
+            <div style={{ borderTop: '1px solid #334155', paddingTop: 14, marginBottom: 14 }}>
+              <div style={{ fontSize: 12, color: '#94a3b8', fontWeight: 700, marginBottom: 10 }}>📊 실적 일괄 입력</div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
                 <div>
                   <div style={LABEL}>양품 수량</div>
@@ -278,11 +424,34 @@ export default function WorkerScreen() {
                     style={{ width: '100%', boxSizing: 'border-box', padding: '10px', borderRadius: 8, border: '1px solid #475569', background: '#0f172a', color: '#f87171', fontSize: 18, fontWeight: 700, textAlign: 'center' }} />
                 </div>
               </div>
-              <input placeholder="불량 유형 (선택)" value={defectType} onChange={e => setDefectType(e.target.value)}
-                style={{ width: '100%', boxSizing: 'border-box', padding: '8px 12px', borderRadius: 8, border: '1px solid #334155', background: '#0f172a', color: '#f8fafc', fontSize: 13, marginBottom: 10 }} />
+              {/* 불량 유형 선택 (일괄입력 시) */}
+              <div style={{ marginBottom: 10 }}>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginBottom: 6 }}>
+                  {DEFECT_TYPES.map(dt => (
+                    <button key={dt} onClick={() => setDefectType(dt)}
+                      style={{ padding: '4px 10px', borderRadius: 20, border: `1px solid ${defectType === dt ? '#3b82f6' : '#334155'}`, background: defectType === dt ? '#1d4ed8' : 'transparent', color: defectType === dt ? '#fff' : '#64748b', fontSize: 11, cursor: 'pointer' }}>
+                      {dt}
+                    </button>
+                  ))}
+                </div>
+                <input placeholder="또는 직접 입력..." value={defectType} onChange={e => setDefectType(e.target.value)}
+                  style={{ width: '100%', boxSizing: 'border-box', padding: '7px 10px', borderRadius: 8, border: '1px solid #334155', background: '#0f172a', color: '#94a3b8', fontSize: 12 }} />
+              </div>
               <button onClick={submitProd} disabled={loading}
-                style={{ width: '100%', padding: '14px', borderRadius: 10, border: 'none', background: '#1d4ed8', color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer' }}>
+                style={{ width: '100%', padding: '13px', borderRadius: 10, border: 'none', background: '#1d4ed8', color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
                 실적 입력
+              </button>
+            </div>
+
+            {/* 현장 액션 버튼 */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 12 }}>
+              <button onClick={() => { setHandoverModal(true); loadHandovers() }} disabled={loading}
+                style={{ padding: '11px', borderRadius: 8, border: '1px solid #475569', background: 'transparent', color: '#94a3b8', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+                📋 교대 인수인계
+              </button>
+              <button onClick={() => setMatReqModal(true)} disabled={loading}
+                style={{ padding: '11px', borderRadius: 8, border: '1px solid #475569', background: 'transparent', color: '#94a3b8', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+                📦 자재 출고 요청
               </button>
             </div>
 
@@ -377,6 +546,184 @@ export default function WorkerScreen() {
               </button>
               <button onClick={() => setPalletModal(null)}
                 style={{ flex: 1, padding: '11px', borderRadius: 8, border: '1px solid #334155', background: 'transparent', color: '#94a3b8', fontSize: 13, cursor: 'pointer' }}>
+                닫기
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── #5 작업 준비 체크리스트 모달 ── */}
+      {checklistModal && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100, padding: 16 }}>
+          <div style={{ background: '#1e293b', borderRadius: 16, padding: 24, width: '100%', maxWidth: 420, maxHeight: '90vh', overflowY: 'auto' }}>
+            <div style={{ fontSize: 15, fontWeight: 800, marginBottom: 4 }}>📋 작업 준비 체크리스트</div>
+            <div style={{ fontSize: 12, color: '#64748b', marginBottom: 16 }}>IATF 16949 §8.5.1 — {checklistModal.part_name} / {checklistModal.machine_name}</div>
+            {[
+              { key: 'mold_ok', label: '1. 금형 장착 및 상태 확인' },
+              { key: 'material_ok', label: '2. 원료 준비 및 건조 확인' },
+              { key: 'temp_ok', label: '3. 온도 설정값 확인' },
+              { key: 'pressure_ok', label: '4. 사출압력/속도 설정 확인' },
+              { key: 'safety_ok', label: '5. 안전장치 작동 점검' },
+              { key: 'first_ok', label: '6. 초물 검사 합격 확인' },
+              { key: 'tool_ok', label: '7. 공구/지그/치구 준비' },
+              { key: 'cleaning_ok', label: '8. 작업 전 청소 완료' },
+            ].map(item => (
+              <div key={item.key} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: '1px solid #1e293b' }}>
+                <span style={{ fontSize: 13, color: checklist[item.key] === 'Y' ? '#4ade80' : checklist[item.key] === 'N' ? '#f87171' : '#e2e8f0' }}>{item.label}</span>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  {['Y', 'N'].map(v => (
+                    <button key={v} onClick={() => setChecklist(c => ({ ...c, [item.key]: v }))}
+                      style={{ width: 36, height: 36, borderRadius: 8, border: 'none', cursor: 'pointer', fontWeight: 800, fontSize: 14,
+                        background: checklist[item.key] === v ? (v === 'Y' ? '#16a34a' : '#dc2626') : '#334155',
+                        color: checklist[item.key] === v ? '#fff' : '#64748b',
+                      }}>
+                      {v}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ))}
+            <textarea placeholder="특이사항 (선택)" value={checklist.note}
+              onChange={e => setChecklist(c => ({ ...c, note: e.target.value }))}
+              style={{ width: '100%', boxSizing: 'border-box', marginTop: 12, padding: '8px 10px', borderRadius: 8, border: '1px solid #334155', background: '#0f172a', color: '#f8fafc', fontSize: 12, resize: 'vertical', minHeight: 56 }} />
+            <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
+              <button onClick={confirmStartWithChecklist} disabled={loading}
+                style={{ flex: 2, padding: '13px', borderRadius: 10, border: 'none', background: '#1d4ed8', color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
+                작업 시작
+              </button>
+              <button onClick={() => setChecklistModal(null)}
+                style={{ flex: 1, padding: '13px', borderRadius: 10, border: '1px solid #334155', background: 'transparent', color: '#94a3b8', fontSize: 13, cursor: 'pointer' }}>
+                취소
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── #3 교대 인수인계 모달 ── */}
+      {handoverModal && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100, padding: 16 }}>
+          <div style={{ background: '#1e293b', borderRadius: 16, padding: 24, width: '100%', maxWidth: 440, maxHeight: '90vh', overflowY: 'auto' }}>
+            <div style={{ fontSize: 15, fontWeight: 800, marginBottom: 4 }}>📋 교대 인수인계</div>
+            <div style={{ fontSize: 12, color: '#64748b', marginBottom: 16 }}>
+              {getShiftLabel()} → {getShiftLabel() === '주간' ? '야간' : '주간'} 인계 / {new Date().toLocaleDateString('ko-KR')}
+            </div>
+
+            {/* 최근 인수인계 */}
+            {recentHandovers.length > 0 && (
+              <div style={{ marginBottom: 16, background: '#0f172a', borderRadius: 8, padding: 12 }}>
+                <div style={{ fontSize: 11, color: '#475569', marginBottom: 8 }}>이전 교대 인수인계</div>
+                {recentHandovers.slice(0, 2).map(h => (
+                  <div key={h.id} style={{ marginBottom: 8, fontSize: 12, borderBottom: '1px solid #1e293b', paddingBottom: 8 }}>
+                    <span style={{ color: '#3b82f6', fontWeight: 700 }}>{h.from_shift} → {h.to_shift}</span>
+                    <span style={{ color: '#475569', marginLeft: 8 }}>{h.outgoing_worker}</span>
+                    {h.issues && <div style={{ color: '#fca5a5', marginTop: 2 }}>이슈: {h.issues}</div>}
+                    {h.pending_work && <div style={{ color: '#fbbf24', marginTop: 2 }}>미완료: {h.pending_work}</div>}
+                    {!h.acknowledged_at && (
+                      <button onClick={async () => { await api.post(`/mes-floor/handover/${h.id}/acknowledge`); loadHandovers() }}
+                        style={{ marginTop: 4, padding: '3px 10px', borderRadius: 20, border: 'none', background: '#16a34a', color: '#fff', fontSize: 10, cursor: 'pointer' }}>
+                        ✓ 인수 확인
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* 인계 작성 폼 */}
+            {[
+              { key: 'good_qty', label: '이번 교대 양품 수량', placeholder: session?.good_qty || 0, type: 'number' },
+              { key: 'defect_qty', label: '이번 교대 불량 수량', placeholder: session?.defect_qty || 0, type: 'number' },
+            ].map(f => (
+              <div key={f.key} style={{ marginBottom: 10 }}>
+                <div style={{ fontSize: 11, color: '#94a3b8', marginBottom: 4 }}>{f.label}</div>
+                <input type={f.type} value={handoverForm[f.key]} placeholder={f.placeholder}
+                  onChange={e => setHandoverForm(p => ({ ...p, [f.key]: e.target.value }))}
+                  style={{ width: '100%', boxSizing: 'border-box', padding: '8px 10px', borderRadius: 8, border: '1px solid #334155', background: '#0f172a', color: '#f8fafc', fontSize: 13 }} />
+              </div>
+            ))}
+            {[
+              { key: 'issues', label: '품질/설비 이슈', placeholder: '예) 3호기 사출압력 불안정, 색상 미세 차이 발생 중' },
+              { key: 'pending_work', label: '미완료 작업/인수 사항', placeholder: '예) WO-001 목표 500EA 중 350EA 완료, 금형 교체 예정' },
+              { key: 'special_note', label: '특이사항', placeholder: '예) 원료 잔여량 20kg, 창고 반납 필요' },
+            ].map(f => (
+              <div key={f.key} style={{ marginBottom: 10 }}>
+                <div style={{ fontSize: 11, color: '#94a3b8', marginBottom: 4 }}>{f.label}</div>
+                <textarea value={handoverForm[f.key]} placeholder={f.placeholder}
+                  onChange={e => setHandoverForm(p => ({ ...p, [f.key]: e.target.value }))}
+                  style={{ width: '100%', boxSizing: 'border-box', padding: '8px 10px', borderRadius: 8, border: '1px solid #334155', background: '#0f172a', color: '#f8fafc', fontSize: 12, resize: 'vertical', minHeight: 48 }} />
+              </div>
+            ))}
+            <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
+              <button onClick={submitHandover} disabled={loading}
+                style={{ flex: 2, padding: '12px', borderRadius: 10, border: 'none', background: '#1d4ed8', color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
+                인수인계 등록
+              </button>
+              <button onClick={() => setHandoverModal(false)}
+                style={{ flex: 1, padding: '12px', borderRadius: 10, border: '1px solid #334155', background: 'transparent', color: '#94a3b8', fontSize: 13, cursor: 'pointer' }}>
+                닫기
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── #4 자재 출고 요청 모달 ── */}
+      {matReqModal && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100, padding: 16 }}>
+          <div style={{ background: '#1e293b', borderRadius: 16, padding: 24, width: '100%', maxWidth: 400, maxHeight: '90vh', overflowY: 'auto' }}>
+            <div style={{ fontSize: 15, fontWeight: 800, marginBottom: 4 }}>📦 자재 출고 요청</div>
+            <div style={{ fontSize: 12, color: '#64748b', marginBottom: 16 }}>창고로 자재 출고 요청</div>
+
+            <div style={{ marginBottom: 10 }}>
+              <div style={{ fontSize: 11, color: '#94a3b8', marginBottom: 4 }}>품번 선택</div>
+              <select value={matReqForm.part_no} onChange={e => setMatReqForm(p => ({ ...p, part_no: e.target.value }))}
+                style={{ width: '100%', padding: '9px 10px', borderRadius: 8, border: '1px solid #334155', background: '#0f172a', color: '#f8fafc', fontSize: 13 }}>
+                <option value="">— 품번 선택 —</option>
+                {items.map(i => (
+                  <option key={i.part_no} value={i.part_no}>{i.part_no} {i.name}</option>
+                ))}
+              </select>
+            </div>
+            <div style={{ marginBottom: 10 }}>
+              <div style={{ fontSize: 11, color: '#94a3b8', marginBottom: 4 }}>요청 수량</div>
+              <input type="number" min="0.01" step="0.01" value={matReqForm.req_qty}
+                onChange={e => setMatReqForm(p => ({ ...p, req_qty: e.target.value }))}
+                style={{ width: '100%', boxSizing: 'border-box', padding: '9px 10px', borderRadius: 8, border: '1px solid #334155', background: '#0f172a', color: '#f8fafc', fontSize: 15, fontWeight: 700, textAlign: 'center' }} />
+            </div>
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ fontSize: 11, color: '#94a3b8', marginBottom: 4 }}>요청 사유</div>
+              <input value={matReqForm.reason} onChange={e => setMatReqForm(p => ({ ...p, reason: e.target.value }))}
+                placeholder="예) 원료 소진, 금형 교체 준비"
+                style={{ width: '100%', boxSizing: 'border-box', padding: '8px 10px', borderRadius: 8, border: '1px solid #334155', background: '#0f172a', color: '#f8fafc', fontSize: 13 }} />
+            </div>
+
+            {/* 최근 내 요청 */}
+            {myReqs.length > 0 && (
+              <div style={{ marginBottom: 16, background: '#0f172a', borderRadius: 8, padding: 10 }}>
+                <div style={{ fontSize: 11, color: '#475569', marginBottom: 6 }}>최근 요청 현황</div>
+                {myReqs.slice(0, 3).map(r => (
+                  <div key={r.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, marginBottom: 4 }}>
+                    <span style={{ color: '#94a3b8' }}>{r.req_no}</span>
+                    <span style={{ color: '#e2e8f0' }}>{r.part_name} {r.req_qty}</span>
+                    <span style={{
+                      padding: '1px 6px', borderRadius: 20, fontSize: 10,
+                      background: r.status === '출고완료' ? '#14532d' : r.status === '승인' ? '#1e3a8a' : r.status === '반려' ? '#450a0a' : '#1e293b',
+                      color: r.status === '출고완료' ? '#4ade80' : r.status === '승인' ? '#93c5fd' : r.status === '반려' ? '#f87171' : '#94a3b8',
+                    }}>{r.status}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button onClick={submitMatReq} disabled={loading}
+                style={{ flex: 2, padding: '12px', borderRadius: 10, border: 'none', background: '#7c3aed', color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
+                출고 요청
+              </button>
+              <button onClick={() => setMatReqModal(false)}
+                style={{ flex: 1, padding: '12px', borderRadius: 10, border: '1px solid #334155', background: 'transparent', color: '#94a3b8', fontSize: 13, cursor: 'pointer' }}>
                 닫기
               </button>
             </div>

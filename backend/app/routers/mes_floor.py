@@ -33,7 +33,8 @@ from app.models.mes_floor import (
     Machine, MesWorkOrder, WorkerSession, ProdLog, DowntimeLog,
     WOStatus, SessionStatus, DowntimeReason, MachineStatus, AndonCall, MesPallet,
 )
-from app.models.master import Item
+from app.models.master import Item, BomLine
+from app.models.ledger import StockLedger, LedgerType
 from app.services.doc_no import next_doc_no
 
 router = APIRouter(prefix="/mes-floor", tags=["MES현장"])
@@ -235,7 +236,7 @@ def create_wo(body: WOCreate, db: Session = Depends(get_db), user: User = Depend
         raise HTTPException(404, f"품목 없음: {body.part_no}")
     if not db.get(Machine, body.machine_id):
         raise HTTPException(404, f"호기 없음: {body.machine_id}")
-    if body.assigned_worker_id and not db.get(AuthUser, body.assigned_worker_id):
+    if body.assigned_worker_id and not db.query(AuthUser).filter(AuthUser.username == body.assigned_worker_id).first():
         raise HTTPException(404, f"작업자 없음: {body.assigned_worker_id}")
 
     wo_no = next_doc_no(db, "WO", "mes_work_order", "wo_no")
@@ -291,17 +292,25 @@ class WOActualUpdate(BaseModel):
     defect_qty: int = 0
 
 
+STATUS_FLOW = {
+    "대기":     "자재확인",
+    "자재확인": "발행",
+    "발행":     "진행",
+    "진행":     "완료",
+    "완료":     "마감",
+}
+
+
 @router.patch("/work-orders/{wo_no}/status")
 def update_wo_status(wo_no: str, body: WOStatusUpdate, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
-    """작업지시 상태 변경 (대기 → 진행 → 완료)"""
+    """작업지시 상태 변경 (대기→자재확인→발행→진행→완료→마감)"""
     wo = db.get(MesWorkOrder, wo_no)
     if not wo:
         raise HTTPException(404, f"작업지시 없음: {wo_no}")
-    allowed = {"대기": "진행", "진행": "완료"}
-    if body.status not in allowed.values():
-        raise HTTPException(400, f"허용되지 않은 상태: {body.status}")
-    if wo.status not in allowed or allowed[wo.status] != body.status:
-        raise HTTPException(400, f"현재 상태 '{wo.status}'에서 '{body.status}'로 변경 불가")
+    current = wo.status if isinstance(wo.status, str) else wo.status.value
+    next_allowed = STATUS_FLOW.get(current)
+    if next_allowed != body.status:
+        raise HTTPException(400, f"현재 상태 '{current}'에서 '{body.status}'로 변경 불가 (다음: {next_allowed})")
     wo.status = body.status
     db.commit()
     return _wo_with_qr(wo)
@@ -410,6 +419,25 @@ def start_session(body: SessionStart, db: Session = Depends(get_db)):
         shift=get_shift(),
     )
     db.add(session)
+
+    # ② 자재 불출 자동화: BOM 소요량 × 목표수량 → 생산소모 원장 등록
+    bom_lines = db.query(BomLine).filter(BomLine.product_part_no == wo.part_no).all()
+    today_date = date.today()
+    for bom in bom_lines:
+        consume_qty = int(round(float(bom.qty_per) * wo.target_qty))
+        if consume_qty <= 0:
+            continue
+        db.add(StockLedger(
+            txn_date=today_date,
+            part_no=bom.component_part_no,
+            ledger_type=LedgerType.consumption,
+            qty=-consume_qty,
+            unit_price=0,
+            ref_type="WO",
+            ref_no=wo.wo_no,
+            note=f"작업지시 자동불출 세션#{session.worker_id}",
+        ))
+
     db.commit()
     db.refresh(session)
     return _session_detail(db, session)
@@ -1121,3 +1149,218 @@ def machine_oee_summary(days: int = 7, db: Session = Depends(get_db)):
         })
     result.sort(key=lambda x: x["avg_oee"], reverse=True)
     return result
+
+
+# ═══════════════════════════════════════════════════════════════════
+# #3  교대 인수인계
+# ═══════════════════════════════════════════════════════════════════
+from app.models.mes_floor import ShiftHandover, MaterialRequisition, SetupChecklist
+
+class HandoverIn(BaseModel):
+    shift_date: str           # YYYY-MM-DD
+    from_shift: str
+    to_shift: str
+    machine_id: Optional[str] = None
+    outgoing_worker: str
+    incoming_worker: Optional[str] = None
+    good_qty: int = 0
+    defect_qty: int = 0
+    issues: Optional[str] = None
+    pending_work: Optional[str] = None
+    special_note: Optional[str] = None
+
+@router.post("/handover")
+def create_handover(body: HandoverIn, db: Session = Depends(get_db)):
+    ho = ShiftHandover(
+        shift_date=date.fromisoformat(body.shift_date),
+        from_shift=body.from_shift,
+        to_shift=body.to_shift,
+        machine_id=body.machine_id,
+        outgoing_worker=body.outgoing_worker,
+        incoming_worker=body.incoming_worker,
+        good_qty=body.good_qty,
+        defect_qty=body.defect_qty,
+        issues=body.issues,
+        pending_work=body.pending_work,
+        special_note=body.special_note,
+    )
+    db.add(ho)
+    db.commit()
+    db.refresh(ho)
+    return {"id": ho.id, "created_at": ho.created_at.isoformat()}
+
+@router.get("/handover")
+def list_handovers(
+    shift_date: Optional[str] = None,
+    machine_id: Optional[str] = None,
+    limit: int = 20,
+    db: Session = Depends(get_db),
+):
+    q = db.query(ShiftHandover)
+    if shift_date:
+        q = q.filter(ShiftHandover.shift_date == date.fromisoformat(shift_date))
+    if machine_id:
+        q = q.filter(ShiftHandover.machine_id == machine_id)
+    rows = q.order_by(ShiftHandover.created_at.desc()).limit(limit).all()
+    return [
+        {
+            "id": r.id, "shift_date": r.shift_date.isoformat(),
+            "from_shift": r.from_shift, "to_shift": r.to_shift,
+            "machine_id": r.machine_id,
+            "outgoing_worker": r.outgoing_worker,
+            "incoming_worker": r.incoming_worker,
+            "good_qty": r.good_qty, "defect_qty": r.defect_qty,
+            "issues": r.issues, "pending_work": r.pending_work,
+            "special_note": r.special_note,
+            "created_at": r.created_at.isoformat(),
+            "acknowledged_at": r.acknowledged_at.isoformat() if r.acknowledged_at else None,
+        }
+        for r in rows
+    ]
+
+@router.post("/handover/{handover_id}/acknowledge")
+def acknowledge_handover(handover_id: int, db: Session = Depends(get_db)):
+    ho = db.get(ShiftHandover, handover_id)
+    if not ho:
+        raise HTTPException(404, "인수인계 없음")
+    ho.acknowledged_at = datetime.now()
+    db.commit()
+    return {"ok": True}
+
+
+# ═══════════════════════════════════════════════════════════════════
+# #4  자재 출고 요청
+# ═══════════════════════════════════════════════════════════════════
+
+class MatReqIn(BaseModel):
+    wo_no: Optional[str] = None
+    machine_id: Optional[str] = None
+    requester_id: str
+    part_no: str
+    req_qty: float
+    reason: Optional[str] = None
+
+@router.post("/material-req")
+def create_mat_req(body: MatReqIn, db: Session = Depends(get_db)):
+    today = date.today()
+    prefix = f"MR-{today.strftime('%Y%m%d')}"
+    count = db.query(MaterialRequisition).filter(
+        MaterialRequisition.req_no.like(f"{prefix}%")
+    ).count()
+    req_no = f"{prefix}-{str(count + 1).zfill(3)}"
+
+    req = MaterialRequisition(
+        req_no=req_no,
+        wo_no=body.wo_no,
+        machine_id=body.machine_id,
+        requester_id=body.requester_id,
+        part_no=body.part_no,
+        req_qty=body.req_qty,
+        reason=body.reason,
+    )
+    db.add(req)
+    db.commit()
+    db.refresh(req)
+    return {"id": req.id, "req_no": req.req_no}
+
+@router.get("/material-req")
+def list_mat_reqs(
+    status: Optional[str] = None,
+    requester_id: Optional[str] = None,
+    limit: int = 50,
+    db: Session = Depends(get_db),
+):
+    q = db.query(MaterialRequisition)
+    if status:
+        q = q.filter(MaterialRequisition.status == status)
+    if requester_id:
+        q = q.filter(MaterialRequisition.requester_id == requester_id)
+    rows = q.order_by(MaterialRequisition.created_at.desc()).limit(limit).all()
+    return [
+        {
+            "id": r.id, "req_no": r.req_no, "wo_no": r.wo_no,
+            "machine_id": r.machine_id, "requester_id": r.requester_id,
+            "part_no": r.part_no,
+            "part_name": r.item.name if r.item else r.part_no,
+            "req_qty": r.req_qty, "reason": r.reason, "status": r.status,
+            "created_at": r.created_at.isoformat(),
+            "handled_at": r.handled_at.isoformat() if r.handled_at else None,
+            "handled_by": r.handled_by,
+        }
+        for r in rows
+    ]
+
+@router.patch("/material-req/{req_id}/status")
+def update_mat_req_status(
+    req_id: int,
+    status: str,
+    handled_by: str,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    req = db.get(MaterialRequisition, req_id)
+    if not req:
+        raise HTTPException(404, "요청 없음")
+    req.status = status
+    req.handled_by = handled_by
+    req.handled_at = datetime.now()
+    db.commit()
+    return {"ok": True}
+
+
+# ═══════════════════════════════════════════════════════════════════
+# #5  작업 준비 체크리스트
+# ═══════════════════════════════════════════════════════════════════
+
+class ChecklistIn(BaseModel):
+    wo_no: str
+    machine_id: str
+    worker_id: str
+    shift: str
+    mold_ok: Optional[str] = None
+    material_ok: Optional[str] = None
+    temp_ok: Optional[str] = None
+    pressure_ok: Optional[str] = None
+    safety_ok: Optional[str] = None
+    first_ok: Optional[str] = None
+    tool_ok: Optional[str] = None
+    cleaning_ok: Optional[str] = None
+    note: Optional[str] = None
+
+@router.post("/setup-checklist")
+def create_checklist(body: ChecklistIn, db: Session = Depends(get_db)):
+    items = [body.mold_ok, body.material_ok, body.temp_ok, body.pressure_ok,
+             body.safety_ok, body.first_ok, body.tool_ok, body.cleaning_ok]
+    is_complete = all(v == 'Y' for v in items)
+    cl = SetupChecklist(
+        wo_no=body.wo_no, machine_id=body.machine_id,
+        worker_id=body.worker_id, shift=body.shift,
+        mold_ok=body.mold_ok, material_ok=body.material_ok,
+        temp_ok=body.temp_ok, pressure_ok=body.pressure_ok,
+        safety_ok=body.safety_ok, first_ok=body.first_ok,
+        tool_ok=body.tool_ok, cleaning_ok=body.cleaning_ok,
+        note=body.note, is_complete=is_complete,
+        completed_at=datetime.now() if is_complete else None,
+    )
+    db.add(cl)
+    db.commit()
+    db.refresh(cl)
+    return {"id": cl.id, "is_complete": is_complete}
+
+@router.get("/setup-checklist")
+def get_checklist(wo_no: str, db: Session = Depends(get_db)):
+    cl = db.query(SetupChecklist).filter(
+        SetupChecklist.wo_no == wo_no
+    ).order_by(SetupChecklist.created_at.desc()).first()
+    if not cl:
+        return None
+    return {
+        "id": cl.id, "wo_no": cl.wo_no, "machine_id": cl.machine_id,
+        "worker_id": cl.worker_id, "shift": cl.shift,
+        "mold_ok": cl.mold_ok, "material_ok": cl.material_ok,
+        "temp_ok": cl.temp_ok, "pressure_ok": cl.pressure_ok,
+        "safety_ok": cl.safety_ok, "first_ok": cl.first_ok,
+        "tool_ok": cl.tool_ok, "cleaning_ok": cl.cleaning_ok,
+        "note": cl.note, "is_complete": cl.is_complete,
+        "created_at": cl.created_at.isoformat(),
+    }

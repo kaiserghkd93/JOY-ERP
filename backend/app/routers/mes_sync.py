@@ -731,9 +731,9 @@ def get_cost_report(
             SUM(c.labor_cost)    AS labor_cost,
             SUM(c.revenue)       AS revenue,
             SUM(c.margin)        AS margin,
-            MAX(c.bom_ok)        AS bom_ok,
-            MAX(c.labor_ok)      AS labor_ok,
-            MAX(c.stock_deducted) AS stock_deducted
+            MAX(c.bom_ok::int)        AS bom_ok,
+            MAX(c.labor_ok::int)      AS labor_ok,
+            MAX(c.stock_deducted::int) AS stock_deducted
         FROM mes_production_cost c
         LEFT JOIN item i ON i.part_no = c.part_no
         WHERE c.prod_date BETWEEN :s AND :e
