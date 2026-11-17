@@ -1319,6 +1319,7 @@ function MatReportPanel({ month }) {
                 {reportData.overdue_count}건 지연
               </span>
             )}
+            <span style={{ fontSize: 11, color: '#94a3b8', marginLeft: 'auto' }}>※ 외주발주(금호·성일·마이더스·유한·상원) 제외 — 외주구매 탭에서 확인</span>
           </div>
           {reportData.overdue_list?.length === 0 ? (
             <div style={{ textAlign: 'center', color: '#059669', fontSize: 13, padding: 16 }}>미납 발주 없음 — 모든 발주 납기 준수</div>

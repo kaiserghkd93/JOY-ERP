@@ -20,6 +20,14 @@ from app.models.master import Partner, Item
 
 router = APIRouter(prefix="/purchase", tags=["구매·외주"])
 
+# 외주업체 고정 목록 — 이 거래처의 발주는 자재구매 보고서에서 제외되고 외주구매 탭에서만 집계
+OUTSOURCE_PARTNER_KEYWORDS = ['금호', '성일', '마이더스', '유한', '상원']
+
+def _is_outsource(partner_name: str | None) -> bool:
+    if not partner_name:
+        return False
+    return any(kw in partner_name for kw in OUTSOURCE_PARTNER_KEYWORDS)
+
 
 @router.post("/orders", response_model=POOut)
 def post_order(body: POCreate, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
@@ -268,21 +276,23 @@ def purchase_report_data(
     first_day = date(year, month, 1)
     last_day  = date(year, month, mr(year, month)[1])
 
-    # ── 1. 미납/지연 발주 목록 ─────────────────────────────────────
+    # ── 1. 미납/지연 발주 목록 (자재발주 po_type="material" 한정) ─
     overdue_pos = db.query(PurchaseOrder).filter(
         PurchaseOrder.status.in_([POStatus.open, POStatus.partial]),
         PurchaseOrder.due_date < today,
+        PurchaseOrder.po_type == "material",
     ).order_by(PurchaseOrder.due_date).all()
 
     overdue_list = []
     for po in overdue_pos:
         partner = db.get(Partner, po.partner_id)
+        partner_name = partner.name if partner else po.partner_id
         item    = db.get(Item, po.part_no)
         days_late = (today - po.due_date).days
         received = sum(r.qty for r in po.receipts if r.status == ReceiptStatus.confirmed)
         overdue_list.append({
             "po_no":        po.po_no,
-            "partner_name": partner.name if partner else po.partner_id,
+            "partner_name": partner_name,
             "part_no":      po.part_no,
             "part_name":    item.name if item else po.part_no,
             "due_date":     po.due_date.isoformat(),
@@ -292,18 +302,19 @@ def purchase_report_data(
             "remain_qty":   po.qty - received,
         })
 
-    # ── 2. 당월 협력사별 납기준수율 ───────────────────────────────
+    # ── 2. 당월 협력사별 납기준수율 (자재발주 한정) ──────────────
     closed_this_month = db.query(PurchaseOrder).filter(
         PurchaseOrder.status == POStatus.closed,
         PurchaseOrder.due_date >= first_day,
         PurchaseOrder.due_date <= last_day,
+        PurchaseOrder.po_type == "material",
     ).all()
 
     partner_otd: dict[str, dict] = {}
     for po in closed_this_month:
         pid = po.partner_id
+        p = db.get(Partner, pid)
         if pid not in partner_otd:
-            p = db.get(Partner, pid)
             partner_otd[pid] = {"name": p.name if p else pid, "total": 0, "on_time": 0}
         partner_otd[pid]["total"] += 1
         receipts = [r for r in po.receipts if r.status == ReceiptStatus.confirmed]
@@ -335,10 +346,15 @@ def purchase_report_data(
         prev_last  = date(year, prev_m, mr(year, prev_m)[1])
 
     def avg_prices(start, end):
+        # 자재발주(po_type="material") 입고건만 대상
+        mat_po_nos = {
+            po.po_no for po in db.query(PurchaseOrder).filter(PurchaseOrder.po_type == "material").all()
+        }
         receipts = db.query(Receipt).filter(
             Receipt.receipt_date >= start,
             Receipt.receipt_date <= end,
             Receipt.status == ReceiptStatus.confirmed,
+            Receipt.po_no.in_(mat_po_nos),
         ).all()
         price_map: dict[str, list] = {}
         for r in receipts:
