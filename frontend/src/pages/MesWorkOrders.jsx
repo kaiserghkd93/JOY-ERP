@@ -98,6 +98,16 @@ export default function MesWorkOrders() {
     } catch (e) { alert('변경 실패: ' + (e.response?.data?.detail || e.message)) }
   }
 
+  // ── WO 취소 ──
+  const cancelWO = async (wo) => {
+    if (!window.confirm(`${wo.wo_no} 작업지시를 취소하시겠습니까?\n자재 불출 역전표가 자동 생성됩니다.`)) return
+    try {
+      const r = await api.post(`/mes-floor/work-orders/${wo.wo_no}/cancel`)
+      alert(`취소 완료. 역전표 ${r.data.reversed_entries}건 생성됨.`)
+      load()
+    } catch (e) { alert('취소 실패: ' + (e.response?.data?.detail || e.message)) }
+  }
+
   // ── 작업표 프린트 ──
   const printWO = (wo) => {
     const w = window.open('', '_blank', 'width=800,height=900')
@@ -383,6 +393,12 @@ export default function MesWorkOrders() {
                       title="작업표 출력" onClick={() => printWO(w)}>
                       🖨
                     </button>
+                    {!['완료','마감','취소'].includes(w.status) && (
+                      <button className="btn btn-sm" style={{ fontSize:11, background:'#fee2e2', color:'#dc2626', border:'none' }}
+                        title="작업지시 취소 (자재 역전표 자동생성)" onClick={() => cancelWO(w)}>
+                        취소
+                      </button>
+                    )}
                   </td>
                 </tr>
               )

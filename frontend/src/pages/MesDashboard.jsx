@@ -243,6 +243,120 @@ const STATUS_COLOR = {
   '대기':  { bg: '#f1f5f9', border: '#cbd5e1', text: '#64748b', dot: '#94a3b8' },
 }
 
+/* ── 불량 파레토 탭 ───────────────────────────────────────────── */
+function DefectPareto() {
+  const fmtDate = (d) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
+  const [start, setStart] = useState(() => { const d = new Date(); d.setDate(1); return fmtDate(d) })
+  const [end,   setEnd]   = useState(() => fmtDate(new Date()))
+  const [machineId, setMachineId] = useState('')
+  const [machines, setMachines]   = useState([])
+  const [data, setData]   = useState({ total:0, items:[] })
+  const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    api.get('/mes-floor/machines').then(r => setMachines(r.data)).catch(() => {})
+  }, [])
+
+  const load = () => {
+    setLoading(true)
+    const p = new URLSearchParams({ start, end })
+    if (machineId) p.set('machine_id', machineId)
+    api.get(`/mes-floor/defect-pareto?${p}`)
+      .then(r => setData(r.data))
+      .catch(() => setData({ total:0, items:[] }))
+      .finally(() => setLoading(false))
+  }
+
+  useEffect(() => { load() }, [start, end, machineId])
+
+  const maxCount = Math.max(...data.items.map(i => i.count), 1)
+
+  return (
+    <div>
+      {/* 필터 */}
+      <div style={{ display:'flex', gap:10, marginBottom:16, flexWrap:'wrap', alignItems:'flex-end' }}>
+        <div className="form-group" style={{ margin:0 }}>
+          <label style={{ fontSize:11 }}>시작일</label>
+          <input type="date" className="form-control" value={start} onChange={e=>setStart(e.target.value)} style={{ width:140 }} />
+        </div>
+        <div className="form-group" style={{ margin:0 }}>
+          <label style={{ fontSize:11 }}>종료일</label>
+          <input type="date" className="form-control" value={end} onChange={e=>setEnd(e.target.value)} style={{ width:140 }} />
+        </div>
+        <div className="form-group" style={{ margin:0 }}>
+          <label style={{ fontSize:11 }}>호기</label>
+          <select className="form-control" value={machineId} onChange={e=>setMachineId(e.target.value)} style={{ width:120 }}>
+            <option value="">전체</option>
+            {machines.map(m=><option key={m.machine_id} value={m.machine_id}>{m.name}</option>)}
+          </select>
+        </div>
+      </div>
+
+      {loading ? (
+        <div style={{ padding:40, textAlign:'center', color:'#94a3b8' }}>로딩 중...</div>
+      ) : data.items.length === 0 ? (
+        <div style={{ padding:40, textAlign:'center', color:'#94a3b8' }}>불량 데이터 없음</div>
+      ) : (
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 300px', gap:20 }}>
+          {/* 바 차트 */}
+          <div style={{ border:'1px solid #e2e8f0', borderRadius:10, padding:20, background:'#fff' }}>
+            <div style={{ fontSize:13, fontWeight:700, marginBottom:16 }}>
+              불량 유형별 발생 건수 — 총 <strong style={{ color:'#dc2626' }}>{data.total.toLocaleString()}</strong>건
+            </div>
+            {data.items.map((item, i) => (
+              <div key={item.defect_type} style={{ marginBottom:10 }}>
+                <div style={{ display:'flex', justifyContent:'space-between', fontSize:12, marginBottom:3 }}>
+                  <span style={{ fontWeight:600 }}>
+                    <span style={{ display:'inline-block', width:20, textAlign:'right', color:'#94a3b8', marginRight:8 }}>{i+1}</span>
+                    {item.defect_type}
+                  </span>
+                  <span style={{ color:'#dc2626', fontWeight:700 }}>{item.count.toLocaleString()} ({item.pct}%)</span>
+                </div>
+                <div style={{ position:'relative', height:18, background:'#f1f5f9', borderRadius:4 }}>
+                  <div style={{
+                    width:`${(item.count/maxCount)*100}%`, height:'100%', borderRadius:4,
+                    background: i===0?'#dc2626':i===1?'#f97316':i===2?'#f59e0b':'#94a3b8',
+                    transition:'width 0.4s',
+                  }} />
+                  {/* 누적 % */}
+                  <div style={{
+                    position:'absolute', right:4, top:1, fontSize:10, color:'#64748b', fontWeight:600,
+                  }}>누적 {item.cumulative_pct}%</div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* 테이블 */}
+          <div style={{ border:'1px solid #e2e8f0', borderRadius:10, background:'#fff', overflow:'auto' }}>
+            <table className="table" style={{ marginBottom:0 }}>
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>불량 유형</th>
+                  <th style={{ textAlign:'right' }}>건수</th>
+                  <th style={{ textAlign:'right' }}>비율</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.items.map((item, i) => (
+                  <tr key={item.defect_type} style={{ background: i<3?'#fff7f7':undefined }}>
+                    <td style={{ color:'#94a3b8', fontSize:11 }}>{i+1}</td>
+                    <td style={{ fontWeight:i<3?700:400 }}>{item.defect_type}</td>
+                    <td style={{ textAlign:'right', fontWeight:700, color:'#dc2626' }}>{item.count.toLocaleString()}</td>
+                    <td style={{ textAlign:'right', fontSize:11, color:'#64748b' }}>{item.pct}%</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+
 const ANDON_COLOR = {
   '품질이상': '#dc2626',
   '설비고장': '#ea580c',
@@ -427,7 +541,7 @@ export default function MesDashboard() {
 
       {/* 메인 탭 */}
       <div style={{ display:'flex', gap:0, marginBottom:16, borderBottom:'2px solid #e2e8f0' }}>
-        {[{ k:'andon', label:'🏭 안돈 보드' }, { k:'oee', label:'📊 OEE 분석' }].map(t => (
+        {[{ k:'andon', label:'🏭 안돈 보드' }, { k:'oee', label:'📊 OEE 분석' }, { k:'pareto', label:'📉 불량 파레토' }].map(t => (
           <button key={t.k} onClick={() => setMainTab(t.k)} style={{
             padding:'8px 20px', fontSize:13, fontWeight:700, border:'none', cursor:'pointer',
             background:'transparent', color:mainTab===t.k?'#1d4ed8':'#64748b',
@@ -438,6 +552,7 @@ export default function MesDashboard() {
       </div>
 
       {mainTab === 'oee' && <OeeAnalysis />}
+      {mainTab === 'pareto' && <DefectPareto />}
 
       {mainTab === 'andon' && <>
       {/* KPI 요약 */}

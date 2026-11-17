@@ -51,6 +51,9 @@ class MoldOrder(Base):
     status:       Mapped[MoldOrderStatus] = mapped_column(SAEnum(MoldOrderStatus, native_enum=False), default=MoldOrderStatus.in_progress)
     note:         Mapped[str | None]    = mapped_column(Text)
     created_at:   Mapped[datetime]      = mapped_column(DateTime, default=datetime.now)
+    production_shot_count: Mapped[int]  = mapped_column(Integer, default=0)   # MES 누적 생산 샷수
+    pm_cycle_shot: Mapped[int]          = mapped_column(Integer, default=500000)  # PM 교체 주기(샷)
+    last_pm_shot: Mapped[int]           = mapped_column(Integer, default=0)   # 직전 PM 시점 누적 샷수
 
     customer: Mapped["Partner"]         = relationship()
     parts:    Mapped[list["MoldPart"]]  = relationship(back_populates="order", cascade="all, delete-orphan")

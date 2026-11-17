@@ -215,6 +215,10 @@ with engine.connect() as _conn:
         # HR — 지각 여부 (생산직만 체크)
         "ALTER TABLE hr_attendance ADD COLUMN IF NOT EXISTS late BOOLEAN DEFAULT FALSE",
         "ALTER TABLE hr_attendance ADD COLUMN IF NOT EXISTS leave_type VARCHAR(10)",
+        # 금형 — MES 연동 생산 샷수 누적 + PM 주기 관리
+        "ALTER TABLE mold_order ADD COLUMN IF NOT EXISTS production_shot_count INTEGER DEFAULT 0",
+        "ALTER TABLE mold_order ADD COLUMN IF NOT EXISTS pm_cycle_shot INTEGER DEFAULT 500000",
+        "ALTER TABLE mold_order ADD COLUMN IF NOT EXISTS last_pm_shot INTEGER DEFAULT 0",
     ]:
         try:
             _conn.execute(_text(_sql))

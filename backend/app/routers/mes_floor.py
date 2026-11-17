@@ -350,6 +350,47 @@ def update_wo_actual(wo_no: str, body: WOActualUpdate, db: Session = Depends(get
     return _wo_with_qr(wo)
 
 
+@router.post("/work-orders/{wo_no}/cancel")
+def cancel_wo(wo_no: str, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+    """⑤ WO 취소 — 자재 불출 역전표 자동 생성"""
+    wo = db.get(MesWorkOrder, wo_no)
+    if not wo:
+        raise HTTPException(404, f"작업지시 없음: {wo_no}")
+    if wo.status in (WOStatus.completed, WOStatus.closed):
+        raise HTTPException(400, f"완료/마감된 작업지시는 취소 불가")
+    if wo.status == WOStatus.cancelled:
+        raise HTTPException(400, "이미 취소된 작업지시")
+
+    # 자재 불출 역전표 (소모로 차감된 것 복원)
+    consumed = db.query(StockLedger).filter(
+        StockLedger.ref_no == wo_no,
+        StockLedger.ref_type == "WO",
+        StockLedger.ledger_type == LedgerType.consumption,
+    ).all()
+    today_date = date.today()
+    for entry in consumed:
+        db.add(StockLedger(
+            txn_date=today_date,
+            part_no=entry.part_no,
+            ledger_type=LedgerType.cancel,
+            qty=-entry.qty,  # 원래 음수였으므로 반전하면 양수
+            unit_price=entry.unit_price,
+            ref_type="WO",
+            ref_no=wo_no,
+            note=f"작업지시취소 역전표 (원전표 #{entry.id})",
+        ))
+
+    wo.status = WOStatus.cancelled
+    # 진행중인 세션도 중단
+    for s in wo.sessions:
+        if s.status == SessionStatus.running:
+            s.status = SessionStatus.stopped
+            s.end_time = datetime.now()
+
+    db.commit()
+    return {"ok": True, "reversed_entries": len(consumed)}
+
+
 def _wo_with_qr(wo: MesWorkOrder) -> dict:
     """작업지시서 + QR 인코딩 데이터"""
     qr_data = json.dumps({
@@ -524,19 +565,28 @@ def complete_session(session_id: int, db: Session = Depends(get_db)):
     if total_good >= wo.target_qty:
         wo.status = WOStatus.completed
 
-    # 재고원장 반영 (완성품 입고)
+    # ① 재고원장 반영 — 완성품 생산입고
     from app.services.ledger_service import post_ledger
-    from app.models.ledger import LedgerType
     from app.models.master import Item
     item = db.get(Item, wo.part_no)
     avg_cost = float(item.avg_cost or item.std_buy_price or 0) if item else 0
     if session.good_qty > 0:
         post_ledger(
             db, wo.part_no, date.today(),
-            LedgerType.receipt, session.good_qty, avg_cost,
-            ref_type="MES", ref_no=session.wo_no,
-            note=f"MES생산확정 {session.machine_id}",
+            LedgerType.production, session.good_qty, avg_cost,
+            ref_type="WO", ref_no=session.wo_no,
+            note=f"MES생산입고 {session.machine_id}",
         )
+
+    # ② 금형 샷수 자동 누적
+    if wo.mold_no:
+        from app.models.mold import MoldOrder
+        mold = db.get(MoldOrder, wo.mold_no)
+        if mold:
+            mold.production_shot_count = (mold.production_shot_count or 0) + session.shot_count
+            since_pm = mold.production_shot_count - (mold.last_pm_shot or 0)
+            if since_pm >= (mold.pm_cycle_shot or 500000):
+                pass  # 알림 플래그 → Andon or 별도 로직으로 확장 가능
 
     db.commit()
     return _session_detail(db, session)
@@ -1346,6 +1396,53 @@ def create_checklist(body: ChecklistIn, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(cl)
     return {"id": cl.id, "is_complete": is_complete}
+
+@router.get("/defect-pareto")
+def defect_pareto(
+    start: Optional[date] = None,
+    end: Optional[date] = None,
+    machine_id: Optional[str] = None,
+    part_no: Optional[str] = None,
+    db: Session = Depends(get_db),
+):
+    """③ 불량 유형별 파레토 집계"""
+    from sqlalchemy import func as sqlfunc
+    if not start:
+        start = date.today().replace(day=1)
+    if not end:
+        end = date.today()
+
+    q = db.query(
+        ProdLog.defect_type,
+        sqlfunc.sum(ProdLog.defect_qty).label("count"),
+    ).join(WorkerSession, ProdLog.session_id == WorkerSession.id)
+
+    if machine_id:
+        q = q.filter(WorkerSession.machine_id == machine_id)
+    if part_no:
+        q = q.join(MesWorkOrder, WorkerSession.wo_no == MesWorkOrder.wo_no).filter(MesWorkOrder.part_no == part_no)
+
+    q = q.filter(
+        ProdLog.defect_qty > 0,
+        ProdLog.defect_type != None,
+        ProdLog.logged_at >= datetime.combine(start, dt_time.min),
+        ProdLog.logged_at <= datetime.combine(end, dt_time.max),
+    )
+    rows = q.group_by(ProdLog.defect_type).order_by(sqlfunc.sum(ProdLog.defect_qty).desc()).all()
+
+    total = sum(r.count for r in rows) or 1
+    cumulative = 0
+    result = []
+    for r in rows:
+        cumulative += r.count
+        result.append({
+            "defect_type": r.defect_type or "미분류",
+            "count": int(r.count),
+            "pct": round(r.count / total * 100, 1),
+            "cumulative_pct": round(cumulative / total * 100, 1),
+        })
+    return {"total": int(total), "items": result}
+
 
 @router.get("/setup-checklist")
 def get_checklist(wo_no: str, db: Session = Depends(get_db)):
