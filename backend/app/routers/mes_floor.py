@@ -34,6 +34,7 @@ from app.models.mes_floor import (
     WOStatus, SessionStatus, DowntimeReason, MachineStatus, AndonCall, MesPallet,
     ArticleInspection, WorkerSessionCost, FiveWhy,
     SetupChecklist, ShiftHandover, MaterialRequisition,
+    ProcessCondition, MoldPmPlan, WorkerSkill,
 )
 from app.models.master import Item, BomLine
 from app.models.ledger import StockLedger, LedgerType
@@ -309,12 +310,16 @@ def update_wo_status(wo_no: str, body: WOStatusUpdate, db: Session = Depends(get
     wo = db.get(MesWorkOrder, wo_no)
     if not wo:
         raise HTTPException(404, f"작업지시 없음: {wo_no}")
-    current = wo.status if isinstance(wo.status, str) else wo.status.value
+    current = wo.status.value if hasattr(wo.status, 'value') else str(wo.status)
     next_allowed = STATUS_FLOW.get(current)
     if next_allowed != body.status:
         raise HTTPException(400, f"현재 상태 '{current}'에서 '{body.status}'로 변경 불가 (다음: {next_allowed})")
-    wo.status = body.status
+    try:
+        wo.status = WOStatus(body.status)
+    except ValueError:
+        raise HTTPException(400, f"유효하지 않은 상태값: {body.status}")
     db.commit()
+    db.refresh(wo)
     return _wo_with_qr(wo)
 
 
@@ -346,8 +351,8 @@ def update_wo_actual(wo_no: str, body: WOActualUpdate, db: Session = Depends(get
         db.flush()
     direct_session.good_qty = body.good_qty
     direct_session.defect_qty = body.defect_qty
-    if wo.status == "대기":
-        wo.status = "진행"
+    if wo.status == WOStatus.pending or (hasattr(wo.status, 'value') and wo.status.value == "대기"):
+        wo.status = WOStatus.running
     db.commit()
     return _wo_with_qr(wo)
 
@@ -1715,17 +1720,17 @@ def list_five_why(andon_id: Optional[int] = None, limit: int = 50, db: Session =
 @router.get("/spc-chart")
 def spc_chart(
     part_no: str,
-    dim: str = "dim1",   # dim1 / dim2 / dim3
+    dim: str = "dim1",
     limit_groups: int = 25,
+    usl: Optional[float] = None,
+    lsl: Optional[float] = None,
     db: Session = Depends(get_db),
 ):
-    """Xbar-R 관리도 데이터"""
-    import math
-    # A2, D3, D4 상수 (n=3 기준)
-    A2, D3, D4 = 1.023, 0.0, 2.574
+    """Xbar-R 관리도 + Cp/Cpk 공정능력지수 (n=3)"""
+    # A2, D3, D4, d2 상수 (n=3 기준)
+    A2, D3, D4, d2 = 1.023, 0.0, 2.574, 1.693
 
     actual_col = getattr(ArticleInspection, f"{dim}_actual", None)
-    spec_col   = getattr(ArticleInspection, f"{dim}_spec",   None)
     if actual_col is None:
         raise HTTPException(400, f"잘못된 dim: {dim}")
 
@@ -1737,12 +1742,13 @@ def spc_chart(
     ).order_by(ArticleInspection.created_at).all()
 
     if not rows:
-        return {"part_no": part_no, "dim": dim, "groups": [], "ucl_x": None, "lcl_x": None, "ucl_r": None, "spec": None}
+        return {"part_no": part_no, "dim": dim, "groups": [], "ucl_x": None, "lcl_x": None, "ucl_r": None, "spec": None, "cp": None, "cpk": None}
 
-    # 첫 번째 행의 규격값 (spec)
     spec_val = getattr(rows[0], f"{dim}_spec", None)
+    # spec 값 기반 USL/LSL 추정 (파라미터 없을 때)
+    if usl is None and lsl is None and spec_val:
+        pass  # caller 미제공시 Cp/Cpk 계산 불가
 
-    # 3개씩 묶어 서브그룹 형성
     n = 3
     groups = []
     for i in range(0, len(rows), n):
@@ -1760,9 +1766,8 @@ def spc_chart(
         })
 
     if not groups:
-        return {"part_no": part_no, "dim": dim, "groups": [], "ucl_x": None, "lcl_x": None, "ucl_r": None, "spec": spec_val}
+        return {"part_no": part_no, "dim": dim, "groups": [], "ucl_x": None, "lcl_x": None, "ucl_r": None, "spec": spec_val, "cp": None, "cpk": None}
 
-    # 최근 25그룹만
     groups = groups[-limit_groups:]
 
     xbar_bar = sum(g["xbar"] for g in groups) / len(groups)
@@ -1772,11 +1777,29 @@ def spc_chart(
     ucl_r = round(D4 * r_bar, 4)
     lcl_r = round(D3 * r_bar, 4)
 
+    # Cp/Cpk 계산 (σ = R̄/d2)
+    cp = cpk = cpu = cpl = None
+    sigma = r_bar / d2 if r_bar > 0 else 0
+    if sigma > 0 and usl is not None and lsl is not None:
+        cp  = round((usl - lsl) / (6 * sigma), 3)
+        cpu = round((usl - xbar_bar) / (3 * sigma), 3)
+        cpl = round((xbar_bar - lsl) / (3 * sigma), 3)
+        cpk = round(min(cpu, cpl), 3)
+    elif sigma > 0 and usl is not None:
+        cpu = round((usl - xbar_bar) / (3 * sigma), 3)
+        cpk = cpu
+    elif sigma > 0 and lsl is not None:
+        cpl = round((xbar_bar - lsl) / (3 * sigma), 3)
+        cpk = cpl
+
     return {
         "part_no": part_no, "dim": dim,
         "xbar_bar": round(xbar_bar, 4), "r_bar": round(r_bar, 4),
         "ucl_x": ucl_x, "lcl_x": lcl_x, "ucl_r": ucl_r, "lcl_r": lcl_r,
         "spec": float(spec_val) if spec_val else None,
+        "sigma": round(sigma, 4),
+        "cp": cp, "cpk": cpk, "cpu": cpu, "cpl": cpl,
+        "usl": usl, "lsl": lsl,
         "groups": groups,
     }
 
@@ -1952,3 +1975,552 @@ def delivery_tracking(
 
     result.sort(key=lambda x: x["due_date"])
     return {"year": year, "month": month, "items": result}
+
+
+# ═══════════════════════════════════════════════════════════════════
+# ② 공정 조건 기록표
+# ═══════════════════════════════════════════════════════════════════
+
+class ProcessConditionIn(BaseModel):
+    session_id: int
+    wo_no: str
+    machine_id: str
+    barrel_temp1: Optional[float] = None
+    barrel_temp2: Optional[float] = None
+    barrel_temp3: Optional[float] = None
+    mold_temp_core: Optional[float] = None
+    mold_temp_cav: Optional[float] = None
+    injection_pressure: Optional[float] = None
+    holding_pressure: Optional[float] = None
+    back_pressure: Optional[float] = None
+    injection_speed: Optional[float] = None
+    cooling_time: Optional[float] = None
+    cycle_time: Optional[float] = None
+    shot_weight: Optional[float] = None
+    recorded_by: Optional[str] = None
+    note: Optional[str] = None
+
+
+@router.post("/process-condition")
+def add_process_condition(body: ProcessConditionIn, db: Session = Depends(get_db)):
+    rec = ProcessCondition(**body.model_dump())
+    db.add(rec)
+    db.commit()
+    db.refresh(rec)
+    return {"id": rec.id, "created_at": rec.created_at.isoformat()}
+
+
+@router.get("/process-condition")
+def list_process_conditions(
+    session_id: Optional[int] = None,
+    wo_no: Optional[str] = None,
+    limit: int = 50,
+    db: Session = Depends(get_db),
+):
+    q = db.query(ProcessCondition)
+    if session_id:
+        q = q.filter(ProcessCondition.session_id == session_id)
+    if wo_no:
+        q = q.filter(ProcessCondition.wo_no == wo_no)
+    rows = q.order_by(ProcessCondition.created_at.desc()).limit(limit).all()
+    return [
+        {
+            "id": r.id, "session_id": r.session_id, "wo_no": r.wo_no, "machine_id": r.machine_id,
+            "barrel_temp1": r.barrel_temp1, "barrel_temp2": r.barrel_temp2, "barrel_temp3": r.barrel_temp3,
+            "mold_temp_core": r.mold_temp_core, "mold_temp_cav": r.mold_temp_cav,
+            "injection_pressure": r.injection_pressure, "holding_pressure": r.holding_pressure,
+            "back_pressure": r.back_pressure, "injection_speed": r.injection_speed,
+            "cooling_time": r.cooling_time, "cycle_time": r.cycle_time, "shot_weight": r.shot_weight,
+            "recorded_by": r.recorded_by, "note": r.note,
+            "created_at": r.created_at.isoformat(),
+        }
+        for r in rows
+    ]
+
+
+# ═══════════════════════════════════════════════════════════════════
+# ③ 금형 PM 캘린더
+# ═══════════════════════════════════════════════════════════════════
+
+class PmPlanIn(BaseModel):
+    mold_no: str
+    plan_date: str         # YYYY-MM-DD
+    pm_type: str = "정기"
+    description: Optional[str] = None
+    note: Optional[str] = None
+
+
+@router.post("/pm-plan")
+def add_pm_plan(body: PmPlanIn, db: Session = Depends(get_db)):
+    rec = MoldPmPlan(
+        mold_no=body.mold_no,
+        plan_date=date.fromisoformat(body.plan_date),
+        pm_type=body.pm_type,
+        description=body.description,
+        note=body.note,
+    )
+    db.add(rec)
+    db.commit()
+    db.refresh(rec)
+    return {"id": rec.id}
+
+
+@router.patch("/pm-plan/{plan_id}/complete")
+def complete_pm_plan(
+    plan_id: int,
+    completed_by: Optional[str] = None,
+    note: Optional[str] = None,
+    db: Session = Depends(get_db),
+):
+    rec = db.get(MoldPmPlan, plan_id)
+    if not rec:
+        raise HTTPException(404, "PM 계획 없음")
+    rec.status = "완료"
+    rec.completed_date = date.today()
+    if completed_by:
+        rec.completed_by = completed_by
+    if note:
+        rec.note = note
+    # 금형 last_pm_shot 갱신
+    from app.models.mold import MoldOrder
+    mold = db.get(MoldOrder, rec.mold_no)
+    if mold:
+        mold.last_pm_shot = mold.production_shot_count or 0
+    db.commit()
+    return {"ok": True}
+
+
+@router.get("/pm-calendar")
+def pm_calendar(
+    year: int,
+    month: int,
+    db: Session = Depends(get_db),
+):
+    month_start = date(year, month, 1)
+    month_end = date(year, month + 1, 1) if month < 12 else date(year + 1, 1, 1)
+    rows = db.query(MoldPmPlan).filter(
+        MoldPmPlan.plan_date >= month_start,
+        MoldPmPlan.plan_date < month_end,
+    ).order_by(MoldPmPlan.plan_date).all()
+
+    # 미완료 금형 PM 주의 목록
+    from app.models.mold import MoldOrder
+    molds_due = db.query(MoldOrder).filter(
+        MoldOrder.production_shot_count != None,
+        MoldOrder.pm_cycle_shot != None,
+    ).all()
+    overdue = []
+    for m in molds_due:
+        since = (m.production_shot_count or 0) - (m.last_pm_shot or 0)
+        if since >= (m.pm_cycle_shot or 500000):
+            overdue.append({"mold_no": m.mold_no, "mold_name": m.mold_name, "since_pm_shot": since, "pm_cycle_shot": m.pm_cycle_shot})
+
+    return {
+        "year": year, "month": month,
+        "plans": [
+            {
+                "id": r.id, "mold_no": r.mold_no, "plan_date": str(r.plan_date),
+                "pm_type": r.pm_type, "description": r.description, "status": r.status,
+                "completed_date": str(r.completed_date) if r.completed_date else None,
+                "completed_by": r.completed_by,
+            }
+            for r in rows
+        ],
+        "overdue_molds": overdue,
+    }
+
+
+# ═══════════════════════════════════════════════════════════════════
+# ④ 작업자 스킬 매트릭스
+# ═══════════════════════════════════════════════════════════════════
+
+class WorkerSkillIn(BaseModel):
+    worker_id: str
+    machine_id: str
+    part_no: Optional[str] = None
+    skill_level: str = "견습"   # 견습/보조/주작업자/교사
+    certified_at: Optional[str] = None
+    certified_by: Optional[str] = None
+    valid_until: Optional[str] = None
+    note: Optional[str] = None
+
+
+@router.post("/worker-skill")
+def upsert_worker_skill(body: WorkerSkillIn, db: Session = Depends(get_db)):
+    existing = db.query(WorkerSkill).filter(
+        WorkerSkill.worker_id == body.worker_id,
+        WorkerSkill.machine_id == body.machine_id,
+        WorkerSkill.part_no == body.part_no,
+    ).first()
+    if existing:
+        existing.skill_level = body.skill_level
+        existing.certified_at = date.fromisoformat(body.certified_at) if body.certified_at else existing.certified_at
+        existing.certified_by = body.certified_by or existing.certified_by
+        existing.valid_until = date.fromisoformat(body.valid_until) if body.valid_until else existing.valid_until
+        existing.note = body.note or existing.note
+        db.commit()
+        return {"id": existing.id, "updated": True}
+    rec = WorkerSkill(
+        worker_id=body.worker_id,
+        machine_id=body.machine_id,
+        part_no=body.part_no,
+        skill_level=body.skill_level,
+        certified_at=date.fromisoformat(body.certified_at) if body.certified_at else None,
+        certified_by=body.certified_by,
+        valid_until=date.fromisoformat(body.valid_until) if body.valid_until else None,
+        note=body.note,
+    )
+    db.add(rec)
+    db.commit()
+    db.refresh(rec)
+    return {"id": rec.id, "updated": False}
+
+
+@router.get("/worker-skill")
+def list_worker_skills(
+    worker_id: Optional[str] = None,
+    machine_id: Optional[str] = None,
+    db: Session = Depends(get_db),
+):
+    q = db.query(WorkerSkill)
+    if worker_id:
+        q = q.filter(WorkerSkill.worker_id == worker_id)
+    if machine_id:
+        q = q.filter(WorkerSkill.machine_id == machine_id)
+    rows = q.all()
+
+    from app.models.auth import User as AuthUser
+    users = {u.username: u.name for u in db.query(AuthUser).all()}
+    machines_q = {m.machine_id: m.name for m in db.query(Machine).all()}
+
+    # 매트릭스 형태로 변환
+    skill_map: dict = {}
+    for r in rows:
+        wid = r.worker_id
+        if wid not in skill_map:
+            skill_map[wid] = {"worker_id": wid, "worker_name": users.get(wid, wid), "skills": []}
+        skill_map[wid]["skills"].append({
+            "id": r.id,
+            "machine_id": r.machine_id,
+            "machine_name": machines_q.get(r.machine_id, r.machine_id),
+            "part_no": r.part_no,
+            "skill_level": r.skill_level,
+            "certified_at": str(r.certified_at) if r.certified_at else None,
+            "certified_by": r.certified_by,
+            "valid_until": str(r.valid_until) if r.valid_until else None,
+        })
+    return list(skill_map.values())
+
+
+# ═══════════════════════════════════════════════════════════════════
+# ⑤ 재고 ABC 분석
+# ═══════════════════════════════════════════════════════════════════
+
+@router.get("/abc-analysis")
+def abc_analysis(
+    days: int = 365,
+    db: Session = Depends(get_db),
+):
+    """재고 ABC 분석 — 이동금액 기준 A(70%) / B(20%) / C(10%) 분류"""
+    from app.models.ledger import StockLedger as SL
+    from app.models.master import Item
+    from sqlalchemy import func as sqlfunc
+    cutoff = datetime.now() - timedelta(days=days)
+
+    # 품목별 이동금액 합산 (입출고 절댓값 기준)
+    rows = db.query(
+        SL.part_no,
+        sqlfunc.sum(sqlfunc.abs(SL.qty * SL.unit_price)).label("move_val"),
+        sqlfunc.max(SL.txn_date).label("last_move"),
+    ).filter(
+        SL.txn_date >= cutoff.date(),
+    ).group_by(SL.part_no).all()
+
+    total_val = sum(float(r.move_val or 0) for r in rows)
+    if total_val == 0:
+        return {"total_items": 0, "items": []}
+
+    items_sorted = sorted(rows, key=lambda r: float(r.move_val or 0), reverse=True)
+
+    result = []
+    cum = 0.0
+    dead_cutoff = date.today() - timedelta(days=90)
+    for r in items_sorted:
+        mv = float(r.move_val or 0)
+        cum += mv
+        pct = cum / total_val
+        cls = "A" if pct <= 0.7 else "B" if pct <= 0.9 else "C"
+        last = r.last_move
+        dead = (last < dead_cutoff) if last else True
+
+        item = db.get(Item, r.part_no)
+        result.append({
+            "part_no": r.part_no,
+            "part_name": item.name if item else r.part_no,
+            "move_value": round(mv, 0),
+            "cumulative_pct": round(cum / total_val * 100, 1),
+            "abc_class": cls,
+            "last_move": str(last) if last else None,
+            "dead_stock": dead,
+        })
+
+    summary = {"A": 0, "B": 0, "C": 0, "dead": 0}
+    for r in result:
+        summary[r["abc_class"]] += 1
+        if r["dead_stock"]:
+            summary["dead"] += 1
+
+    return {"total_items": len(result), "summary": summary, "items": result}
+
+
+# ═══════════════════════════════════════════════════════════════════
+# ⑥ MRP 자재 부족 예측
+# ═══════════════════════════════════════════════════════════════════
+
+@router.get("/mrp-alert")
+def mrp_alert(
+    days: int = 30,
+    db: Session = Depends(get_db),
+):
+    """향후 N일 작업지시 BOM 수요 vs 현재고 부족 예측"""
+    from app.models.master import BomLine, Item
+    from app.models.ledger import StockLedger as SL
+    from sqlalchemy import func as sqlfunc
+
+    horizon = date.today() + timedelta(days=days)
+    pending_wos = db.query(MesWorkOrder).filter(
+        MesWorkOrder.plan_date <= horizon,
+        MesWorkOrder.plan_date >= date.today(),
+        MesWorkOrder.status.in_(["대기", "자재확인", "발행", WOStatus.pending, WOStatus.material_check, WOStatus.issued]),
+    ).all()
+
+    # 품목별 필요 수량 집계
+    demand: dict = {}
+    wo_map: dict = {}
+    for wo in pending_wos:
+        boms = db.query(BomLine).filter(BomLine.product_part_no == wo.part_no).all()
+        for b in boms:
+            comp = b.component_part_no
+            needed = float(b.qty_per) * wo.target_qty
+            demand[comp] = demand.get(comp, 0) + needed
+            if comp not in wo_map:
+                wo_map[comp] = []
+            wo_map[comp].append({"wo_no": wo.wo_no, "part_no": wo.part_no, "qty": needed})
+
+    # 현재고 계산
+    stock_rows = db.query(
+        SL.part_no,
+        sqlfunc.sum(SL.qty).label("on_hand"),
+    ).group_by(SL.part_no).all()
+    stock_map = {r.part_no: float(r.on_hand or 0) for r in stock_rows}
+
+    alerts = []
+    for part_no, need in demand.items():
+        on_hand = stock_map.get(part_no, 0)
+        shortage = need - on_hand
+        item = db.get(Item, part_no)
+        alerts.append({
+            "part_no": part_no,
+            "part_name": item.name if item else part_no,
+            "required_qty": round(need, 2),
+            "on_hand_qty": round(on_hand, 2),
+            "shortage_qty": round(max(0, shortage), 2),
+            "is_short": shortage > 0,
+            "related_wos": wo_map.get(part_no, []),
+        })
+
+    alerts.sort(key=lambda x: -x["shortage_qty"])
+    return {
+        "horizon_days": days,
+        "wo_count": len(pending_wos),
+        "shortage_items": sum(1 for a in alerts if a["is_short"]),
+        "items": alerts,
+    }
+
+
+# ═══════════════════════════════════════════════════════════════════
+# ⑦ 월별 손익 자동화
+# ═══════════════════════════════════════════════════════════════════
+
+@router.get("/monthly-pl")
+def monthly_pl(
+    year: int,
+    month: int,
+    db: Session = Depends(get_db),
+):
+    """월별 손익 = 출하 매출 - 실원가"""
+    from app.models.sales import SalesOrder, Shipment
+    from app.models.master import Item
+    month_start = date(year, month, 1)
+    month_end = date(year, month + 1, 1) if month < 12 else date(year + 1, 1, 1)
+
+    # 출하 매출 (출하수량 × 품목 표준판가)
+    shipments = db.query(Shipment).filter(
+        Shipment.ship_date >= month_start,
+        Shipment.ship_date < month_end,
+    ).all()
+
+    revenue_by_part: dict = {}
+    for s in shipments:
+        item = db.get(Item, s.part_no)
+        price = float(item.std_sell_price or item.std_buy_price or 0) if item else 0
+        part = s.part_no
+        if part not in revenue_by_part:
+            revenue_by_part[part] = {"part_no": part, "part_name": item.name if item else part, "revenue": 0, "qty": 0}
+        revenue_by_part[part]["revenue"] += price * s.qty
+        revenue_by_part[part]["qty"] += s.qty
+
+    # 실원가 (WorkerSessionCost 집계)
+    costs = db.query(WorkerSessionCost).join(
+        WorkerSession, WorkerSessionCost.session_id == WorkerSession.id
+    ).filter(
+        WorkerSession.start_time >= datetime.combine(month_start, dt_time.min),
+        WorkerSession.start_time < datetime.combine(month_end, dt_time.min),
+    ).all()
+
+    cost_by_part: dict = {}
+    for c in costs:
+        p = c.part_no
+        if p not in cost_by_part:
+            cost_by_part[p] = {"total_cost": 0, "material_cost": 0, "labor_cost": 0, "good_qty": 0}
+        cost_by_part[p]["total_cost"] += float(c.total_cost)
+        cost_by_part[p]["material_cost"] += float(c.material_cost)
+        cost_by_part[p]["labor_cost"] += float(c.labor_cost)
+        cost_by_part[p]["good_qty"] += c.good_qty
+
+    # 품목별 손익 조합
+    all_parts = set(revenue_by_part) | set(cost_by_part)
+    items = []
+    for p in all_parts:
+        rv = revenue_by_part.get(p, {})
+        co = cost_by_part.get(p, {})
+        revenue = rv.get("revenue", 0)
+        total_cost = co.get("total_cost", 0)
+        profit = revenue - total_cost
+        margin = round(profit / revenue * 100, 1) if revenue > 0 else None
+        items.append({
+            "part_no": p,
+            "part_name": rv.get("part_name", co.get("part_name", p)),
+            "shipped_qty": rv.get("qty", 0),
+            "good_qty_produced": co.get("good_qty", 0),
+            "revenue": round(revenue, 0),
+            "material_cost": round(co.get("material_cost", 0), 0),
+            "labor_cost": round(co.get("labor_cost", 0), 0),
+            "total_cost": round(total_cost, 0),
+            "profit": round(profit, 0),
+            "margin_pct": margin,
+        })
+
+    items.sort(key=lambda x: -abs(x["profit"]))
+    total_rev = sum(i["revenue"] for i in items)
+    total_cost_sum = sum(i["total_cost"] for i in items)
+    total_profit = total_rev - total_cost_sum
+
+    return {
+        "year": year, "month": month,
+        "total_revenue": round(total_rev, 0),
+        "total_cost": round(total_cost_sum, 0),
+        "total_profit": round(total_profit, 0),
+        "total_margin_pct": round(total_profit / total_rev * 100, 1) if total_rev > 0 else None,
+        "items": items,
+    }
+
+
+# ═══════════════════════════════════════════════════════════════════
+# ⑧ 클레임 LOT 역추적
+# ═══════════════════════════════════════════════════════════════════
+
+@router.get("/claim-trace")
+def claim_trace(
+    part_no: str,
+    date_from: str,
+    date_to: str,
+    db: Session = Depends(get_db),
+):
+    """클레임 LOT 역추적 — 품번 + 기간 → 세션·검사·공정조건·안돈 풀 체인"""
+    d_from = date.fromisoformat(date_from)
+    d_to   = date.fromisoformat(date_to)
+
+    # 1. 작업지시 → 세션
+    wos = db.query(MesWorkOrder).filter(
+        MesWorkOrder.part_no == part_no,
+        MesWorkOrder.plan_date >= d_from,
+        MesWorkOrder.plan_date <= d_to,
+    ).all()
+
+    result = []
+    for wo in wos:
+        for sess in wo.sessions:
+            if sess.start_time.date() < d_from or sess.start_time.date() > d_to:
+                continue
+
+            # 검사 기록
+            inspections = db.query(ArticleInspection).filter(
+                ArticleInspection.session_id == sess.id
+            ).all()
+
+            # 공정 조건
+            conditions = db.query(ProcessCondition).filter(
+                ProcessCondition.session_id == sess.id
+            ).all()
+
+            # 안돈
+            andons = db.query(AndonCall).filter(
+                AndonCall.machine_id == sess.machine_id,
+                AndonCall.called_at >= sess.start_time,
+                AndonCall.called_at <= (sess.end_time or datetime.now()),
+            ).all()
+
+            # 파렛트 LOT
+            pallets = db.query(MesPallet).filter(
+                MesPallet.session_id == sess.id
+            ).all()
+
+            result.append({
+                "wo_no": wo.wo_no,
+                "session_id": sess.id,
+                "machine_id": sess.machine_id,
+                "worker_id": sess.worker_id,
+                "start_time": sess.start_time.isoformat(),
+                "end_time": sess.end_time.isoformat() if sess.end_time else None,
+                "good_qty": sess.good_qty,
+                "defect_qty": sess.defect_qty,
+                "status": sess.status.value if hasattr(sess.status, 'value') else str(sess.status),
+                "pallets": [{"pallet_id": p.pallet_id, "qty": p.qty} for p in pallets],
+                "inspections": [
+                    {
+                        "id": i.id, "insp_type": i.insp_type, "result": i.result,
+                        "dim1_spec": i.dim1_spec, "dim1_actual": i.dim1_actual,
+                        "appearance": i.appearance, "note": i.note,
+                        "created_at": i.created_at.isoformat(),
+                    }
+                    for i in inspections
+                ],
+                "process_conditions": [
+                    {
+                        "id": c.id,
+                        "barrel_temp1": c.barrel_temp1, "injection_pressure": c.injection_pressure,
+                        "cycle_time": c.cycle_time, "recorded_by": c.recorded_by,
+                        "created_at": c.created_at.isoformat(),
+                    }
+                    for c in conditions
+                ],
+                "andons": [
+                    {
+                        "id": a.id, "andon_type": a.andon_type, "caller_id": a.caller_id,
+                        "note": a.note, "is_resolved": a.is_resolved,
+                        "called_at": a.called_at.isoformat(),
+                    }
+                    for a in andons
+                ],
+            })
+
+    result.sort(key=lambda x: x["start_time"])
+    return {
+        "part_no": part_no,
+        "date_from": date_from,
+        "date_to": date_to,
+        "wo_count": len(wos),
+        "session_count": len(result),
+        "sessions": result,
+    }

@@ -54,6 +54,13 @@ export default function WorkerScreen() {
   const [matReqForm, setMatReqForm] = useState({ part_no: '', req_qty: '', reason: '' })
   const [inspModal, setInspModal] = useState(null) // { type: '초물'|'중간'|'종물' }
   const [inspForm, setInspForm] = useState({ result: 'OK', appearance: 'OK', dim1_spec: '', dim1_actual: '', dim2_spec: '', dim2_actual: '', note: '' })
+  const [procCondModal, setProcCondModal] = useState(false)
+  const [procCondForm, setProcCondForm] = useState({
+    barrel_temp1: '', barrel_temp2: '', barrel_temp3: '',
+    mold_temp_core: '', mold_temp_cav: '',
+    injection_pressure: '', holding_pressure: '', back_pressure: '',
+    injection_speed: '', cooling_time: '', cycle_time: '', shot_weight: '',
+  })
   const [items, setItems] = useState([])
   const [myReqs, setMyReqs] = useState([])
 
@@ -456,8 +463,12 @@ export default function WorkerScreen() {
                 📦 자재 출고 요청
               </button>
               <button onClick={() => setInspModal({ type: '초물' })} disabled={loading}
-                style={{ padding: '11px', borderRadius: 8, border: '1px solid #0ea5e9', background: 'transparent', color: '#38bdf8', fontSize: 12, fontWeight: 600, cursor: 'pointer', gridColumn: 'span 2' }}>
+                style={{ padding: '11px', borderRadius: 8, border: '1px solid #0ea5e9', background: 'transparent', color: '#38bdf8', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
                 🔍 초·중·종물 검사
+              </button>
+              <button onClick={() => setProcCondModal(true)} disabled={loading}
+                style={{ padding: '11px', borderRadius: 8, border: '1px solid #7c3aed', background: 'transparent', color: '#a78bfa', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+                🧪 공정 조건 기록
               </button>
             </div>
 
@@ -817,6 +828,52 @@ export default function WorkerScreen() {
               </button>
               <button onClick={() => setInspModal(null)}
                 style={{ flex: 1, padding: '12px', borderRadius: 10, border: '1px solid #334155', background: 'transparent', color: '#94a3b8', fontSize: 13, cursor: 'pointer' }}>
+                닫기
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── 공정 조건 기록 모달 ── */}
+      {procCondModal && session && (
+        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.75)', zIndex:200, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}>
+          <div style={{ background:'#1e293b', borderRadius:16, padding:24, width:'100%', maxWidth:480, maxHeight:'90vh', overflowY:'auto' }}>
+            <div style={{ fontSize:15, fontWeight:800, marginBottom:16, color:'#e2e8f0' }}>🧪 공정 조건 기록</div>
+            {[
+              ['노즐온도 (℃)', 'barrel_temp1'], ['1존온도 (℃)', 'barrel_temp2'], ['2존온도 (℃)', 'barrel_temp3'],
+              ['코어온도 (℃)', 'mold_temp_core'], ['캐비티온도 (℃)', 'mold_temp_cav'],
+              ['사출압 (MPa)', 'injection_pressure'], ['보압 (MPa)', 'holding_pressure'], ['배압 (MPa)', 'back_pressure'],
+              ['사출속도 (mm/s)', 'injection_speed'], ['냉각시간 (sec)', 'cooling_time'], ['사이클 (sec)', 'cycle_time'],
+              ['숏트중량 (g)', 'shot_weight'],
+            ].map(([label, key]) => (
+              <div key={key} style={{ marginBottom:10 }}>
+                <div style={{ fontSize:11, color:'#94a3b8', marginBottom:4 }}>{label}</div>
+                <input
+                  type="number" step="0.1" inputMode="decimal"
+                  value={procCondForm[key]}
+                  onChange={e => setProcCondForm(f => ({ ...f, [key]: e.target.value }))}
+                  style={{ width:'100%', padding:'10px', borderRadius:8, border:'1px solid #334155', background:'#0f172a', color:'#e2e8f0', fontSize:14, boxSizing:'border-box' }}
+                  placeholder={label}
+                />
+              </div>
+            ))}
+            <div style={{ display:'flex', gap:10, marginTop:16 }}>
+              <button onClick={async () => {
+                try {
+                  const payload = { session_id: session.id, wo_no: session.wo_no, machine_id: session.machine_id, recorded_by: session.worker_id }
+                  Object.entries(procCondForm).forEach(([k, v]) => { if (v !== '') payload[k] = parseFloat(v) })
+                  await api.post('/mes-floor/process-condition', payload)
+                  flash('공정 조건 기록 완료')
+                  setProcCondModal(false)
+                  setProcCondForm({ barrel_temp1:'',barrel_temp2:'',barrel_temp3:'',mold_temp_core:'',mold_temp_cav:'',injection_pressure:'',holding_pressure:'',back_pressure:'',injection_speed:'',cooling_time:'',cycle_time:'',shot_weight:'' })
+                } catch { flash('기록 실패', true) }
+              }} disabled={loading}
+                style={{ flex:2, padding:'12px', borderRadius:10, border:'none', background:'#7c3aed', color:'#fff', fontSize:14, fontWeight:700, cursor:'pointer' }}>
+                기록 저장
+              </button>
+              <button onClick={() => setProcCondModal(false)}
+                style={{ flex:1, padding:'12px', borderRadius:10, border:'1px solid #334155', background:'transparent', color:'#94a3b8', fontSize:13, cursor:'pointer' }}>
                 닫기
               </button>
             </div>

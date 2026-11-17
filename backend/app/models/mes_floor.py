@@ -288,3 +288,60 @@ class SetupChecklist(Base):
     is_complete: Mapped[bool] = mapped_column(Boolean, default=False)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+
+
+class ProcessCondition(Base):
+    """공정 조건 기록표 — 사출 성형 조건 (IATF §8.5.1 공정 파라미터 관리)"""
+    __tablename__ = "mes_process_condition"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    session_id: Mapped[int] = mapped_column(ForeignKey("worker_session.id"), nullable=False)
+    wo_no: Mapped[str] = mapped_column(ForeignKey("mes_work_order.wo_no"), nullable=False)
+    machine_id: Mapped[str] = mapped_column(String(20), nullable=False)
+    barrel_temp1: Mapped[float | None] = mapped_column(Float, nullable=True)    # 노즐온도 ℃
+    barrel_temp2: Mapped[float | None] = mapped_column(Float, nullable=True)    # 1존온도 ℃
+    barrel_temp3: Mapped[float | None] = mapped_column(Float, nullable=True)    # 2존온도 ℃
+    mold_temp_core: Mapped[float | None] = mapped_column(Float, nullable=True)  # 코어온도 ℃
+    mold_temp_cav: Mapped[float | None] = mapped_column(Float, nullable=True)   # 캐비티온도 ℃
+    injection_pressure: Mapped[float | None] = mapped_column(Float, nullable=True)  # 사출압 MPa
+    holding_pressure: Mapped[float | None] = mapped_column(Float, nullable=True)    # 보압 MPa
+    back_pressure: Mapped[float | None] = mapped_column(Float, nullable=True)       # 배압 MPa
+    injection_speed: Mapped[float | None] = mapped_column(Float, nullable=True)     # 사출속도 mm/s
+    cooling_time: Mapped[float | None] = mapped_column(Float, nullable=True)        # 냉각시간 sec
+    cycle_time: Mapped[float | None] = mapped_column(Float, nullable=True)          # 사이클 sec
+    shot_weight: Mapped[float | None] = mapped_column(Float, nullable=True)         # 숏트중량 g
+    recorded_by: Mapped[str | None] = mapped_column(String(50))
+    note: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+
+
+class MoldPmPlan(Base):
+    """금형 PM 캘린더 — 예방보전 계획 및 완료 기록"""
+    __tablename__ = "mes_mold_pm_plan"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    mold_no: Mapped[str] = mapped_column(ForeignKey("mold.mold_no"), nullable=False)
+    plan_date: Mapped[date] = mapped_column(Date, nullable=False)
+    pm_type: Mapped[str] = mapped_column(String(20), default="정기")   # 정기/임시/마감
+    description: Mapped[str | None] = mapped_column(String(200))
+    status: Mapped[str] = mapped_column(String(10), default="계획")    # 계획/완료/연기
+    completed_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    completed_by: Mapped[str | None] = mapped_column(String(50))
+    note: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+
+
+class WorkerSkill(Base):
+    """작업자 스킬 매트릭스 — IATF §7.2 적격성 증거"""
+    __tablename__ = "mes_worker_skill"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    worker_id: Mapped[str] = mapped_column(ForeignKey("user.username"), nullable=False)
+    machine_id: Mapped[str] = mapped_column(ForeignKey("machine.machine_id"), nullable=False)
+    part_no: Mapped[str | None] = mapped_column(ForeignKey("item.part_no"), nullable=True)
+    skill_level: Mapped[str] = mapped_column(String(10), default="견습")  # 견습/보조/주작업자/교사
+    certified_at: Mapped[date | None] = mapped_column(Date, nullable=True)
+    certified_by: Mapped[str | None] = mapped_column(String(50))
+    valid_until: Mapped[date | None] = mapped_column(Date, nullable=True)
+    note: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)

@@ -897,6 +897,570 @@ function DefectPareto() {
 }
 
 
+/* ── 공정 조건 기록표 ───────────────────────────────────────────── */
+function ProcessConditionTab() {
+  const now = new Date()
+  const [woNo, setWoNo] = useState('')
+  const [data, setData] = useState([])
+  const [loading, setLoading] = useState(false)
+
+  const load = () => {
+    if (!woNo) return
+    setLoading(true)
+    api.get(`/mes-floor/process-condition?wo_no=${woNo}&limit=20`)
+      .then(r => setData(r.data)).catch(() => setData([]))
+      .finally(() => setLoading(false))
+  }
+
+  const fields = [
+    ['노즐온도', 'barrel_temp1', '℃'], ['1존온도', 'barrel_temp2', '℃'], ['2존온도', 'barrel_temp3', '℃'],
+    ['코어온도', 'mold_temp_core', '℃'], ['캐비티온도', 'mold_temp_cav', '℃'],
+    ['사출압', 'injection_pressure', 'MPa'], ['보압', 'holding_pressure', 'MPa'], ['배압', 'back_pressure', 'MPa'],
+    ['사출속도', 'injection_speed', 'mm/s'], ['냉각시간', 'cooling_time', 's'], ['사이클', 'cycle_time', 's'],
+    ['숏트중량', 'shot_weight', 'g'],
+  ]
+
+  return (
+    <div>
+      <div style={{ display:'flex', gap:10, marginBottom:16, alignItems:'center' }}>
+        <input value={woNo} onChange={e => setWoNo(e.target.value)} placeholder="작업지시번호 (WO-...)"
+          style={{ padding:'7px 12px', borderRadius:6, border:'1px solid #d1d5db', fontSize:13, width:220 }} />
+        <button onClick={load} style={{ padding:'7px 16px', borderRadius:6, background:'#1d4ed8', color:'#fff', border:'none', cursor:'pointer', fontSize:13 }}>조회</button>
+      </div>
+      {loading ? <div style={{ padding:30, textAlign:'center', color:'#94a3b8' }}>로딩 중...</div> : data.length === 0 ? (
+        <div style={{ padding:30, textAlign:'center', color:'#94a3b8' }}>공정 조건 기록 없음<br/><small>작업자 화면에서 공정 조건을 입력합니다</small></div>
+      ) : (
+        <div style={{ overflowX:'auto' }}>
+          <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
+            <thead>
+              <tr style={{ background:'#f8fafc' }}>
+                <th style={{ padding:'8px', textAlign:'left', borderBottom:'2px solid #e2e8f0', whiteSpace:'nowrap' }}>기록일시</th>
+                <th style={{ padding:'8px', textAlign:'left', borderBottom:'2px solid #e2e8f0' }}>기록자</th>
+                {fields.map(([label]) => (
+                  <th key={label} style={{ padding:'8px', textAlign:'right', borderBottom:'2px solid #e2e8f0', whiteSpace:'nowrap' }}>{label}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {data.map(r => (
+                <tr key={r.id} style={{ borderBottom:'1px solid #f1f5f9' }}>
+                  <td style={{ padding:'7px 8px', whiteSpace:'nowrap', color:'#64748b', fontSize:11 }}>{r.created_at?.slice(0,16)}</td>
+                  <td style={{ padding:'7px 8px' }}>{r.recorded_by || '-'}</td>
+                  {fields.map(([, key, unit]) => (
+                    <td key={key} style={{ padding:'7px 8px', textAlign:'right', fontVariantNumeric:'tabular-nums' }}>
+                      {r[key] != null ? `${r[key]} ${unit}` : '-'}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  )
+}
+
+
+/* ── 금형 PM 캘린더 ─────────────────────────────────────────────── */
+function PmCalendar() {
+  const now = new Date()
+  const [year, setYear] = useState(now.getFullYear())
+  const [month, setMonth] = useState(now.getMonth() + 1)
+  const [data, setData] = useState(null)
+  const [showForm, setShowForm] = useState(false)
+  const [form, setForm] = useState({ mold_no:'', plan_date:'', pm_type:'정기', description:'' })
+  const [molds, setMolds] = useState([])
+
+  const load = useCallback(() => {
+    Promise.all([
+      api.get(`/mes-floor/pm-calendar?year=${year}&month=${month}`).then(r => setData(r.data)).catch(() => {}),
+      api.get('/mold/list?limit=100').then(r => setMolds(r.data?.items || [])).catch(() => {}),
+    ])
+  }, [year, month])
+
+  useEffect(() => { load() }, [load])
+
+  const submit = async () => {
+    try {
+      await api.post('/mes-floor/pm-plan', form)
+      setShowForm(false); load()
+    } catch (e) { alert('등록 실패: ' + (e.response?.data?.detail || e.message)) }
+  }
+
+  const complete = async (id) => {
+    const by = prompt('완료 처리자 ID')
+    if (by === null) return
+    try { await api.patch(`/mes-floor/pm-plan/${id}/complete?completed_by=${by}`); load() }
+    catch (e) { alert('실패: ' + (e.response?.data?.detail || e.message)) }
+  }
+
+  const pmColor = (s) => s === '완료' ? '#16a34a' : s === '연기' ? '#d97706' : '#1d4ed8'
+
+  return (
+    <div>
+      <div style={{ display:'flex', gap:10, marginBottom:16, alignItems:'center', flexWrap:'wrap' }}>
+        <select value={year} onChange={e => setYear(+e.target.value)}
+          style={{ padding:'6px 10px', borderRadius:6, border:'1px solid #d1d5db', fontSize:13 }}>
+          {[now.getFullYear()-1, now.getFullYear(), now.getFullYear()+1].map(y => <option key={y} value={y}>{y}년</option>)}
+        </select>
+        <select value={month} onChange={e => setMonth(+e.target.value)}
+          style={{ padding:'6px 10px', borderRadius:6, border:'1px solid #d1d5db', fontSize:13 }}>
+          {Array.from({length:12},(_,i)=>i+1).map(m => <option key={m} value={m}>{m}월</option>)}
+        </select>
+        <button onClick={load} style={{ padding:'6px 14px', borderRadius:6, background:'#1d4ed8', color:'#fff', border:'none', cursor:'pointer', fontSize:13 }}>조회</button>
+        <button onClick={() => setShowForm(v => !v)} style={{ padding:'6px 14px', borderRadius:6, background:'#16a34a', color:'#fff', border:'none', cursor:'pointer', fontSize:13 }}>+ PM 계획 등록</button>
+      </div>
+
+      {showForm && (
+        <div style={{ background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:10, padding:16, marginBottom:16 }}>
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:10, marginBottom:10 }}>
+            <select value={form.mold_no} onChange={e => setForm(f => ({...f,mold_no:e.target.value}))}
+              style={{ padding:'7px', borderRadius:6, border:'1px solid #d1d5db', fontSize:13 }}>
+              <option value="">금형 선택</option>
+              {molds.map(m => <option key={m.mold_no} value={m.mold_no}>{m.mold_no} {m.mold_name}</option>)}
+            </select>
+            <input type="date" value={form.plan_date} onChange={e => setForm(f => ({...f,plan_date:e.target.value}))}
+              style={{ padding:'7px', borderRadius:6, border:'1px solid #d1d5db', fontSize:13 }} />
+            <select value={form.pm_type} onChange={e => setForm(f => ({...f,pm_type:e.target.value}))}
+              style={{ padding:'7px', borderRadius:6, border:'1px solid #d1d5db', fontSize:13 }}>
+              {['정기','임시','마감'].map(t => <option key={t} value={t}>{t}</option>)}
+            </select>
+            <input value={form.description} onChange={e => setForm(f => ({...f,description:e.target.value}))} placeholder="작업 내용"
+              style={{ padding:'7px', borderRadius:6, border:'1px solid #d1d5db', fontSize:13 }} />
+          </div>
+          <button onClick={submit} style={{ padding:'7px 20px', borderRadius:6, background:'#1d4ed8', color:'#fff', border:'none', cursor:'pointer', fontSize:13 }}>등록</button>
+        </div>
+      )}
+
+      {data && (
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:16 }}>
+          <div>
+            <div style={{ fontWeight:700, fontSize:13, marginBottom:10 }}>PM 계획 목록</div>
+            {data.plans.length === 0 ? (
+              <div style={{ padding:24, textAlign:'center', color:'#94a3b8', border:'1px solid #e2e8f0', borderRadius:8 }}>이번 달 PM 계획 없음</div>
+            ) : data.plans.map(p => (
+              <div key={p.id} style={{ background:'#fff', border:'1px solid #e2e8f0', borderRadius:8, padding:'10px 14px', marginBottom:8 }}>
+                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                  <div>
+                    <span style={{ fontWeight:700, fontSize:13 }}>{p.mold_no}</span>
+                    <span style={{ fontSize:11, color:'#64748b', marginLeft:8 }}>{p.plan_date}</span>
+                    <span style={{ fontSize:11, background:'#e0f2fe', color:'#0369a1', padding:'1px 7px', borderRadius:10, marginLeft:6 }}>{p.pm_type}</span>
+                  </div>
+                  <span style={{ fontSize:11, fontWeight:700, color: pmColor(p.status) }}>{p.status}</span>
+                </div>
+                {p.description && <div style={{ fontSize:11, color:'#64748b', marginTop:4 }}>{p.description}</div>}
+                {p.status === '계획' && (
+                  <button onClick={() => complete(p.id)} style={{ marginTop:6, padding:'3px 10px', borderRadius:6, background:'#16a34a', color:'#fff', border:'none', cursor:'pointer', fontSize:11 }}>완료 처리</button>
+                )}
+              </div>
+            ))}
+          </div>
+          <div>
+            <div style={{ fontWeight:700, fontSize:13, marginBottom:10 }}>PM 주의 금형</div>
+            {data.overdue_molds.length === 0 ? (
+              <div style={{ padding:24, textAlign:'center', color:'#94a3b8', border:'1px solid #e2e8f0', borderRadius:8 }}>PM 주기 초과 금형 없음</div>
+            ) : data.overdue_molds.map(m => (
+              <div key={m.mold_no} style={{ background:'#fef2f2', border:'1px solid #fca5a5', borderRadius:8, padding:'10px 14px', marginBottom:8 }}>
+                <div style={{ fontWeight:700, fontSize:13, color:'#dc2626' }}>⚠ {m.mold_no} {m.mold_name}</div>
+                <div style={{ fontSize:12, color:'#64748b', marginTop:4 }}>PM 후 누적: {(m.since_pm_shot||0).toLocaleString()}샷 / 주기: {(m.pm_cycle_shot||0).toLocaleString()}샷</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+
+/* ── 작업자 스킬 매트릭스 ───────────────────────────────────────── */
+function SkillMatrix() {
+  const [data, setData] = useState([])
+  const [form, setForm] = useState({ worker_id:'', machine_id:'', part_no:'', skill_level:'견습', certified_at:'', certified_by:'' })
+  const [machines, setMachines] = useState([])
+  const [loading, setLoading] = useState(false)
+
+  const load = () => {
+    setLoading(true)
+    Promise.all([
+      api.get('/mes-floor/worker-skill').then(r => setData(r.data)).catch(() => {}),
+      api.get('/mes-floor/machines').then(r => setMachines(r.data)).catch(() => {}),
+    ]).finally(() => setLoading(false))
+  }
+  useEffect(() => { load() }, [])
+
+  const submit = async () => {
+    if (!form.worker_id || !form.machine_id) return alert('작업자ID, 호기는 필수')
+    try { await api.post('/mes-floor/worker-skill', form); load() }
+    catch (e) { alert('실패: ' + (e.response?.data?.detail || e.message)) }
+  }
+
+  const LEVEL_COLOR = { '견습':'#94a3b8', '보조':'#3b82f6', '주작업자':'#16a34a', '교사':'#7c3aed' }
+
+  return (
+    <div>
+      <div style={{ background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:10, padding:14, marginBottom:16 }}>
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(6,1fr)', gap:8, marginBottom:10 }}>
+          {[['작업자ID','worker_id'],['호기ID','machine_id'],['품번(선택)','part_no'],['인증자','certified_by'],['인증일','certified_at']].map(([lbl,key]) => (
+            <div key={key}>
+              <div style={{ fontSize:11, color:'#64748b', marginBottom:3 }}>{lbl}</div>
+              <input type={key==='certified_at'?'date':'text'} value={form[key]} onChange={e => setForm(f => ({...f,[key]:e.target.value}))}
+                style={{ width:'100%', padding:'6px 8px', borderRadius:6, border:'1px solid #d1d5db', fontSize:12, boxSizing:'border-box' }} />
+            </div>
+          ))}
+          <div>
+            <div style={{ fontSize:11, color:'#64748b', marginBottom:3 }}>레벨</div>
+            <select value={form.skill_level} onChange={e => setForm(f => ({...f,skill_level:e.target.value}))}
+              style={{ width:'100%', padding:'6px 8px', borderRadius:6, border:'1px solid #d1d5db', fontSize:12 }}>
+              {['견습','보조','주작업자','교사'].map(l => <option key={l} value={l}>{l}</option>)}
+            </select>
+          </div>
+        </div>
+        <button onClick={submit} style={{ padding:'7px 20px', borderRadius:6, background:'#1d4ed8', color:'#fff', border:'none', cursor:'pointer', fontSize:13 }}>등록/갱신</button>
+      </div>
+
+      {loading ? <div style={{ padding:30, textAlign:'center', color:'#94a3b8' }}>로딩 중...</div> : data.length === 0 ? (
+        <div style={{ padding:30, textAlign:'center', color:'#94a3b8' }}>스킬 데이터 없음</div>
+      ) : data.map(w => (
+        <div key={w.worker_id} style={{ background:'#fff', border:'1px solid #e2e8f0', borderRadius:10, padding:14, marginBottom:12 }}>
+          <div style={{ fontWeight:800, fontSize:14, marginBottom:10 }}>👤 {w.worker_name} ({w.worker_id})</div>
+          <div style={{ display:'flex', flexWrap:'wrap', gap:8 }}>
+            {w.skills.map(s => (
+              <div key={s.id} style={{ background:'#f8fafc', border:`2px solid ${LEVEL_COLOR[s.skill_level]||'#e2e8f0'}`, borderRadius:8, padding:'6px 12px', minWidth:140 }}>
+                <div style={{ fontWeight:700, fontSize:12 }}>{s.machine_name}</div>
+                {s.part_no && <div style={{ fontSize:11, color:'#64748b' }}>품번: {s.part_no}</div>}
+                <div style={{ fontSize:11, fontWeight:700, color: LEVEL_COLOR[s.skill_level], marginTop:3 }}>{s.skill_level}</div>
+                {s.certified_at && <div style={{ fontSize:10, color:'#94a3b8' }}>인증: {s.certified_at}</div>}
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+
+/* ── 재고 ABC 분석 ──────────────────────────────────────────────── */
+function AbcAnalysis() {
+  const [data, setData] = useState(null)
+  const [loading, setLoading] = useState(false)
+  const [days, setDays] = useState(365)
+  const [filter, setFilter] = useState('ALL')
+
+  const load = () => {
+    setLoading(true)
+    api.get(`/mes-floor/abc-analysis?days=${days}`)
+      .then(r => setData(r.data)).catch(() => {})
+      .finally(() => setLoading(false))
+  }
+  useEffect(() => { load() }, [days])
+
+  const cls_color = { A:'#dc2626', B:'#d97706', C:'#16a34a' }
+  const items = data?.items?.filter(i => filter === 'ALL' ? true : filter === 'DEAD' ? i.dead_stock : i.abc_class === filter) || []
+
+  return (
+    <div>
+      <div style={{ display:'flex', gap:10, marginBottom:16, alignItems:'center', flexWrap:'wrap' }}>
+        <select value={days} onChange={e => setDays(+e.target.value)}
+          style={{ padding:'6px 10px', borderRadius:6, border:'1px solid #d1d5db', fontSize:13 }}>
+          {[[90,'3개월'],[180,'6개월'],[365,'1년'],[730,'2년']].map(([v,l]) => <option key={v} value={v}>{l}</option>)}
+        </select>
+        {data?.summary && (
+          <div style={{ display:'flex', gap:6 }}>
+            {['ALL','A','B','C','DEAD'].map(f => (
+              <button key={f} onClick={() => setFilter(f)} style={{
+                padding:'4px 12px', borderRadius:20, fontSize:12, fontWeight:700, cursor:'pointer', border:'none',
+                background: filter===f ? (f==='DEAD'?'#dc2626':f==='ALL'?'#1d4ed8':cls_color[f]) : '#f1f5f9',
+                color: filter===f ? '#fff' : '#374151',
+              }}>
+                {f === 'DEAD' ? `🚨 불용 ${data.summary.dead}` : f === 'ALL' ? `전체 ${data.total_items}` : `${f}등급 ${data.summary[f]}`}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {loading ? <div style={{ padding:30, textAlign:'center', color:'#94a3b8' }}>분석 중...</div> : !data ? null : (
+        <div style={{ overflowX:'auto' }}>
+          <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
+            <thead>
+              <tr style={{ background:'#f8fafc' }}>
+                {['등급','품번','품명','이동금액','누적%','최근이동일','불용재고'].map(h => (
+                  <th key={h} style={{ padding:'8px 10px', textAlign:'left', borderBottom:'2px solid #e2e8f0', fontWeight:700 }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {items.length === 0 && <tr><td colSpan={7} style={{ padding:24, textAlign:'center', color:'#94a3b8' }}>데이터 없음</td></tr>}
+              {items.map((i, idx) => (
+                <tr key={i.part_no} style={{ borderBottom:'1px solid #f1f5f9', background: i.dead_stock?'#fef2f2':undefined }}>
+                  <td style={{ padding:'7px 10px' }}>
+                    <span style={{ fontWeight:800, color: cls_color[i.abc_class], fontSize:14 }}>{i.abc_class}</span>
+                  </td>
+                  <td style={{ padding:'7px 10px', fontFamily:'monospace', fontSize:11 }}>{i.part_no}</td>
+                  <td style={{ padding:'7px 10px' }}>{i.part_name}</td>
+                  <td style={{ padding:'7px 10px', textAlign:'right', fontVariantNumeric:'tabular-nums' }}>{(i.move_value||0).toLocaleString()}원</td>
+                  <td style={{ padding:'7px 10px', textAlign:'right' }}>{i.cumulative_pct}%</td>
+                  <td style={{ padding:'7px 10px', color:'#64748b', fontSize:11 }}>{i.last_move || '-'}</td>
+                  <td style={{ padding:'7px 10px', textAlign:'center' }}>{i.dead_stock ? '🚨' : '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  )
+}
+
+
+/* ── MRP 자재 부족 예측 ─────────────────────────────────────────── */
+function MrpAlert() {
+  const [days, setDays] = useState(30)
+  const [data, setData] = useState(null)
+  const [loading, setLoading] = useState(false)
+
+  const load = () => {
+    setLoading(true)
+    api.get(`/mes-floor/mrp-alert?days=${days}`)
+      .then(r => setData(r.data)).catch(() => {})
+      .finally(() => setLoading(false))
+  }
+  useEffect(() => { load() }, [days])
+
+  return (
+    <div>
+      <div style={{ display:'flex', gap:10, marginBottom:16, alignItems:'center' }}>
+        <select value={days} onChange={e => setDays(+e.target.value)}
+          style={{ padding:'6px 10px', borderRadius:6, border:'1px solid #d1d5db', fontSize:13 }}>
+          {[[7,'7일'],[14,'14일'],[30,'30일'],[60,'60일']].map(([v,l]) => <option key={v} value={v}>{l}</option>)}
+        </select>
+        <button onClick={load} style={{ padding:'6px 14px', borderRadius:6, background:'#1d4ed8', color:'#fff', border:'none', cursor:'pointer', fontSize:13 }}>분석</button>
+        {data && <span style={{ fontSize:12, color:'#64748b' }}>WO {data.wo_count}건 / 부족 {data.shortage_items}품목</span>}
+      </div>
+
+      {loading ? <div style={{ padding:30, textAlign:'center', color:'#94a3b8' }}>분석 중...</div> : !data ? null : data.items.length === 0 ? (
+        <div style={{ padding:30, textAlign:'center', color:'#16a34a' }}>✅ {days}일 내 자재 부족 없음</div>
+      ) : (
+        <div style={{ overflowX:'auto' }}>
+          <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
+            <thead>
+              <tr style={{ background:'#f8fafc' }}>
+                {['품번','품명','필요수량','현재고','부족수량','상태','관련 WO'].map(h => (
+                  <th key={h} style={{ padding:'8px 10px', textAlign:'left', borderBottom:'2px solid #e2e8f0', fontWeight:700 }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {data.items.map(i => (
+                <tr key={i.part_no} style={{ borderBottom:'1px solid #f1f5f9', background: i.is_short?'#fef2f2':undefined }}>
+                  <td style={{ padding:'7px 10px', fontFamily:'monospace', fontSize:11 }}>{i.part_no}</td>
+                  <td style={{ padding:'7px 10px' }}>{i.part_name}</td>
+                  <td style={{ padding:'7px 10px', textAlign:'right', fontVariantNumeric:'tabular-nums' }}>{i.required_qty.toLocaleString()}</td>
+                  <td style={{ padding:'7px 10px', textAlign:'right', fontVariantNumeric:'tabular-nums' }}>{i.on_hand_qty.toLocaleString()}</td>
+                  <td style={{ padding:'7px 10px', textAlign:'right', fontWeight:700, color: i.is_short?'#dc2626':'#16a34a' }}>{i.shortage_qty.toLocaleString()}</td>
+                  <td style={{ padding:'7px 10px' }}>
+                    {i.is_short ? <span style={{ color:'#dc2626', fontWeight:700 }}>🚨 부족</span> : <span style={{ color:'#16a34a' }}>✅ 충분</span>}
+                  </td>
+                  <td style={{ padding:'7px 10px', fontSize:11, color:'#64748b' }}>{i.related_wos.map(w => w.wo_no).slice(0,3).join(', ')}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  )
+}
+
+
+/* ── 월별 손익 ──────────────────────────────────────────────────── */
+function MonthlyPL() {
+  const now = new Date()
+  const [year, setYear] = useState(now.getFullYear())
+  const [month, setMonth] = useState(now.getMonth() + 1)
+  const [data, setData] = useState(null)
+  const [loading, setLoading] = useState(false)
+
+  const load = useCallback(() => {
+    setLoading(true)
+    api.get(`/mes-floor/monthly-pl?year=${year}&month=${month}`)
+      .then(r => setData(r.data)).catch(() => {})
+      .finally(() => setLoading(false))
+  }, [year, month])
+
+  useEffect(() => { load() }, [load])
+
+  const marginColor = (p) => p >= 20 ? '#16a34a' : p >= 10 ? '#d97706' : p >= 0 ? '#f97316' : '#dc2626'
+
+  return (
+    <div>
+      <div style={{ display:'flex', gap:10, marginBottom:16, alignItems:'center' }}>
+        <select value={year} onChange={e => setYear(+e.target.value)}
+          style={{ padding:'6px 10px', borderRadius:6, border:'1px solid #d1d5db', fontSize:13 }}>
+          {[now.getFullYear()-1, now.getFullYear()].map(y => <option key={y} value={y}>{y}년</option>)}
+        </select>
+        <select value={month} onChange={e => setMonth(+e.target.value)}
+          style={{ padding:'6px 10px', borderRadius:6, border:'1px solid #d1d5db', fontSize:13 }}>
+          {Array.from({length:12},(_,i)=>i+1).map(m => <option key={m} value={m}>{m}월</option>)}
+        </select>
+        <button onClick={load} style={{ padding:'6px 14px', borderRadius:6, background:'#1d4ed8', color:'#fff', border:'none', cursor:'pointer', fontSize:13 }}>조회</button>
+      </div>
+
+      {loading ? <div style={{ padding:30, textAlign:'center', color:'#94a3b8' }}>로딩 중...</div> : !data ? null : (
+        <>
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:12, marginBottom:16 }}>
+            {[
+              { label:'총 매출', val:(data.total_revenue||0).toLocaleString(), unit:'원', color:'#1d4ed8' },
+              { label:'총 원가', val:(data.total_cost||0).toLocaleString(), unit:'원', color:'#64748b' },
+              { label:'총 이익', val:(data.total_profit||0).toLocaleString(), unit:'원', color: data.total_profit>=0?'#16a34a':'#dc2626' },
+              { label:'이익률', val: data.total_margin_pct != null ? data.total_margin_pct : '-', unit:'%', color: marginColor(data.total_margin_pct) },
+            ].map(k => (
+              <div key={k.label} style={{ background:'#fff', border:'1px solid #e2e8f0', borderRadius:8, padding:'14px', textAlign:'center' }}>
+                <div style={{ fontSize:11, color:'#64748b', marginBottom:4 }}>{k.label}</div>
+                <div style={{ fontSize:20, fontWeight:800, color:k.color }}>{k.val}<span style={{ fontSize:12 }}>{k.unit}</span></div>
+              </div>
+            ))}
+          </div>
+          <div style={{ overflowX:'auto' }}>
+            <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
+              <thead>
+                <tr style={{ background:'#f8fafc' }}>
+                  {['품번','품명','출하수량','생산수량','매출','재료비','노무비','원가','이익','이익률'].map(h => (
+                    <th key={h} style={{ padding:'8px 10px', textAlign:'right', borderBottom:'2px solid #e2e8f0', fontWeight:700, whiteSpace:'nowrap' }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {data.items.map(i => (
+                  <tr key={i.part_no} style={{ borderBottom:'1px solid #f1f5f9' }}>
+                    <td style={{ padding:'7px 10px', textAlign:'left', fontFamily:'monospace', fontSize:11 }}>{i.part_no}</td>
+                    <td style={{ padding:'7px 10px', textAlign:'left' }}>{i.part_name}</td>
+                    <td style={{ padding:'7px 10px', textAlign:'right', fontVariantNumeric:'tabular-nums' }}>{(i.shipped_qty||0).toLocaleString()}</td>
+                    <td style={{ padding:'7px 10px', textAlign:'right', fontVariantNumeric:'tabular-nums' }}>{(i.good_qty_produced||0).toLocaleString()}</td>
+                    <td style={{ padding:'7px 10px', textAlign:'right', fontVariantNumeric:'tabular-nums' }}>{(i.revenue||0).toLocaleString()}</td>
+                    <td style={{ padding:'7px 10px', textAlign:'right', fontVariantNumeric:'tabular-nums' }}>{(i.material_cost||0).toLocaleString()}</td>
+                    <td style={{ padding:'7px 10px', textAlign:'right', fontVariantNumeric:'tabular-nums' }}>{(i.labor_cost||0).toLocaleString()}</td>
+                    <td style={{ padding:'7px 10px', textAlign:'right', fontVariantNumeric:'tabular-nums' }}>{(i.total_cost||0).toLocaleString()}</td>
+                    <td style={{ padding:'7px 10px', textAlign:'right', fontWeight:700, color: i.profit>=0?'#16a34a':'#dc2626', fontVariantNumeric:'tabular-nums' }}>{(i.profit||0).toLocaleString()}</td>
+                    <td style={{ padding:'7px 10px', textAlign:'right', fontWeight:700, color: marginColor(i.margin_pct) }}>{i.margin_pct != null ? `${i.margin_pct}%` : '-'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
+
+/* ── 클레임 LOT 역추적 ──────────────────────────────────────────── */
+function LotClaimTrace() {
+  const fmtDate = (d) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
+  const [partNo, setPartNo] = useState('')
+  const [dateFrom, setDateFrom] = useState(() => { const d = new Date(); d.setDate(1); return fmtDate(d) })
+  const [dateTo, setDateTo] = useState(() => fmtDate(new Date()))
+  const [data, setData] = useState(null)
+  const [loading, setLoading] = useState(false)
+  const [expanded, setExpanded] = useState(null)
+
+  const load = () => {
+    if (!partNo) return alert('품번을 입력하세요')
+    setLoading(true)
+    api.get(`/mes-floor/claim-trace?part_no=${encodeURIComponent(partNo)}&date_from=${dateFrom}&date_to=${dateTo}`)
+      .then(r => setData(r.data)).catch(e => alert('조회 실패: ' + (e.response?.data?.detail || e.message)))
+      .finally(() => setLoading(false))
+  }
+
+  return (
+    <div>
+      <div style={{ display:'flex', gap:10, marginBottom:16, alignItems:'center', flexWrap:'wrap' }}>
+        <input value={partNo} onChange={e => setPartNo(e.target.value)} placeholder="품번 (예: PA-001)"
+          style={{ padding:'7px 12px', borderRadius:6, border:'1px solid #d1d5db', fontSize:13, width:180 }} />
+        <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
+          style={{ padding:'7px', borderRadius:6, border:'1px solid #d1d5db', fontSize:13 }} />
+        <span style={{ color:'#94a3b8' }}>~</span>
+        <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
+          style={{ padding:'7px', borderRadius:6, border:'1px solid #d1d5db', fontSize:13 }} />
+        <button onClick={load} style={{ padding:'7px 16px', borderRadius:6, background:'#1d4ed8', color:'#fff', border:'none', cursor:'pointer', fontSize:13 }}>역추적</button>
+      </div>
+
+      {loading ? <div style={{ padding:30, textAlign:'center', color:'#94a3b8' }}>추적 중...</div> : !data ? null : (
+        <>
+          <div style={{ background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:8, padding:'10px 16px', marginBottom:14, fontSize:13 }}>
+            품번 <strong>{data.part_no}</strong> · WO {data.wo_count}건 · 세션 {data.session_count}건
+          </div>
+          {data.sessions.length === 0 ? (
+            <div style={{ padding:24, textAlign:'center', color:'#94a3b8' }}>해당 기간 세션 없음</div>
+          ) : data.sessions.map(s => (
+            <div key={s.session_id} style={{ background:'#fff', border:'1px solid #e2e8f0', borderRadius:10, padding:'12px 16px', marginBottom:10 }}>
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', cursor:'pointer' }}
+                onClick={() => setExpanded(expanded === s.session_id ? null : s.session_id)}>
+                <div>
+                  <span style={{ fontWeight:700, fontSize:13 }}>{s.wo_no}</span>
+                  <span style={{ fontSize:12, color:'#64748b', marginLeft:10 }}>{s.machine_id} · {s.worker_id}</span>
+                  <span style={{ fontSize:11, color:'#94a3b8', marginLeft:10 }}>{s.start_time?.slice(0,16)}</span>
+                </div>
+                <div style={{ display:'flex', gap:12, fontSize:12 }}>
+                  <span>양품 <strong style={{ color:'#16a34a' }}>{s.good_qty}</strong></span>
+                  <span>불량 <strong style={{ color:'#dc2626' }}>{s.defect_qty}</strong></span>
+                  {s.inspections.length > 0 && <span style={{ color:'#1d4ed8' }}>검사 {s.inspections.length}건</span>}
+                  {s.andons.length > 0 && <span style={{ color:'#dc2626' }}>안돈 {s.andons.length}건</span>}
+                  <span style={{ color:'#94a3b8' }}>{expanded===s.session_id?'▲':'▼'}</span>
+                </div>
+              </div>
+
+              {expanded === s.session_id && (
+                <div style={{ marginTop:12, paddingTop:12, borderTop:'1px solid #f1f5f9' }}>
+                  {/* 파렛트 */}
+                  {s.pallets.length > 0 && (
+                    <div style={{ marginBottom:10 }}>
+                      <div style={{ fontSize:11, fontWeight:700, color:'#64748b', marginBottom:4 }}>📦 파렛트 LOT</div>
+                      <div style={{ display:'flex', flexWrap:'wrap', gap:6 }}>
+                        {s.pallets.map(p => <span key={p.pallet_id} style={{ background:'#e0f2fe', color:'#0369a1', fontSize:11, padding:'2px 8px', borderRadius:10 }}>{p.pallet_id} ({p.qty}EA)</span>)}
+                      </div>
+                    </div>
+                  )}
+                  {/* 검사 */}
+                  {s.inspections.length > 0 && (
+                    <div style={{ marginBottom:10 }}>
+                      <div style={{ fontSize:11, fontWeight:700, color:'#64748b', marginBottom:4 }}>🔍 초·중·종물 검사</div>
+                      {s.inspections.map(i => (
+                        <div key={i.id} style={{ fontSize:11, background:'#f8fafc', padding:'4px 8px', borderRadius:6, marginBottom:4 }}>
+                          <span style={{ fontWeight:700 }}>[{i.insp_type}]</span>
+                          <span style={{ color: i.result==='OK'?'#16a34a':'#dc2626', marginLeft:6, fontWeight:700 }}>{i.result}</span>
+                          {i.dim1_spec && <span style={{ color:'#64748b', marginLeft:8 }}>dim1: {i.dim1_spec}→{i.dim1_actual}</span>}
+                          <span style={{ color:'#94a3b8', marginLeft:8 }}>{i.created_at?.slice(0,16)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {/* 안돈 */}
+                  {s.andons.length > 0 && (
+                    <div>
+                      <div style={{ fontSize:11, fontWeight:700, color:'#64748b', marginBottom:4 }}>🚨 안돈 이력</div>
+                      {s.andons.map(a => (
+                        <div key={a.id} style={{ fontSize:11, background:'#fef2f2', padding:'4px 8px', borderRadius:6, marginBottom:4, color:'#dc2626' }}>
+                          [{a.andon_type}] {a.note} <span style={{ color: a.is_resolved?'#16a34a':'#dc2626' }}>{a.is_resolved?'✓해결':'미해결'}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          ))}
+        </>
+      )}
+    </div>
+  )
+}
+
+
 const ANDON_COLOR = {
   '품질이상': '#dc2626',
   '설비고장': '#ea580c',
@@ -1080,25 +1644,34 @@ export default function MesDashboard() {
       </div>
 
       {/* 메인 탭 */}
-      <div style={{ display:'flex', gap:0, marginBottom:16, borderBottom:'2px solid #e2e8f0' }}>
-        {[
-          { k:'andon', label:'🏭 안돈 보드' },
-          { k:'oee', label:'📊 OEE 분석' },
-          { k:'pareto', label:'📉 불량 파레토' },
-          { k:'planact', label:'📋 계획 대비 실적' },
-          { k:'cost', label:'💰 원가 분석' },
-          { k:'spc', label:'📐 SPC 관리도' },
-          { k:'smed', label:'⏱ SMED' },
-          { k:'fivewhy', label:'🔍 5-Why' },
-          { k:'delivery', label:'🚚 납기 추적' },
-        ].map(t => (
-          <button key={t.k} onClick={() => setMainTab(t.k)} style={{
-            padding:'8px 20px', fontSize:13, fontWeight:700, border:'none', cursor:'pointer',
-            background:'transparent', color:mainTab===t.k?'#1d4ed8':'#64748b',
-            borderBottom:mainTab===t.k?'2px solid #1d4ed8':'2px solid transparent',
-            marginBottom:-2,
-          }}>{t.label}</button>
-        ))}
+      <div style={{ overflowX:'auto', marginBottom:16, borderBottom:'2px solid #e2e8f0' }}>
+        <div style={{ display:'flex', gap:0, minWidth:'max-content' }}>
+          {[
+            { k:'andon', label:'🏭 안돈 보드' },
+            { k:'oee', label:'📊 OEE 분석' },
+            { k:'pareto', label:'📉 불량 파레토' },
+            { k:'planact', label:'📋 계획 대비 실적' },
+            { k:'cost', label:'💰 원가 분석' },
+            { k:'spc', label:'📐 SPC 관리도' },
+            { k:'smed', label:'⏱ SMED' },
+            { k:'fivewhy', label:'🔍 5-Why' },
+            { k:'delivery', label:'🚚 납기 추적' },
+            { k:'procond', label:'🧪 공정 조건' },
+            { k:'pmcal', label:'🔧 PM 캘린더' },
+            { k:'skill', label:'👷 스킬 매트릭스' },
+            { k:'abc', label:'📦 ABC 분석' },
+            { k:'mrp', label:'⚠ MRP 경보' },
+            { k:'pl', label:'💹 월별 손익' },
+            { k:'claimtrace', label:'🔎 LOT 역추적' },
+          ].map(t => (
+            <button key={t.k} onClick={() => setMainTab(t.k)} style={{
+              padding:'8px 16px', fontSize:12, fontWeight:700, border:'none', cursor:'pointer',
+              background:'transparent', color:mainTab===t.k?'#1d4ed8':'#64748b',
+              borderBottom:mainTab===t.k?'2px solid #1d4ed8':'2px solid transparent',
+              marginBottom:-2, whiteSpace:'nowrap',
+            }}>{t.label}</button>
+          ))}
+        </div>
       </div>
 
       {mainTab === 'oee' && <OeeAnalysis />}
@@ -1109,6 +1682,13 @@ export default function MesDashboard() {
       {mainTab === 'smed' && <SmedAnalysis />}
       {mainTab === 'fivewhy' && <FiveWhyBoard />}
       {mainTab === 'delivery' && <DeliveryTracking />}
+      {mainTab === 'procond' && <ProcessConditionTab />}
+      {mainTab === 'pmcal' && <PmCalendar />}
+      {mainTab === 'skill' && <SkillMatrix />}
+      {mainTab === 'abc' && <AbcAnalysis />}
+      {mainTab === 'mrp' && <MrpAlert />}
+      {mainTab === 'pl' && <MonthlyPL />}
+      {mainTab === 'claimtrace' && <LotClaimTrace />}
 
       {mainTab === 'andon' && <>
       {/* KPI 요약 */}
