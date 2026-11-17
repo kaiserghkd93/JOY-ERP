@@ -309,7 +309,7 @@ def deliver(body: DeliveryReq, user: User = Depends(get_current_user), db: Sessi
 # ── QR 스캔용 명세서 공개 조회 (인증 불필요) ───────────────────────
 @router.get("/receipt/{gr_no}")
 def get_receipt_public(gr_no: str, db: Session = Depends(get_db)):
-    """QR 코드 스캔 후 명세서 조회 — 로그인 없이 접근 가능"""
+    """QR 코드 스캔 후 명세서 JSON 조회 — 로그인 없이 접근 가능"""
     receipt = db.get(Receipt, gr_no)
     if not receipt:
         raise HTTPException(404, f"입고 기록 없음: {gr_no}")
@@ -333,6 +333,105 @@ def get_receipt_public(gr_no: str, db: Session = Depends(get_db)):
         "partner": partner.name if partner else "—",
         "note": receipt.note,
     }
+
+
+@router.get("/receipt/{gr_no}/view", response_class=None)
+def view_receipt_mobile(gr_no: str, db: Session = Depends(get_db)):
+    """QR 스캔 → 폰 브라우저에서 열리는 모바일 명세서 페이지 (로그인 불필요)"""
+    from fastapi.responses import HTMLResponse
+    receipt = db.get(Receipt, gr_no)
+    if not receipt:
+        html = f"""<!DOCTYPE html><html lang="ko"><head><meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width,initial-scale=1">
+        <title>조회 오류</title>
+        <style>body{{font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;background:#f8fafc}}
+        .box{{text-align:center;padding:32px;background:#fff;border-radius:12px;box-shadow:0 4px 24px rgba(0,0,0,.08)}}
+        h2{{color:#dc2626;margin:0 0 8px}}p{{color:#64748b;margin:0}}</style></head>
+        <body><div class="box"><h2>❌ 조회 실패</h2><p>{gr_no} 입고 기록을 찾을 수 없습니다</p></div></body></html>"""
+        return HTMLResponse(content=html, status_code=404)
+
+    item = db.get(Item, receipt.part_no)
+    partner = db.get(Partner, receipt.partner_id) if receipt.partner_id else None
+    part_name = item.name if item else receipt.part_no
+    item_unit = item.unit if item else "EA"
+    partner_name = partner.name if partner else "—"
+    amount = receipt.qty * float(receipt.unit_price or 0)
+    status_map = {"pending": ("검사대기", "#f59e0b", "#fef3c7"),
+                  "confirmed": ("입고확정", "#16a34a", "#dcfce7"),
+                  "cancelled": ("취소", "#dc2626", "#fee2e2")}
+    raw_status = str(receipt.status).replace("ReceiptStatus.", "")
+    s_label, s_color, s_bg = status_map.get(raw_status, (raw_status, "#64748b", "#f1f5f9"))
+
+    html = f"""<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+  <title>납품명세서 {gr_no}</title>
+  <style>
+    *{{box-sizing:border-box;margin:0;padding:0}}
+    body{{font-family:'Malgun Gothic',Apple SD Gothic Neo,sans-serif;background:#f0f4f8;min-height:100vh;padding:0 0 32px}}
+    .header{{background:linear-gradient(135deg,#1d4ed8,#2563eb);color:#fff;padding:20px 16px 16px;text-align:center}}
+    .header h1{{font-size:17px;font-weight:800;margin-bottom:4px}}
+    .header p{{font-size:12px;opacity:.8}}
+    .card{{background:#fff;margin:12px;border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.08)}}
+    .card-title{{font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.5px;padding:12px 14px 6px;border-bottom:1px solid #f1f5f9}}
+    .row{{display:flex;justify-content:space-between;align-items:center;padding:9px 14px;border-bottom:1px solid #f8fafc}}
+    .row:last-child{{border-bottom:none}}
+    .row label{{font-size:12px;color:#64748b}}
+    .row value,.row-val{{font-size:13px;font-weight:600;color:#1e293b;text-align:right}}
+    .badge{{display:inline-block;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;background:{s_bg};color:{s_color}}}
+    .gr-box{{background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;margin:12px;padding:12px 14px}}
+    .gr-label{{font-size:11px;color:#3b82f6;font-weight:600;margin-bottom:2px}}
+    .gr-no{{font-size:19px;font-weight:800;font-family:monospace;color:#1d4ed8;letter-spacing:1px}}
+    .lot-box{{background:#fffbeb;border:1px solid #fde68a;border-radius:8px;margin:0 12px 12px;padding:10px 14px}}
+    .lot-label{{font-size:11px;color:#d97706;font-weight:600;margin-bottom:2px}}
+    .lot-no{{font-size:15px;font-weight:700;font-family:monospace;color:#92400e}}
+    .amount{{font-size:18px;font-weight:800;color:#1d4ed8}}
+    .footer{{text-align:center;padding:16px;font-size:11px;color:#94a3b8;line-height:1.6}}
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>📄 납품 명세서</h1>
+    <p>조이산업 — QR 스캔 조회</p>
+  </div>
+
+  <div class="gr-box">
+    <div class="gr-label">입고번호</div>
+    <div class="gr-no">{receipt.gr_no}</div>
+  </div>
+  <div class="lot-box">
+    <div class="lot-label">LOT 번호 (역추적 코드)</div>
+    <div class="lot-no">{receipt.lot_no or '—'}</div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">납품 정보</div>
+    <div class="row"><label>협력사</label><span class="row-val">{partner_name}</span></div>
+    <div class="row"><label>납품일</label><span class="row-val">{receipt.receipt_date}</span></div>
+    <div class="row"><label>발주번호</label><span class="row-val">{receipt.po_no or '—'}</span></div>
+    <div class="row"><label>상태</label><span class="badge">{s_label}</span></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">품목 정보</div>
+    <div class="row"><label>품번</label><span class="row-val" style="font-family:monospace;font-size:12px">{receipt.part_no}</span></div>
+    <div class="row"><label>품명</label><span class="row-val">{part_name}</span></div>
+    <div class="row"><label>납품 수량</label><span class="row-val">{receipt.qty:,} {item_unit}</span></div>
+    <div class="row"><label>단가</label><span class="row-val">₩{float(receipt.unit_price or 0):,.0f}</span></div>
+    <div class="row"><label>금액</label><span class="amount">₩{amount:,.0f}</span></div>
+  </div>
+
+  {"" if not receipt.note else f'<div class="card"><div class="card-title">비고</div><div class="row"><span style="font-size:12px;color:#475569">{receipt.note}</span></div></div>'}
+
+  <div class="footer">
+    본 명세서는 조이산업 ERP 시스템에서 자동 발행되었습니다.<br>
+    수입검사 완료 후 입고 처리됩니다.
+  </div>
+</body>
+</html>"""
+    return HTMLResponse(content=html)
 
 
 # ── 월별 납품 집계 ───────────────────────────────────────────────

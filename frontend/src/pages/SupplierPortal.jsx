@@ -160,7 +160,8 @@ function DeliveryStatementModal({ receipts, partnerName, onClose }) {
 
   useEffect(() => {
     receipts.forEach(async r => {
-      const text = `${r.gr_no}\nLOT:${r.lot_no || '-'}\n${r.part_no}|${r.qty}EA|${r.receipt_date}`
+      const baseUrl = window.location.origin
+      const text = `${baseUrl}/api/portal/receipt/${r.gr_no}/view`
       try {
         const url = await QRCode.toDataURL(text, { width: 160, margin: 1, errorCorrectionLevel: 'M' })
         setQrUrls(prev => ({ ...prev, [r.gr_no]: url }))
@@ -171,6 +172,7 @@ function DeliveryStatementModal({ receipts, partnerName, onClose }) {
   const totalAmount = receipts.reduce((s, r) => s + (r.amount || 0), 0)
 
   const printStatement = () => {
+    const baseUrl = window.location.origin
     const win = window.open('', '_blank', 'width=700,height=900')
     const rows = receipts.map(r => `
       <tr>
@@ -184,6 +186,7 @@ function DeliveryStatementModal({ receipts, partnerName, onClose }) {
       ? `<div style="text-align:center;margin:4px 8px;display:inline-block">
            <img src="${qrUrls[r.gr_no]}" style="width:100px;height:100px"/>
            <div style="font-size:9px;margin-top:3px">${r.gr_no}</div>
+           <div style="font-size:8px;color:#94a3b8">${baseUrl}/api/portal/receipt/${r.gr_no}/view</div>
          </div>` : '').join('')
     win.document.write(`<html><head><title>납품명세서</title>
       <style>body{font-family:'Malgun Gothic',sans-serif;padding:30px;font-size:12px}
