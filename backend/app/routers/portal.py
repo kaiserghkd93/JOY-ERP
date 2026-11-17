@@ -252,6 +252,7 @@ def deliver(body: DeliveryReq, user: User = Depends(get_current_user), db: Sessi
             po = None
 
         gr_no = next_doc_no(db, "GR", "receipt", "gr_no")
+        lot_no = gr_no.replace("GR-", "LOT-")  # LOT-YYYYMMDD-NNN 자동채번
         note_text = f"업체포털 납품{' [직접추가]' if not line.po_no else ''} {body.note or ''}".strip()
         # 포털 납품 → pending(검사대기) 상태로 생성, 품질팀 컨펌 후 confirmed + 재고 반영
         receipt = Receipt(
@@ -262,6 +263,7 @@ def deliver(body: DeliveryReq, user: User = Depends(get_current_user), db: Sessi
             delivered_qty=line.qty,   # 거래명세표 기준 납품수량 자동 기록
             receipt_date=body.delivery_date,
             unit_price=unit_price,
+            lot_no=lot_no,
             status=ReceiptStatus.pending,
             partner_id=partner_id,
             note=note_text,
@@ -286,15 +288,51 @@ def deliver(body: DeliveryReq, user: User = Depends(get_current_user), db: Sessi
             )
             db.add(auto_insp)
 
+        item_obj = db.get(Item, actual_part_no)
         created.append({
             "gr_no": gr_no,
+            "lot_no": lot_no,
             "po_no": line.po_no,
-            "item_name": line.item_name if not line.po_no else None,
+            "part_no": actual_part_no,
+            "item_name": item_obj.name if item_obj else (line.item_name or actual_part_no),
+            "item_unit": item_obj.unit if item_obj else "EA",
             "qty": line.qty,
+            "unit_price": unit_price,
+            "amount": line.qty * unit_price,
+            "receipt_date": str(body.delivery_date),
         })
 
     db.commit()
     return {"ok": True, "receipts": created}
+
+
+# ── QR 스캔용 명세서 공개 조회 (인증 불필요) ───────────────────────
+@router.get("/receipt/{gr_no}")
+def get_receipt_public(gr_no: str, db: Session = Depends(get_db)):
+    """QR 코드 스캔 후 명세서 조회 — 로그인 없이 접근 가능"""
+    receipt = db.get(Receipt, gr_no)
+    if not receipt:
+        raise HTTPException(404, f"입고 기록 없음: {gr_no}")
+    item = db.get(Item, receipt.part_no)
+    partner = db.get(Partner, receipt.partner_id) if receipt.partner_id else None
+    status_label = {
+        "pending": "검사대기", "confirmed": "입고확정", "cancelled": "취소"
+    }.get(str(receipt.status).replace("ReceiptStatus.", ""), str(receipt.status))
+    return {
+        "gr_no": receipt.gr_no,
+        "lot_no": receipt.lot_no,
+        "po_no": receipt.po_no,
+        "part_no": receipt.part_no,
+        "part_name": item.name if item else receipt.part_no,
+        "item_unit": item.unit if item else "EA",
+        "qty": receipt.qty,
+        "unit_price": float(receipt.unit_price or 0),
+        "amount": receipt.qty * float(receipt.unit_price or 0),
+        "receipt_date": str(receipt.receipt_date),
+        "status": status_label,
+        "partner": partner.name if partner else "—",
+        "note": receipt.note,
+    }
 
 
 # ── 월별 납품 집계 ───────────────────────────────────────────────
