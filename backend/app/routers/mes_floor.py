@@ -32,7 +32,8 @@ from app.models.auth import User
 from app.models.mes_floor import (
     Machine, MesWorkOrder, WorkerSession, ProdLog, DowntimeLog,
     WOStatus, SessionStatus, DowntimeReason, MachineStatus, AndonCall, MesPallet,
-    ArticleInspection, WorkerSessionCost,
+    ArticleInspection, WorkerSessionCost, FiveWhy,
+    SetupChecklist, ShiftHandover, MaterialRequisition,
 )
 from app.models.master import Item, BomLine
 from app.models.ledger import StockLedger, LedgerType
@@ -1262,8 +1263,6 @@ def machine_oee_summary(days: int = 7, db: Session = Depends(get_db)):
 # ═══════════════════════════════════════════════════════════════════
 # #3  교대 인수인계
 # ═══════════════════════════════════════════════════════════════════
-from app.models.mes_floor import ShiftHandover, MaterialRequisition, SetupChecklist
-
 class HandoverIn(BaseModel):
     shift_date: str           # YYYY-MM-DD
     from_shift: str
@@ -1660,3 +1659,296 @@ def get_session_cost(session_id: int, db: Session = Depends(get_db)):
         "unit_cost": cost.unit_cost, "calc_note": cost.calc_note,
         "created_at": cost.created_at.isoformat(),
     }
+
+
+# ═══════════════════════════════════════════════════════════════════
+# 5-Why 불량 원인 분석
+# ═══════════════════════════════════════════════════════════════════
+
+class FiveWhyIn(BaseModel):
+    andon_id: int
+    why1: Optional[str] = None
+    why2: Optional[str] = None
+    why3: Optional[str] = None
+    why4: Optional[str] = None
+    why5: Optional[str] = None
+    root_cause: Optional[str] = None
+    countermeasure: Optional[str] = None
+    created_by: Optional[str] = None
+
+
+@router.post("/five-why")
+def create_five_why(body: FiveWhyIn, db: Session = Depends(get_db)):
+    fw = FiveWhy(**body.model_dump())
+    db.add(fw)
+    andon = db.get(AndonCall, body.andon_id)
+    if andon and not andon.is_resolved and body.countermeasure:
+        andon.is_resolved = True
+        andon.resolved_at = datetime.now()
+        andon.resolved_by = body.created_by
+    db.commit()
+    db.refresh(fw)
+    return {"id": fw.id}
+
+
+@router.get("/five-why")
+def list_five_why(andon_id: Optional[int] = None, limit: int = 50, db: Session = Depends(get_db)):
+    q = db.query(FiveWhy).order_by(FiveWhy.created_at.desc())
+    if andon_id:
+        q = q.filter(FiveWhy.andon_id == andon_id)
+    rows = q.limit(limit).all()
+    return [
+        {
+            "id": r.id, "andon_id": r.andon_id,
+            "why1": r.why1, "why2": r.why2, "why3": r.why3, "why4": r.why4, "why5": r.why5,
+            "root_cause": r.root_cause, "countermeasure": r.countermeasure,
+            "created_by": r.created_by, "created_at": r.created_at.isoformat(),
+        }
+        for r in rows
+    ]
+
+
+# ═══════════════════════════════════════════════════════════════════
+# SPC 관리도 (Xbar-R) — ArticleInspection 치수 데이터 활용
+# ═══════════════════════════════════════════════════════════════════
+
+@router.get("/spc-chart")
+def spc_chart(
+    part_no: str,
+    dim: str = "dim1",   # dim1 / dim2 / dim3
+    limit_groups: int = 25,
+    db: Session = Depends(get_db),
+):
+    """Xbar-R 관리도 데이터"""
+    import math
+    # A2, D3, D4 상수 (n=3 기준)
+    A2, D3, D4 = 1.023, 0.0, 2.574
+
+    actual_col = getattr(ArticleInspection, f"{dim}_actual", None)
+    spec_col   = getattr(ArticleInspection, f"{dim}_spec",   None)
+    if actual_col is None:
+        raise HTTPException(400, f"잘못된 dim: {dim}")
+
+    rows = db.query(ArticleInspection).filter(
+        ArticleInspection.wo_no.in_(
+            db.query(MesWorkOrder.wo_no).filter(MesWorkOrder.part_no == part_no)
+        ),
+        actual_col != None,
+    ).order_by(ArticleInspection.created_at).all()
+
+    if not rows:
+        return {"part_no": part_no, "dim": dim, "groups": [], "ucl_x": None, "lcl_x": None, "ucl_r": None, "spec": None}
+
+    # 첫 번째 행의 규격값 (spec)
+    spec_val = getattr(rows[0], f"{dim}_spec", None)
+
+    # 3개씩 묶어 서브그룹 형성
+    n = 3
+    groups = []
+    for i in range(0, len(rows), n):
+        sub = [float(getattr(r, f"{dim}_actual")) for r in rows[i:i+n] if getattr(r, f"{dim}_actual") is not None]
+        if not sub:
+            continue
+        xbar = sum(sub) / len(sub)
+        rng  = max(sub) - min(sub)
+        groups.append({
+            "idx": len(groups) + 1,
+            "xbar": round(xbar, 4),
+            "r": round(rng, 4),
+            "insp_type": rows[i].insp_type,
+            "created_at": rows[i].created_at.isoformat(),
+        })
+
+    if not groups:
+        return {"part_no": part_no, "dim": dim, "groups": [], "ucl_x": None, "lcl_x": None, "ucl_r": None, "spec": spec_val}
+
+    # 최근 25그룹만
+    groups = groups[-limit_groups:]
+
+    xbar_bar = sum(g["xbar"] for g in groups) / len(groups)
+    r_bar    = sum(g["r"] for g in groups) / len(groups)
+    ucl_x = round(xbar_bar + A2 * r_bar, 4)
+    lcl_x = round(xbar_bar - A2 * r_bar, 4)
+    ucl_r = round(D4 * r_bar, 4)
+    lcl_r = round(D3 * r_bar, 4)
+
+    return {
+        "part_no": part_no, "dim": dim,
+        "xbar_bar": round(xbar_bar, 4), "r_bar": round(r_bar, 4),
+        "ucl_x": ucl_x, "lcl_x": lcl_x, "ucl_r": ucl_r, "lcl_r": lcl_r,
+        "spec": float(spec_val) if spec_val else None,
+        "groups": groups,
+    }
+
+
+# ═══════════════════════════════════════════════════════════════════
+# SMED — 금형 교체 시간 분석
+# ═══════════════════════════════════════════════════════════════════
+
+@router.get("/smed-analysis")
+def smed_analysis(days: int = 30, db: Session = Depends(get_db)):
+    """금형교체 비가동 시간 집계"""
+    from sqlalchemy import func as sqlfunc
+    since = datetime.now() - timedelta(days=days)
+
+    rows = db.query(DowntimeLog).filter(
+        DowntimeLog.reason == DowntimeReason.mold_change,
+        DowntimeLog.start_time >= since,
+        DowntimeLog.end_time != None,
+    ).all()
+
+    if not rows:
+        return {"avg_min": 0, "min_min": 0, "max_min": 0, "count": 0, "target_min": 30, "items": []}
+
+    durations = [
+        (dt.end_time - dt.start_time).total_seconds() / 60
+        for dt in rows
+    ]
+    result_items = []
+    for dt in rows:
+        dur = (dt.end_time - dt.start_time).total_seconds() / 60
+        session = db.get(WorkerSession, dt.session_id)
+        result_items.append({
+            "date": dt.start_time.strftime("%m/%d"),
+            "machine_id": session.machine_id if session else "-",
+            "duration_min": round(dur, 1),
+        })
+
+    # 기계별 평균
+    machine_avg: dict[str, list] = {}
+    for item in result_items:
+        machine_avg.setdefault(item["machine_id"], []).append(item["duration_min"])
+
+    return {
+        "avg_min": round(sum(durations) / len(durations), 1),
+        "min_min": round(min(durations), 1),
+        "max_min": round(max(durations), 1),
+        "count": len(durations),
+        "target_min": 30,
+        "items": sorted(result_items, key=lambda x: x["date"]),
+        "by_machine": [
+            {"machine_id": k, "avg_min": round(sum(v) / len(v), 1), "count": len(v)}
+            for k, v in machine_avg.items()
+        ],
+    }
+
+
+# ═══════════════════════════════════════════════════════════════════
+# 실원가 분석 대시보드
+# ═══════════════════════════════════════════════════════════════════
+
+@router.get("/cost-analysis")
+def cost_analysis(year: int, month: int, db: Session = Depends(get_db)):
+    """품목별 실원가 집계"""
+    from sqlalchemy import func as sqlfunc
+    month_start = date(year, month, 1)
+    month_end = date(year, month + 1, 1) if month < 12 else date(year + 1, 1, 1)
+
+    costs = db.query(WorkerSessionCost).join(
+        WorkerSession, WorkerSessionCost.session_id == WorkerSession.id
+    ).filter(
+        WorkerSession.start_time >= datetime.combine(month_start, dt_time.min),
+        WorkerSession.start_time < datetime.combine(month_end, dt_time.min),
+    ).all()
+
+    part_map: dict[str, dict] = {}
+    for c in costs:
+        k = c.part_no
+        if k not in part_map:
+            item = db.get(Item, k)
+            std_price = float(item.std_buy_price or 0) if item else 0
+            part_map[k] = {
+                "part_no": k,
+                "part_name": item.name if item else k,
+                "std_unit_price": std_price,
+                "good_qty": 0, "material_cost": 0, "labor_cost": 0,
+                "total_cost": 0, "sessions": 0,
+            }
+        part_map[k]["good_qty"] += c.good_qty
+        part_map[k]["material_cost"] += c.material_cost
+        part_map[k]["labor_cost"] += c.labor_cost
+        part_map[k]["total_cost"] += c.total_cost
+        part_map[k]["sessions"] += 1
+
+    rows = []
+    for v in part_map.values():
+        v["unit_cost"] = round(v["total_cost"] / v["good_qty"], 2) if v["good_qty"] > 0 else 0
+        v["margin"] = round((v["std_unit_price"] - v["unit_cost"]) / v["std_unit_price"] * 100, 1) if v["std_unit_price"] > 0 else None
+        rows.append(v)
+
+    rows.sort(key=lambda x: -x["total_cost"])
+    return {
+        "year": year, "month": month,
+        "total_material": round(sum(r["material_cost"] for r in rows)),
+        "total_labor": round(sum(r["labor_cost"] for r in rows)),
+        "total_cost": round(sum(r["total_cost"] for r in rows)),
+        "items": rows,
+    }
+
+
+# ═══════════════════════════════════════════════════════════════════
+# 고객납기 추적 (수주 → WO → 출하)
+# ═══════════════════════════════════════════════════════════════════
+
+@router.get("/delivery-tracking")
+def delivery_tracking(
+    year: int,
+    month: int,
+    db: Session = Depends(get_db),
+):
+    """수주-WO-출하 납기 추적"""
+    from app.models.sales import SalesOrder, Shipment
+    from app.models.auth import User as AuthUser
+
+    month_start = date(year, month, 1)
+    month_end = date(year, month + 1, 1) if month < 12 else date(year + 1, 1, 1)
+
+    orders = db.query(SalesOrder).filter(
+        SalesOrder.due_date >= month_start,
+        SalesOrder.due_date < month_end,
+    ).all()
+
+    result = []
+    for so in orders:
+        # 같은 품번, 납기 ±7일 내 WO 연결
+        wos = db.query(MesWorkOrder).filter(
+            MesWorkOrder.part_no == so.part_no,
+            MesWorkOrder.plan_date >= month_start - timedelta(days=7),
+            MesWorkOrder.plan_date < month_end + timedelta(days=7),
+        ).all()
+        wo_data = [{"wo_no": w.wo_no, "plan_date": str(w.plan_date), "status": w.status,
+                    "good_qty": sum(s.good_qty for s in w.sessions)} for w in wos]
+        wo_total_good = sum(w["good_qty"] for w in wo_data)
+
+        # 같은 수주번호 출하
+        ships = db.query(Shipment).filter(Shipment.so_no == so.so_no).all()
+        shipped_qty = sum(s.qty for s in ships)
+        last_ship = max((s.ship_date for s in ships), default=None)
+
+        # 납기 준수 판정
+        on_time = None
+        if last_ship:
+            on_time = last_ship <= so.due_date
+
+        from app.models.master import Partner
+        partner = db.get(Partner, so.partner_id)
+
+        result.append({
+            "so_no": so.so_no,
+            "partner_name": partner.name if partner else so.partner_id,
+            "part_no": so.part_no,
+            "part_name": so.item.name if so.item else so.part_no,
+            "order_qty": so.qty,
+            "due_date": str(so.due_date),
+            "so_status": so.status,
+            "wo_count": len(wos),
+            "wo_good_qty": wo_total_good,
+            "shipped_qty": shipped_qty,
+            "last_ship_date": str(last_ship) if last_ship else None,
+            "on_time": on_time,
+            "open_qty": max(0, so.qty - shipped_qty),
+            "work_orders": wo_data,
+        })
+
+    result.sort(key=lambda x: x["due_date"])
+    return {"year": year, "month": month, "items": result}

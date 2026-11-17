@@ -243,6 +243,453 @@ const STATUS_COLOR = {
   '대기':  { bg: '#f1f5f9', border: '#cbd5e1', text: '#64748b', dot: '#94a3b8' },
 }
 
+/* ── 원가 분석 탭 ───────────────────────────────────────────────── */
+function CostAnalysis() {
+  const now = new Date()
+  const [year, setYear] = useState(now.getFullYear())
+  const [month, setMonth] = useState(now.getMonth() + 1)
+  const [data, setData] = useState(null)
+  const [loading, setLoading] = useState(false)
+
+  const load = useCallback(() => {
+    setLoading(true)
+    api.get(`/mes-floor/cost-analysis?year=${year}&month=${month}`)
+      .then(r => setData(r.data)).catch(() => setData(null))
+      .finally(() => setLoading(false))
+  }, [year, month])
+  useEffect(() => { load() }, [load])
+
+  const marginColor = (m) => m === null ? '#94a3b8' : m >= 20 ? '#16a34a' : m >= 0 ? '#d97706' : '#dc2626'
+
+  return (
+    <div>
+      <div style={{ display:'flex', gap:10, marginBottom:16, alignItems:'center' }}>
+        <select value={year} onChange={e => setYear(+e.target.value)} style={{ padding:'6px 10px', borderRadius:6, border:'1px solid #d1d5db', fontSize:13 }}>
+          {[now.getFullYear()-1, now.getFullYear()].map(y => <option key={y} value={y}>{y}년</option>)}
+        </select>
+        <select value={month} onChange={e => setMonth(+e.target.value)} style={{ padding:'6px 10px', borderRadius:6, border:'1px solid #d1d5db', fontSize:13 }}>
+          {Array.from({length:12},(_,i)=>i+1).map(m => <option key={m} value={m}>{m}월</option>)}
+        </select>
+        <button onClick={load} style={{ padding:'6px 14px', borderRadius:6, background:'#1d4ed8', color:'#fff', border:'none', fontSize:13, cursor:'pointer' }}>조회</button>
+      </div>
+
+      {loading && <div style={{ padding:40, textAlign:'center', color:'#94a3b8' }}>로딩 중...</div>}
+
+      {data && (
+        <>
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:12, marginBottom:16 }}>
+            {[
+              { label:'총 재료비', val: data.total_material?.toLocaleString(), unit:'원' },
+              { label:'총 노무비', val: data.total_labor?.toLocaleString(), unit:'원' },
+              { label:'총 원가', val: data.total_cost?.toLocaleString(), unit:'원', bold:true },
+            ].map(k => (
+              <div key={k.label} style={{ background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:8, padding:'12px 16px', textAlign:'center' }}>
+                <div style={{ fontSize:11, color:'#64748b', marginBottom:4 }}>{k.label}</div>
+                <div style={{ fontSize:20, fontWeight:k.bold?800:600, color:'#374151' }}>{k.val}<span style={{ fontSize:12, color:'#94a3b8', marginLeft:3 }}>{k.unit}</span></div>
+              </div>
+            ))}
+          </div>
+          <table style={{ width:'100%', borderCollapse:'collapse', fontSize:13 }}>
+            <thead>
+              <tr style={{ background:'#f8fafc' }}>
+                {['품번','품명','생산량','재료비','노무비','단위원가','이익률'].map(h => (
+                  <th key={h} style={{ padding:'8px 12px', textAlign:'right', borderBottom:'2px solid #e2e8f0', fontWeight:700, color:'#374151' }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {data.items.map(r => (
+                <tr key={r.part_no} style={{ borderBottom:'1px solid #f1f5f9' }}>
+                  <td style={{ padding:'8px 12px', fontFamily:'monospace', textAlign:'left', color:'#374151' }}>{r.part_no}</td>
+                  <td style={{ padding:'8px 12px', textAlign:'left', color:'#374151' }}>{r.part_name}</td>
+                  <td style={{ padding:'8px 12px', textAlign:'right' }}>{r.good_qty?.toLocaleString()}</td>
+                  <td style={{ padding:'8px 12px', textAlign:'right' }}>{r.material_cost?.toLocaleString()}</td>
+                  <td style={{ padding:'8px 12px', textAlign:'right' }}>{r.labor_cost?.toLocaleString()}</td>
+                  <td style={{ padding:'8px 12px', textAlign:'right', fontWeight:700 }}>{r.unit_cost?.toLocaleString()}</td>
+                  <td style={{ padding:'8px 12px', textAlign:'right', fontWeight:800, color: marginColor(r.margin) }}>
+                    {r.margin !== null ? `${r.margin}%` : '-'}
+                  </td>
+                </tr>
+              ))}
+              {data.items.length === 0 && <tr><td colSpan={7} style={{ padding:30, textAlign:'center', color:'#94a3b8' }}>데이터 없음</td></tr>}
+            </tbody>
+          </table>
+        </>
+      )}
+    </div>
+  )
+}
+
+
+/* ── SPC 관리도 탭 ──────────────────────────────────────────────── */
+function SpcChart() {
+  const [items, setItems] = useState([])
+  const [partNo, setPartNo] = useState('')
+  const [dim, setDim] = useState('dim1')
+  const [data, setData] = useState(null)
+  const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    api.get('/master/items').then(r => setItems(r.data || [])).catch(() => {})
+  }, [])
+
+  const load = () => {
+    if (!partNo) return
+    setLoading(true)
+    api.get(`/mes-floor/spc-chart?part_no=${encodeURIComponent(partNo)}&dim=${dim}`)
+      .then(r => setData(r.data)).catch(() => setData(null))
+      .finally(() => setLoading(false))
+  }
+
+  const groups = data?.groups || []
+  const maxXbar = groups.length ? Math.max(...groups.map(g => g.xbar), data.ucl_x || 0) : 1
+  const minXbar = groups.length ? Math.min(...groups.map(g => g.xbar), data.lcl_x || 0) : 0
+  const maxR = groups.length ? Math.max(...groups.map(g => g.r), data.ucl_r || 0) : 1
+  const rangeX = maxXbar - minXbar || 1
+
+  const plotY = (v, min, max) => {
+    const range = max - min || 1
+    return Math.round(10 + ((max - v) / range) * 80)
+  }
+
+  return (
+    <div>
+      <div style={{ display:'flex', gap:10, marginBottom:16, flexWrap:'wrap', alignItems:'center' }}>
+        <select value={partNo} onChange={e => setPartNo(e.target.value)} style={{ padding:'6px 10px', borderRadius:6, border:'1px solid #d1d5db', fontSize:13, minWidth:160 }}>
+          <option value="">품번 선택</option>
+          {items.map(i => <option key={i.part_no} value={i.part_no}>{i.part_no} {i.name}</option>)}
+        </select>
+        <select value={dim} onChange={e => setDim(e.target.value)} style={{ padding:'6px 10px', borderRadius:6, border:'1px solid #d1d5db', fontSize:13 }}>
+          <option value="dim1">치수 1</option>
+          <option value="dim2">치수 2</option>
+          <option value="dim3">치수 3</option>
+        </select>
+        <button onClick={load} style={{ padding:'6px 14px', borderRadius:6, background:'#1d4ed8', color:'#fff', border:'none', fontSize:13, cursor:'pointer' }}>조회</button>
+      </div>
+
+      {loading && <div style={{ padding:40, textAlign:'center', color:'#94a3b8' }}>로딩 중...</div>}
+
+      {data && groups.length === 0 && <div style={{ padding:30, textAlign:'center', color:'#94a3b8' }}>검사 데이터 없음 — 초·중·종물 검사를 먼저 등록하세요</div>}
+
+      {data && groups.length > 0 && (
+        <div>
+          {/* 관리 한계값 요약 */}
+          <div style={{ display:'flex', gap:16, marginBottom:16, flexWrap:'wrap' }}>
+            {[
+              { label:'X̄̄ (중심선)', val: data.xbar_bar },
+              { label:'UCL(X̄)', val: data.ucl_x },
+              { label:'LCL(X̄)', val: data.lcl_x },
+              { label:'R̄', val: data.r_bar },
+              { label:'UCL(R)', val: data.ucl_r },
+              data.spec ? { label:'규격', val: data.spec } : null,
+            ].filter(Boolean).map(k => (
+              <div key={k.label} style={{ background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:6, padding:'8px 14px', textAlign:'center', minWidth:80 }}>
+                <div style={{ fontSize:11, color:'#64748b' }}>{k.label}</div>
+                <div style={{ fontSize:16, fontWeight:700, color:'#374151' }}>{k.val}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* X̄ 관리도 (SVG) */}
+          <div style={{ marginBottom:8, fontWeight:700, fontSize:13, color:'#374151' }}>X̄ 관리도</div>
+          <svg viewBox={`0 0 ${Math.max(groups.length * 30 + 40, 400)} 100`} style={{ width:'100%', height:120, background:'#f8fafc', borderRadius:8, border:'1px solid #e2e8f0', display:'block', marginBottom:16 }}>
+            {/* UCL/LCL/CL 라인 */}
+            <line x1="20" y1={plotY(data.ucl_x, minXbar, maxXbar)} x2={groups.length*30+30} y2={plotY(data.ucl_x, minXbar, maxXbar)} stroke="#dc2626" strokeDasharray="4" strokeWidth="1" />
+            <line x1="20" y1={plotY(data.xbar_bar, minXbar, maxXbar)} x2={groups.length*30+30} y2={plotY(data.xbar_bar, minXbar, maxXbar)} stroke="#374151" strokeWidth="1.5" />
+            <line x1="20" y1={plotY(data.lcl_x, minXbar, maxXbar)} x2={groups.length*30+30} y2={plotY(data.lcl_x, minXbar, maxXbar)} stroke="#dc2626" strokeDasharray="4" strokeWidth="1" />
+            {/* 데이터 포인트 연결 */}
+            {groups.map((g, i) => i > 0 && (
+              <line key={`l${i}`}
+                x1={30 + (i-1)*30} y1={plotY(groups[i-1].xbar, minXbar, maxXbar)}
+                x2={30 + i*30} y2={plotY(g.xbar, minXbar, maxXbar)}
+                stroke="#1d4ed8" strokeWidth="1.5" />
+            ))}
+            {groups.map((g, i) => {
+              const y = plotY(g.xbar, minXbar, maxXbar)
+              const oor = g.xbar > data.ucl_x || g.xbar < data.lcl_x
+              return <circle key={i} cx={30 + i*30} cy={y} r="4" fill={oor ? '#dc2626' : '#1d4ed8'} />
+            })}
+          </svg>
+
+          {/* 데이터 테이블 */}
+          <div style={{ overflowX:'auto' }}>
+            <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
+              <thead>
+                <tr style={{ background:'#f8fafc' }}>
+                  {['그룹','검사','X̄','R','판정'].map(h => (
+                    <th key={h} style={{ padding:'6px 10px', textAlign:'center', borderBottom:'2px solid #e2e8f0', fontWeight:700, color:'#374151' }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {groups.map(g => {
+                  const oor = g.xbar > data.ucl_x || g.xbar < data.lcl_x
+                  return (
+                    <tr key={g.idx} style={{ borderBottom:'1px solid #f1f5f9', background: oor ? '#fef2f2' : 'transparent' }}>
+                      <td style={{ padding:'6px 10px', textAlign:'center' }}>{g.idx}</td>
+                      <td style={{ padding:'6px 10px', textAlign:'center', color:'#64748b' }}>{g.insp_type}</td>
+                      <td style={{ padding:'6px 10px', textAlign:'center', fontWeight:700, color: oor ? '#dc2626' : '#374151' }}>{g.xbar}</td>
+                      <td style={{ padding:'6px 10px', textAlign:'center' }}>{g.r}</td>
+                      <td style={{ padding:'6px 10px', textAlign:'center' }}>
+                        <span style={{ color: oor ? '#dc2626' : '#16a34a', fontWeight:700 }}>{oor ? '이상' : 'OK'}</span>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+
+/* ── SMED 분석 탭 ───────────────────────────────────────────────── */
+function SmedAnalysis() {
+  const [days, setDays] = useState(30)
+  const [data, setData] = useState(null)
+  const [loading, setLoading] = useState(false)
+
+  const load = useCallback(() => {
+    setLoading(true)
+    api.get(`/mes-floor/smed-analysis?days=${days}`)
+      .then(r => setData(r.data)).catch(() => setData(null))
+      .finally(() => setLoading(false))
+  }, [days])
+  useEffect(() => { load() }, [load])
+
+  if (loading) return <div style={{ padding:40, textAlign:'center', color:'#94a3b8' }}>로딩 중...</div>
+
+  return (
+    <div>
+      <div style={{ display:'flex', gap:10, marginBottom:16, alignItems:'center' }}>
+        {[7, 14, 30, 90].map(d => (
+          <button key={d} onClick={() => setDays(d)}
+            style={{ padding:'6px 14px', borderRadius:6, border:`1px solid ${days===d?'#1d4ed8':'#d1d5db'}`, background:days===d?'#1d4ed8':'#fff', color:days===d?'#fff':'#374151', fontSize:13, cursor:'pointer' }}>
+            {d}일
+          </button>
+        ))}
+      </div>
+
+      {data && (
+        <>
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:12, marginBottom:16 }}>
+            {[
+              { label:'평균 교체 시간', val: `${data.avg_min}분`, color: data.avg_min <= data.target_min ? '#16a34a' : '#dc2626' },
+              { label:'최소 / 최대', val: `${data.min_min} / ${data.max_min}분`, color:'#374151' },
+              { label:'교체 횟수', val: `${data.count}회`, color:'#1d4ed8' },
+              { label:'목표', val: `${data.target_min}분 이하`, color:'#d97706' },
+            ].map(k => (
+              <div key={k.label} style={{ background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:8, padding:'12px 16px', textAlign:'center' }}>
+                <div style={{ fontSize:11, color:'#64748b', marginBottom:4 }}>{k.label}</div>
+                <div style={{ fontSize:18, fontWeight:700, color: k.color }}>{k.val}</div>
+              </div>
+            ))}
+          </div>
+
+          {data.by_machine?.length > 0 && (
+            <div style={{ marginBottom:16 }}>
+              <div style={{ fontWeight:700, fontSize:13, marginBottom:8, color:'#374151' }}>호기별 평균</div>
+              <div style={{ display:'flex', gap:10, flexWrap:'wrap' }}>
+                {data.by_machine.map(m => (
+                  <div key={m.machine_id} style={{ background: m.avg_min <= data.target_min ? '#f0fdf4' : '#fef2f2', border:`1px solid ${m.avg_min<=data.target_min?'#bbf7d0':'#fecaca'}`, borderRadius:8, padding:'8px 16px', textAlign:'center', minWidth:80 }}>
+                    <div style={{ fontSize:12, color:'#64748b' }}>{m.machine_id}</div>
+                    <div style={{ fontSize:16, fontWeight:800, color: m.avg_min<=data.target_min?'#16a34a':'#dc2626' }}>{m.avg_min}분</div>
+                    <div style={{ fontSize:11, color:'#94a3b8' }}>{m.count}회</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {data.count === 0 && <div style={{ padding:30, textAlign:'center', color:'#94a3b8' }}>금형 교체 기록 없음</div>}
+        </>
+      )}
+    </div>
+  )
+}
+
+
+/* ── 5-Why 보드 탭 ──────────────────────────────────────────────── */
+function FiveWhyBoard() {
+  const [andons, setAndons] = useState([])
+  const [selected, setSelected] = useState(null)
+  const [form, setForm] = useState({ why1:'', why2:'', why3:'', why4:'', why5:'', root_cause:'', countermeasure:'', created_by:'' })
+  const [existing, setExisting] = useState([])
+  const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    api.get('/mes-floor/andon/active').then(r => {
+      // 미해결 + 품질이상 우선
+      const all = [...(r.data||[])].sort((a,b) => a.andon_type === '품질이상' ? -1 : 1)
+      setAndons(all)
+    }).catch(() => {})
+    // 기존 5-Why 목록도 가져오기
+    api.get('/mes-floor/five-why?limit=20').then(r => setExisting(r.data||[])).catch(() => {})
+  }, [])
+
+  const submit = async () => {
+    if (!selected) return
+    setLoading(true)
+    try {
+      await api.post('/mes-floor/five-why', { andon_id: selected.id, ...form })
+      alert('5-Why 등록 완료')
+      setSelected(null)
+      setForm({ why1:'', why2:'', why3:'', why4:'', why5:'', root_cause:'', countermeasure:'', created_by:'' })
+      api.get('/mes-floor/five-why?limit=20').then(r => setExisting(r.data||[])).catch(() => {})
+    } catch { alert('등록 실패') }
+    setLoading(false)
+  }
+
+  return (
+    <div style={{ display:'grid', gridTemplateColumns: selected ? '1fr 1fr' : '1fr', gap:20 }}>
+      {/* 미해결 Andon 목록 */}
+      <div>
+        <div style={{ fontWeight:700, fontSize:13, marginBottom:10, color:'#374151' }}>🚨 미해결 안돈 ({andons.length}건)</div>
+        {andons.length === 0 && <div style={{ padding:20, color:'#94a3b8', fontSize:13 }}>미해결 안돈 없음</div>}
+        {andons.map(a => (
+          <div key={a.id} onClick={() => setSelected(a)} style={{ background: selected?.id===a.id?'#eff6ff':'#f8fafc', border:`1px solid ${selected?.id===a.id?'#3b82f6':'#e2e8f0'}`, borderRadius:8, padding:'10px 14px', marginBottom:8, cursor:'pointer' }}>
+            <div style={{ display:'flex', justifyContent:'space-between', fontSize:12 }}>
+              <span style={{ fontWeight:700, color:'#374151' }}>{a.machine_id} — {a.andon_type}</span>
+              <span style={{ color:'#94a3b8' }}>{a.called_at?.slice(0,16)}</span>
+            </div>
+            {a.note && <div style={{ fontSize:11, color:'#64748b', marginTop:4 }}>{a.note}</div>}
+          </div>
+        ))}
+
+        <div style={{ fontWeight:700, fontSize:13, marginTop:20, marginBottom:10, color:'#374151' }}>📋 최근 5-Why 이력</div>
+        {existing.slice(0,5).map(e => (
+          <div key={e.id} style={{ background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:8, padding:'8px 12px', marginBottom:6, fontSize:12 }}>
+            <div style={{ color:'#374151', fontWeight:600 }}>Why1: {e.why1}</div>
+            {e.root_cause && <div style={{ color:'#64748b', marginTop:2 }}>근본원인: {e.root_cause}</div>}
+            {e.countermeasure && <div style={{ color:'#16a34a', marginTop:2 }}>대책: {e.countermeasure}</div>}
+            <div style={{ color:'#94a3b8', marginTop:2 }}>{e.created_at?.slice(0,16)}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* 5-Why 작성 폼 */}
+      {selected && (
+        <div style={{ background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:12, padding:20 }}>
+          <div style={{ fontWeight:800, fontSize:14, marginBottom:4, color:'#374151' }}>5-Why 분석</div>
+          <div style={{ fontSize:12, color:'#64748b', marginBottom:16 }}>{selected.machine_id} — {selected.andon_type}: {selected.note}</div>
+          {['why1','why2','why3','why4','why5'].map((k,i) => (
+            <div key={k} style={{ marginBottom:10 }}>
+              <div style={{ fontSize:11, color:'#64748b', marginBottom:4 }}>Why {i+1}</div>
+              <input value={form[k]} onChange={e => setForm(f => ({...f,[k]:e.target.value}))} placeholder={`왜 ${i+1}`}
+                style={{ width:'100%', padding:'8px', borderRadius:6, border:'1px solid #d1d5db', fontSize:13, boxSizing:'border-box' }} />
+            </div>
+          ))}
+          {[['root_cause','근본 원인'],['countermeasure','재발 방지 대책'],['created_by','작성자']].map(([k,label]) => (
+            <div key={k} style={{ marginBottom:10 }}>
+              <div style={{ fontSize:11, color:'#64748b', marginBottom:4 }}>{label}</div>
+              <input value={form[k]} onChange={e => setForm(f => ({...f,[k]:e.target.value}))} placeholder={label}
+                style={{ width:'100%', padding:'8px', borderRadius:6, border:'1px solid #d1d5db', fontSize:13, boxSizing:'border-box' }} />
+            </div>
+          ))}
+          <div style={{ display:'flex', gap:8, marginTop:12 }}>
+            <button onClick={submit} disabled={loading}
+              style={{ flex:2, padding:'10px', borderRadius:8, border:'none', background:'#1d4ed8', color:'#fff', fontWeight:700, cursor:'pointer', fontSize:13 }}>
+              등록 (Andon 해결 처리)
+            </button>
+            <button onClick={() => setSelected(null)}
+              style={{ flex:1, padding:'10px', borderRadius:8, border:'1px solid #d1d5db', background:'#fff', color:'#64748b', cursor:'pointer', fontSize:13 }}>
+              취소
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+
+/* ── 납기 추적 탭 ───────────────────────────────────────────────── */
+function DeliveryTracking() {
+  const now = new Date()
+  const [year, setYear] = useState(now.getFullYear())
+  const [month, setMonth] = useState(now.getMonth() + 1)
+  const [data, setData] = useState(null)
+  const [loading, setLoading] = useState(false)
+  const [expanded, setExpanded] = useState(null)
+
+  const load = useCallback(() => {
+    setLoading(true)
+    api.get(`/mes-floor/delivery-tracking?year=${year}&month=${month}`)
+      .then(r => setData(r.data)).catch(() => setData(null))
+      .finally(() => setLoading(false))
+  }, [year, month])
+  useEffect(() => { load() }, [load])
+
+  const statusColor = (item) => {
+    if (item.shipped_qty >= item.order_qty) return { bg:'#f0fdf4', border:'#bbf7d0', badge:'#16a34a', label:'출하완료' }
+    if (item.on_time === false) return { bg:'#fef2f2', border:'#fecaca', badge:'#dc2626', label:'납기초과' }
+    if (new Date(item.due_date) < new Date()) return { bg:'#fff7ed', border:'#fed7aa', badge:'#d97706', label:'납기임박' }
+    return { bg:'#f8fafc', border:'#e2e8f0', badge:'#64748b', label:'진행중' }
+  }
+
+  return (
+    <div>
+      <div style={{ display:'flex', gap:10, marginBottom:16, alignItems:'center' }}>
+        <select value={year} onChange={e => setYear(+e.target.value)} style={{ padding:'6px 10px', borderRadius:6, border:'1px solid #d1d5db', fontSize:13 }}>
+          {[now.getFullYear()-1, now.getFullYear(), now.getFullYear()+1].map(y => <option key={y} value={y}>{y}년</option>)}
+        </select>
+        <select value={month} onChange={e => setMonth(+e.target.value)} style={{ padding:'6px 10px', borderRadius:6, border:'1px solid #d1d5db', fontSize:13 }}>
+          {Array.from({length:12},(_,i)=>i+1).map(m => <option key={m} value={m}>{m}월</option>)}
+        </select>
+        <button onClick={load} style={{ padding:'6px 14px', borderRadius:6, background:'#1d4ed8', color:'#fff', border:'none', fontSize:13, cursor:'pointer' }}>조회</button>
+      </div>
+
+      {loading && <div style={{ padding:40, textAlign:'center', color:'#94a3b8' }}>로딩 중...</div>}
+
+      {data?.items?.map(item => {
+        const s = statusColor(item)
+        const pct = item.order_qty > 0 ? Math.min(100, Math.round(item.shipped_qty / item.order_qty * 100)) : 0
+        return (
+          <div key={item.so_no} onClick={() => setExpanded(expanded===item.so_no ? null : item.so_no)}
+            style={{ background:s.bg, border:`1px solid ${s.border}`, borderRadius:10, padding:'12px 16px', marginBottom:10, cursor:'pointer' }}>
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:6 }}>
+              <div>
+                <span style={{ fontWeight:800, fontSize:13, color:'#374151' }}>{item.so_no}</span>
+                <span style={{ fontSize:12, color:'#64748b', marginLeft:10 }}>{item.partner_name}</span>
+                <span style={{ fontSize:12, color:'#64748b', marginLeft:6 }}>{item.part_no} {item.part_name}</span>
+              </div>
+              <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+                <span style={{ fontSize:11, color:'#64748b' }}>납기 {item.due_date}</span>
+                <span style={{ background:s.badge, color:'#fff', padding:'2px 10px', borderRadius:20, fontSize:11, fontWeight:700 }}>{s.label}</span>
+              </div>
+            </div>
+            <div style={{ display:'flex', gap:16, fontSize:12, color:'#64748b', marginBottom:6 }}>
+              <span>수주 <strong style={{ color:'#374151' }}>{item.order_qty?.toLocaleString()}</strong></span>
+              <span>생산 <strong style={{ color:'#1d4ed8' }}>{item.wo_good_qty?.toLocaleString()}</strong></span>
+              <span>출하 <strong style={{ color:'#16a34a' }}>{item.shipped_qty?.toLocaleString()}</strong></span>
+              <span>잔여 <strong style={{ color: item.open_qty>0 ? '#d97706' : '#374151' }}>{item.open_qty?.toLocaleString()}</strong></span>
+            </div>
+            <div style={{ background:'#e2e8f0', borderRadius:4, height:6, overflow:'hidden' }}>
+              <div style={{ width:`${pct}%`, height:'100%', background: s.badge, borderRadius:4 }} />
+            </div>
+
+            {expanded === item.so_no && item.work_orders?.length > 0 && (
+              <div style={{ marginTop:10, paddingTop:10, borderTop:'1px solid #e2e8f0' }}>
+                <div style={{ fontSize:11, fontWeight:700, color:'#64748b', marginBottom:6 }}>연결 WO ({item.wo_count}건)</div>
+                {item.work_orders.map(w => (
+                  <div key={w.wo_no} style={{ fontSize:11, color:'#374151', marginBottom:3 }}>
+                    {w.wo_no} — {w.plan_date} — {w.status} — 양품 {w.good_qty?.toLocaleString()}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )
+      })}
+      {data?.items?.length === 0 && <div style={{ padding:30, textAlign:'center', color:'#94a3b8' }}>해당 월 수주 없음</div>}
+    </div>
+  )
+}
+
+
 /* ── 계획 대비 실적 탭 ─────────────────────────────────────────── */
 function PlanVsActual() {
   const now = new Date()
@@ -634,7 +1081,17 @@ export default function MesDashboard() {
 
       {/* 메인 탭 */}
       <div style={{ display:'flex', gap:0, marginBottom:16, borderBottom:'2px solid #e2e8f0' }}>
-        {[{ k:'andon', label:'🏭 안돈 보드' }, { k:'oee', label:'📊 OEE 분석' }, { k:'pareto', label:'📉 불량 파레토' }, { k:'planact', label:'📋 계획 대비 실적' }].map(t => (
+        {[
+          { k:'andon', label:'🏭 안돈 보드' },
+          { k:'oee', label:'📊 OEE 분석' },
+          { k:'pareto', label:'📉 불량 파레토' },
+          { k:'planact', label:'📋 계획 대비 실적' },
+          { k:'cost', label:'💰 원가 분석' },
+          { k:'spc', label:'📐 SPC 관리도' },
+          { k:'smed', label:'⏱ SMED' },
+          { k:'fivewhy', label:'🔍 5-Why' },
+          { k:'delivery', label:'🚚 납기 추적' },
+        ].map(t => (
           <button key={t.k} onClick={() => setMainTab(t.k)} style={{
             padding:'8px 20px', fontSize:13, fontWeight:700, border:'none', cursor:'pointer',
             background:'transparent', color:mainTab===t.k?'#1d4ed8':'#64748b',
@@ -647,6 +1104,11 @@ export default function MesDashboard() {
       {mainTab === 'oee' && <OeeAnalysis />}
       {mainTab === 'pareto' && <DefectPareto />}
       {mainTab === 'planact' && <PlanVsActual />}
+      {mainTab === 'cost' && <CostAnalysis />}
+      {mainTab === 'spc' && <SpcChart />}
+      {mainTab === 'smed' && <SmedAnalysis />}
+      {mainTab === 'fivewhy' && <FiveWhyBoard />}
+      {mainTab === 'delivery' && <DeliveryTracking />}
 
       {mainTab === 'andon' && <>
       {/* KPI 요약 */}

@@ -110,6 +110,14 @@ function MachineCard({ m }) {
         </>
       )}
 
+      {/* OEE */}
+      {!isIdle && m.oee !== undefined && (
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#64748b' }}>
+          <span>OEE <strong style={{ color: m.oee >= 85 ? '#16a34a' : m.oee >= 70 ? '#d97706' : '#dc2626' }}>{m.oee}%</strong></span>
+          <span>불량률 <strong style={{ color: '#94a3b8' }}>{m.defect_qty || 0}</strong>EA</span>
+        </div>
+      )}
+
       {isIdle && (
         <div style={{ textAlign: 'center', color: '#475569', fontSize: 12, padding: '8px 0' }}>대기 중</div>
       )}
@@ -120,10 +128,14 @@ function MachineCard({ m }) {
 export default function MesFloorTV() {
   const now = useNow()
   const [machines, setMachines] = useState([])
+  const [andons, setAndons] = useState([])
   const [fullscreen, setFullscreen] = useState(false)
 
   const load = useCallback(() => {
-    api.get('/mes-floor/dashboard').then(r => setMachines(r.data)).catch(() => {})
+    Promise.all([
+      api.get('/mes-floor/dashboard').then(r => setMachines(r.data)).catch(() => {}),
+      api.get('/mes-floor/andon/active').then(r => setAndons(r.data)).catch(() => {}),
+    ])
   }, [])
 
   useEffect(() => {
@@ -220,6 +232,24 @@ export default function MesFloorTV() {
           </div>
         </div>
       </div>
+
+      {/* 안돈 경보 배너 */}
+      {andons.length > 0 && (
+        <div style={{
+          background: '#7f1d1d', border: '2px solid #dc2626',
+          borderRadius: 10, padding: '10px 20px', marginBottom: 16,
+          display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap',
+          animation: 'pulse 1.5s infinite',
+        }}>
+          <span style={{ fontSize: 20 }}>🚨</span>
+          <span style={{ fontWeight: 800, color: '#fca5a5', fontSize: 14 }}>미해결 안돈 {andons.length}건</span>
+          {andons.slice(0, 4).map(a => (
+            <span key={a.id} style={{ background: '#450a0a', padding: '3px 10px', borderRadius: 20, fontSize: 12, color: '#f87171' }}>
+              {a.machine_id} — {a.andon_type}
+            </span>
+          ))}
+        </div>
+      )}
 
       {/* KPI 요약 바 */}
       <div style={{

@@ -233,6 +233,23 @@ class ArticleInspection(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
 
 
+class FiveWhy(Base):
+    """5-Why 불량 원인 분석 (IATF §8.7 부적합품 관리)"""
+    __tablename__ = "mes_five_why"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    andon_id: Mapped[int] = mapped_column(ForeignKey("mes_andon_call.id"), nullable=False)
+    why1: Mapped[str | None] = mapped_column(Text)
+    why2: Mapped[str | None] = mapped_column(Text)
+    why3: Mapped[str | None] = mapped_column(Text)
+    why4: Mapped[str | None] = mapped_column(Text)
+    why5: Mapped[str | None] = mapped_column(Text)
+    root_cause: Mapped[str | None] = mapped_column(Text)
+    countermeasure: Mapped[str | None] = mapped_column(Text)
+    created_by: Mapped[str | None] = mapped_column(String(50))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+
+
 class WorkerSessionCost(Base):
     """세션 완료 시 자동 계산 실원가"""
     __tablename__ = "mes_session_cost"
