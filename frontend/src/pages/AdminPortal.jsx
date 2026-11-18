@@ -194,32 +194,34 @@ function ItemSearch({ value, onChange, onSelect, items, placeholder }) {
       />
       {open && (
         <div style={{
-          position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 9999,
-          background: '#fff', border: '1px solid #2563eb', borderRadius: 6,
-          boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
-          maxHeight: 280, overflowY: 'auto', marginTop: 2,
+          position: 'absolute', top: '100%', left: 0, zIndex: 9999,
+          minWidth: 480, width: 'max-content', maxWidth: '90vw',
+          background: '#fff', border: '1px solid #2563eb', borderRadius: 8,
+          boxShadow: '0 12px 32px rgba(0,0,0,0.18)',
+          maxHeight: 320, overflowY: 'auto', marginTop: 2,
         }}>
           {filtered.length === 0 ? (
-            <div style={{ padding: '10px 12px', fontSize: 12, color: '#94a3b8' }}>검색 결과 없음</div>
+            <div style={{ padding: '12px 16px', fontSize: 13, color: '#94a3b8' }}>검색 결과 없음</div>
           ) : filtered.map(it => (
             <div key={it.part_no}
               onMouseDown={() => handleSelect(it)}
               style={{
-                padding: '7px 12px', fontSize: 12, cursor: 'pointer',
+                padding: '9px 16px', fontSize: 13, cursor: 'pointer',
                 borderBottom: '1px solid #f1f5f9',
                 display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                gap: 16,
               }}
               onMouseEnter={e => e.currentTarget.style.background = '#eff6ff'}
               onMouseLeave={e => e.currentTarget.style.background = ''}
             >
-              <div>
-                <span style={{ fontWeight: 600 }}>{it.item_name}</span>
-                <span style={{ color: '#94a3b8', marginLeft: 8, fontFamily: 'monospace', fontSize: 11 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+                <span style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>{it.item_name}</span>
+                <span style={{ color: '#94a3b8', fontFamily: 'monospace', fontSize: 11, whiteSpace: 'nowrap' }}>
                   {it.part_no}
                 </span>
               </div>
               {it.unit_price > 0 && (
-                <span style={{ color: '#64748b', fontSize: 11, flexShrink: 0, marginLeft: 8 }}>
+                <span style={{ color: '#1e40af', fontSize: 12, fontWeight: 600, flexShrink: 0, whiteSpace: 'nowrap' }}>
                   {fmt(it.unit_price)}원
                 </span>
               )}
