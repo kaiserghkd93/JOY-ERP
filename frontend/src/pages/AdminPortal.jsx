@@ -278,6 +278,7 @@ function OrdersReceiptsTab({ partners }) {
   const [orders, setOrders] = useState([])
   const [receipts, setReceipts] = useState([])
   const [loading, setLoading] = useState(false)
+  const [stmtReceipts, setStmtReceipts] = useState(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -296,9 +297,41 @@ function OrdersReceiptsTab({ partners }) {
 
   useEffect(() => { load() }, [load])
 
+  const handlePurgeAll = async () => {
+    if (!partnerId) { alert('거래처를 먼저 선택하세요'); return }
+    const p = partners.find(x => String(x.partner_id) === String(partnerId))
+    const name = p?.partner_name || partnerId
+    if (!window.confirm(`⚠️ [${name}]의 입고 내역을 전부 삭제하고 발주를 초기화합니다.\n\n이 작업은 되돌릴 수 없습니다. 계속하시겠습니까?`)) return
+    try {
+      const res = await fetch(`${API}/purchase/admin/partner/${partnerId}/purge-all`, {
+        method: 'DELETE', headers: hdr(),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.detail || '삭제 실패')
+      alert(`완료: 입고 ${data.purged}건 삭제, 발주 ${data.reset_pos?.length || 0}건 초기화`)
+      load()
+    } catch (e) { alert('오류: ' + e.message) }
+  }
+
+  const handleBulkStatement = () => {
+    if (!partnerId) { alert('거래처를 먼저 선택하세요'); return }
+    const confirmed = receipts.filter(r => r.status === 'confirmed' && r.qty > 0)
+    if (!confirmed.length) { alert('확정된 납품 내역이 없습니다'); return }
+    setStmtReceipts(confirmed)
+  }
+
+  const partnerName = partners.find(x => String(x.partner_id) === String(partnerId))?.partner_name || '전체'
+
   return (
     <div>
-      <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 12 }}>
+      {stmtReceipts && (
+        <DeliveryStatementModal
+          receipts={stmtReceipts}
+          partnerName={partnerName}
+          onClose={() => setStmtReceipts(null)}
+        />
+      )}
+      <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 12, flexWrap: 'wrap' }}>
         <select
           value={partnerId}
           onChange={e => setPartnerId(e.target.value)}
@@ -318,6 +351,21 @@ function OrdersReceiptsTab({ partners }) {
           </button>
         </div>
         <button className="btn-sm" onClick={load} disabled={loading}>↻ 새로고침</button>
+        {partnerId && (
+          <>
+            <div style={{ width: 1, height: 20, background: 'var(--border)', margin: '0 2px' }} />
+            <button
+              className="btn-sm"
+              style={{ background: '#eff6ff', color: '#1e40af', border: '1px solid #bfdbfe', fontWeight: 700 }}
+              onClick={handleBulkStatement}
+            >🖨️ 일괄 명세서 재발행</button>
+            <button
+              className="btn-sm"
+              style={{ background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', fontWeight: 700 }}
+              onClick={handlePurgeAll}
+            >🗑️ 입고 전체 초기화</button>
+          </>
+        )}
       </div>
 
       {loading && <p style={{ color: 'var(--text-xs)', fontSize: 13 }}>로딩 중...</p>}

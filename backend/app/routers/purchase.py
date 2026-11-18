@@ -1001,6 +1001,48 @@ def purge_receipt(gr_no: str, db: Session = Depends(get_db), _: User = Depends(r
     return {"ok": True, "purged": gr_no}
 
 
+@router.delete("/admin/partner/{partner_id}/purge-all")
+def purge_partner_all_receipts(partner_id: int, db: Session = Depends(get_db), _: User = Depends(require_admin)):
+    """관리자 전용: 거래처의 모든 입고전표 + 재고원장 완전삭제 + 발주 open 초기화 (오입력 데이터 정리용)"""
+    from app.models.quality import Inspection, NonConformance
+    from app.models.ledger import StockLedger
+
+    receipts = db.query(Receipt).filter(Receipt.partner_id == partner_id).all()
+    if not receipts:
+        return {"ok": True, "purged": 0, "reset_pos": []}
+
+    affected_po_nos = set()
+    purged_grs = []
+
+    for r in receipts:
+        # 재고원장 삭제
+        for row in db.query(StockLedger).filter(StockLedger.ref_no == r.gr_no).all():
+            db.delete(row)
+        # NCR 삭제
+        for ncr in db.query(NonConformance).filter(NonConformance.gr_no == r.gr_no).all():
+            db.delete(ncr)
+        # 검사결과 삭제
+        insp = db.query(Inspection).filter(Inspection.gr_no == r.gr_no).first()
+        if insp:
+            db.delete(insp)
+        # PO 목록 수집
+        if r.po_no and r.po_no != r.gr_no:
+            affected_po_nos.add(r.po_no)
+        db.delete(r)
+        purged_grs.append(r.gr_no)
+
+    # 발주 상태 open 초기화
+    reset_pos = []
+    for po_no in affected_po_nos:
+        po = db.get(PurchaseOrder, po_no)
+        if po and po.status != POStatus.open:
+            po.status = POStatus.open
+            reset_pos.append(po_no)
+
+    db.commit()
+    return {"ok": True, "purged": len(purged_grs), "purged_grs": purged_grs, "reset_pos": reset_pos}
+
+
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 #  외주 월마감 Excel 보고서 — Sony Dark Theme
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

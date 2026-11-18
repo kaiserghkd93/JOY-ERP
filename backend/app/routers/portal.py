@@ -120,9 +120,14 @@ def my_completed_orders(
             "is_direct": False,
         })
 
-    # 2) 직접입고 (po_no 없는 confirmed 입고)
-    q_dr = (
-        db.query(Receipt)
+    # 2) 직접입고 (po_no 없는 confirmed 입고) — part_no별 net qty 집계, 역분개 상쇄
+    from sqlalchemy import func as sa_func
+    dr_q = (
+        db.query(
+            Receipt.part_no,
+            sa_func.sum(Receipt.qty).label("net_qty"),
+            sa_func.max(Receipt.receipt_date).label("last_date"),
+        )
         .filter(
             Receipt.partner_id == partner_id,
             Receipt.po_no.is_(None),
@@ -130,26 +135,42 @@ def my_completed_orders(
         )
     )
     if year:
-        q_dr = q_dr.filter(sa_extract("year", Receipt.receipt_date) == year)
+        dr_q = dr_q.filter(sa_extract("year", Receipt.receipt_date) == year)
     if month:
-        q_dr = q_dr.filter(sa_extract("month", Receipt.receipt_date) == month)
-    for r in q_dr.order_by(Receipt.receipt_date.desc()).all():
-        item = db.get(Item, r.part_no)
+        dr_q = dr_q.filter(sa_extract("month", Receipt.receipt_date) == month)
+    dr_rows = dr_q.group_by(Receipt.part_no).having(sa_func.sum(Receipt.qty) > 0).all()
+    for row in dr_rows:
+        item = db.get(Item, row.part_no)
+        net_qty = int(row.net_qty)
+        # 대표 단가: 양수 입고 중 가장 최근 단가
+        last_r = (
+            db.query(Receipt)
+            .filter(
+                Receipt.partner_id == partner_id,
+                Receipt.po_no.is_(None),
+                Receipt.part_no == row.part_no,
+                Receipt.qty > 0,
+                Receipt.status == ReceiptStatus.confirmed,
+            )
+            .order_by(Receipt.receipt_date.desc())
+            .first()
+        )
+        unit_price = float(last_r.unit_price or 0) if last_r else 0
         result.append({
             "po_no": None,
-            "gr_no": r.gr_no,
-            "part_no": r.part_no,
-            "item_name": item.name if item else r.part_no,
+            "gr_no": last_r.gr_no if last_r else f"DR-{row.part_no}",
+            "part_no": row.part_no,
+            "item_name": item.name if item else row.part_no,
             "item_unit": item.unit if item else "EA",
-            "qty": r.qty,
-            "delivered_qty": r.qty,
+            "qty": net_qty,
+            "delivered_qty": net_qty,
             "remaining_qty": 0,
-            "unit_price": float(r.unit_price or 0),
-            "order_date": str(r.receipt_date),
-            "due_date": str(r.receipt_date),
+            "unit_price": unit_price,
+            "order_date": str(row.last_date),
+            "due_date": str(row.last_date),
             "status": "confirmed",
             "is_direct": True,
-            "note": r.note,
+            "note": "직접입고",
         })
 
     result.sort(key=lambda x: x["due_date"], reverse=True)
