@@ -169,6 +169,11 @@ export default function App() {
     }} />
   }
 
+  // admin이 /portal에 접근하면 관리자 포탈로 리다이렉트
+  if (user.role === 'admin' && loc.pathname === '/portal') {
+    return <Navigate to="/admin-portal" replace />
+  }
+
   // supplier 역할은 포털 전용
   if (user.role === 'supplier' && loc.pathname !== '/portal') {
     return <Navigate to="/portal" replace />
