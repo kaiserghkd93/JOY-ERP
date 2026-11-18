@@ -1043,6 +1043,213 @@ def purge_partner_all_receipts(partner_id: str, db: Session = Depends(get_db), _
     return {"ok": True, "purged": len(purged_grs), "purged_grs": purged_grs, "reset_pos": reset_pos}
 
 
+# ── QR 추적 페이지 (인증 불필요, 모바일 최적화) ───────────────────────
+from fastapi.responses import HTMLResponse as _HTMLResponse
+
+@router.get("/receipt/{gr_no}/track", response_class=_HTMLResponse, include_in_schema=False)
+def receipt_track_view(gr_no: str, db: Session = Depends(get_db)):
+    """QR 스캔 → LOT 흐름 추적 페이지 (인증 불필요)"""
+    from app.models.ledger import StockLedger as _SL
+    from sqlalchemy import func as _func
+
+    def _n(v):
+        try: return f"{int(v or 0):,}"
+        except: return str(v)
+    def _d(v): return str(v)[:10] if v else '—'
+
+    r = db.query(Receipt).filter(Receipt.gr_no == gr_no).first()
+    if not r:
+        return _HTMLResponse(f"""<!DOCTYPE html><html lang="ko"><head>
+        <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+        <title>조회 오류</title></head>
+        <body style="font-family:sans-serif;padding:40px;text-align:center;color:#1e293b;">
+        <div style="font-size:48px;margin-bottom:16px;">❌</div>
+        <h2>입고번호를 찾을 수 없습니다</h2>
+        <p style="color:#94a3b8;margin-top:8px;font-family:monospace">{gr_no}</p>
+        </body></html>""", status_code=404)
+
+    item    = db.get(Item, r.part_no)
+    partner = db.get(Partner, r.partner_id)
+
+    stock_qty = db.query(_func.sum(_SL.qty)).filter(_SL.part_no == r.part_no).scalar() or 0
+
+    shipped, shipped_total = [], 0
+    if r.lot_no:
+        try:
+            from app.models.sales import Shipment as _Ship
+            shipped = db.query(_Ship).filter(_Ship.lot_no == r.lot_no).all()
+            shipped_total = sum(s.qty for s in shipped if s.qty and s.qty > 0)
+        except Exception:
+            pass
+
+    status_val = r.status.value if hasattr(r.status, 'value') else str(r.status)
+
+    if status_val == 'pending':
+        step, badge = 0, '<span style="background:#fef3c7;color:#92400e;padding:7px 18px;border-radius:20px;font-weight:700">🔍 검사 대기</span>'
+    elif status_val == 'cancelled':
+        step, badge = -1, '<span style="background:#fee2e2;color:#991b1b;padding:7px 18px;border-radius:20px;font-weight:700">❌ 취소됨</span>'
+    elif shipped_total >= r.qty:
+        step, badge = 2, '<span style="background:#dbeafe;color:#1e40af;padding:7px 18px;border-radius:20px;font-weight:700">🚚 출하 완료</span>'
+    elif shipped_total > 0:
+        step, badge = 2, f'<span style="background:#fef9c3;color:#854d0e;padding:7px 18px;border-radius:20px;font-weight:700">📤 일부 출하 ({_n(shipped_total)}/{_n(r.qty)})</span>'
+    else:
+        step, badge = 1, f'<span style="background:#dcfce7;color:#15803d;padding:7px 18px;border-radius:20px;font-weight:700">🏭 창고 보관 중 ({_n(int(stock_qty))} {item.unit if item else "EA"})</span>'
+
+    def _sc(n):
+        active = n <= step
+        return f'width:30px;height:30px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;flex-shrink:0;background:{"#1e40af" if active else "#e2e8f0"};color:{"#fff" if active else "#94a3b8"}'
+
+    ship_rows = ''.join(f"""
+        <div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid #f8fafc;font-size:14px;">
+          <div>
+            <div style="font-family:monospace;font-size:12px;color:#1e40af">{s.sh_no}</div>
+            <div style="font-size:12px;color:#64748b;margin-top:2px">{_d(s.ship_date)}</div>
+          </div>
+          <div style="font-weight:700">{_n(s.qty)} {item.unit if item else "EA"}</div>
+        </div>
+    """ for s in shipped) if shipped else '<p style="text-align:center;color:#94a3b8;font-size:13px;padding:16px 0">출하 이력 없음</p>'
+
+    confirm_section = ''
+    if status_val == 'pending':
+        confirm_section = f"""
+        <div class="card">
+          <h2>⚡ 입고 확정</h2>
+          <p style="font-size:13px;color:#64748b;margin-bottom:14px;">
+            입고를 확정하면 재고에 자동 반영됩니다.
+          </p>
+          <button id="btn-confirm" onclick="doConfirm()"
+            style="width:100%;padding:14px;background:#1e40af;color:#fff;border:none;border-radius:10px;font-size:16px;font-weight:700;cursor:pointer;">
+            ✅ 입고 확정
+          </button>
+          <div id="confirm-msg" style="margin-top:10px;font-size:13px;text-align:center;min-height:20px;"></div>
+        </div>"""
+
+    return _HTMLResponse(f"""<!DOCTYPE html><html lang="ko"><head>
+    <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>LOT 추적 — {r.lot_no or gr_no}</title>
+    <style>
+      *{{box-sizing:border-box;margin:0;padding:0}}
+      body{{font-family:'Malgun Gothic',-apple-system,sans-serif;background:#f1f5f9;color:#1e293b}}
+      .hero{{background:linear-gradient(135deg,#1e3a8a,#1e40af);color:#fff;padding:22px 20px 18px}}
+      .hero h1{{font-size:17px;font-weight:800;margin-bottom:4px}}
+      .hero .sub{{font-size:12px;opacity:.8}}
+      .card{{background:#fff;border-radius:14px;padding:18px;margin:12px;box-shadow:0 1px 6px rgba(0,0,0,.07)}}
+      .card h2{{font-size:11px;font-weight:700;color:#94a3b8;letter-spacing:1px;text-transform:uppercase;margin-bottom:12px}}
+      .row{{display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid #f8fafc;font-size:14px}}
+      .row:last-child{{border-bottom:none}}
+      .lbl{{color:#64748b}}.val{{font-weight:600;text-align:right;max-width:60%}}
+      .tl{{display:flex;align-items:center}}
+      .tl-step{{display:flex;flex-direction:column;align-items:center;flex:1}}
+      .tl-line{{flex:1;height:2px;margin-top:15px}}
+      .tl-lbl{{font-size:11px;margin-top:6px;font-weight:600}}
+    </style>
+    </head><body>
+    <div class="hero">
+      <h1>📦 LOT 추적 조회</h1>
+      <div class="sub">{partner.name if partner else r.partner_id} &nbsp;·&nbsp; {_d(r.receipt_date)}</div>
+    </div>
+
+    <div class="card">
+      <h2>현재 위치</h2>
+      <div style="text-align:center;margin-bottom:16px">{badge}</div>
+      <div class="tl">
+        <div class="tl-step">
+          <div style="{_sc(0)}">1</div>
+          <div class="tl-lbl" style="color:{'#1e40af' if step>=0 else '#94a3b8'}">입고</div>
+        </div>
+        <div class="tl-line" style="background:{'#1e40af' if step>=1 else '#e2e8f0'}"></div>
+        <div class="tl-step">
+          <div style="{_sc(1)}">2</div>
+          <div class="tl-lbl" style="color:{'#1e40af' if step>=1 else '#94a3b8'}">창고</div>
+        </div>
+        <div class="tl-line" style="background:{'#1e40af' if step>=2 else '#e2e8f0'}"></div>
+        <div class="tl-step">
+          <div style="{_sc(2)}">3</div>
+          <div class="tl-lbl" style="color:{'#1e40af' if step>=2 else '#94a3b8'}">출하</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>입고 정보</h2>
+      <div class="row"><span class="lbl">입고번호</span><span class="val" style="font-family:monospace;font-size:12px;color:#1e40af">{r.gr_no}</span></div>
+      <div class="row"><span class="lbl">LOT번호</span><span class="val" style="font-family:monospace;font-size:12px;color:#6366f1">{r.lot_no or '—'}</span></div>
+      <div class="row"><span class="lbl">품목명</span><span class="val">{item.name if item else r.part_no}</span></div>
+      <div class="row"><span class="lbl">품번</span><span class="val" style="font-family:monospace;font-size:12px;color:#64748b">{r.part_no}</span></div>
+      <div class="row"><span class="lbl">납품 수량</span><span class="val">{_n(r.qty)} {item.unit if item else 'EA'}</span></div>
+      <div class="row"><span class="lbl">납품일</span><span class="val">{_d(r.receipt_date)}</span></div>
+      <div class="row"><span class="lbl">협력사</span><span class="val">{partner.name if partner else r.partner_id}</span></div>
+    </div>
+
+    {confirm_section}
+
+    <div class="card">
+      <h2>출하 이력</h2>
+      {ship_rows}
+    </div>
+
+    <div style="text-align:center;padding:16px 20px 32px;font-size:11px;color:#94a3b8">
+      NEXGEM ERP &nbsp;·&nbsp; {r.part_no}
+    </div>
+
+    <script>
+    async function doConfirm(){{
+      const token = localStorage.getItem('portal_token') || '';
+      const msg = document.getElementById('confirm-msg');
+      if (!token){{
+        msg.innerHTML = '로그인이 필요합니다. <a href="/portal-app" style="color:#1e40af;text-decoration:underline">포털 로그인 →</a>';
+        msg.style.color='#dc2626'; return;
+      }}
+      const btn = document.getElementById('btn-confirm');
+      btn.disabled=true; btn.textContent='처리 중...';
+      try{{
+        const res = await fetch('/portal/receipt/{gr_no}/qr-confirm',{{
+          method:'POST',
+          headers:{{'Authorization':'Bearer '+token,'Content-Type':'application/json'}}
+        }});
+        const data = await res.json();
+        if(res.ok){{
+          btn.style.background='#16a34a'; btn.textContent='✅ 입고 확정 완료!';
+          msg.style.color='#16a34a'; msg.textContent='재고에 반영되었습니다.';
+          setTimeout(()=>location.reload(),1500);
+        }}else{{
+          btn.disabled=false; btn.textContent='✅ 입고 확정';
+          msg.style.color='#dc2626'; msg.textContent='오류: '+(data.detail||'처리 실패');
+        }}
+      }}catch(e){{
+        btn.disabled=false; msg.style.color='#dc2626'; msg.textContent='네트워크 오류: '+e.message;
+      }}
+    }}
+    </script>
+    </body></html>""")
+
+
+@router.post("/receipts/batch-cancel", dependencies=[Depends(require_admin)])
+def batch_cancel_receipts(gr_nos: list[str], db: Session = Depends(get_db)):
+    """관리자 전용: 선택 입고건 역분개/취소 (ERP 원칙: 삭제 아닌 취소전표)"""
+    from app.services.ledger_service import cancel_receipt as _cancel_rcpt
+
+    cancelled, reversed_ok, errors = [], [], []
+
+    for gr_no in gr_nos:
+        r = db.query(Receipt).filter(Receipt.gr_no == gr_no).first()
+        if not r or r.status == ReceiptStatus.cancelled:
+            continue
+        try:
+            if r.status == ReceiptStatus.pending:
+                r.status = ReceiptStatus.cancelled
+                db.flush()
+                cancelled.append(gr_no)
+            elif r.status == ReceiptStatus.confirmed:
+                _cancel_rcpt(db, gr_no, force=True)
+                reversed_ok.append(gr_no)
+        except Exception as e:
+            errors.append({'gr_no': gr_no, 'error': str(e)})
+
+    db.commit()
+    return {'ok': True, 'cancelled': cancelled, 'reversed': reversed_ok, 'errors': errors}
+
+
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 #  외주 월마감 Excel 보고서 — Sony Dark Theme
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

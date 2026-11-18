@@ -250,6 +250,23 @@ class DeliveryReq(BaseModel):
     note: str | None = None
 
 
+@router.post("/receipt/{gr_no}/qr-confirm")
+def qr_confirm_receipt(gr_no: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """QR 스캔 → 협력사 담당자 입고 확정 (포털 로그인 필요)"""
+    from app.services.ledger_service import confirm_receipt as _confirm
+    from app.models.purchase import Receipt as _Receipt
+
+    partner_id = _supplier_partner(user, allow_admin=True)
+    r = db.get(_Receipt, gr_no)
+    if not r:
+        raise HTTPException(404, "입고 번호를 찾을 수 없습니다")
+    if partner_id and r.partner_id != partner_id:
+        raise HTTPException(403, "본인 협력사의 입고만 확정할 수 있습니다")
+    result = _confirm(db, gr_no)
+    db.commit()
+    return {"ok": True, "gr_no": gr_no, "part_no": r.part_no, "qty": r.qty}
+
+
 @router.post("/deliver")
 def deliver(body: DeliveryReq, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     partner_id = _supplier_partner(user)

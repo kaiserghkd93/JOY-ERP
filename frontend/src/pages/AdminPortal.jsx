@@ -11,39 +11,34 @@ const STATUS_CLASS = { pending: 'badge badge-amber', confirmed: 'badge badge-gre
 function fmt(n) { return Number(n || 0).toLocaleString() }
 function fmtDate(s) { return s ? s.slice(0, 10) : '—' }
 
-// ── 납품 명세표 모달 (QR 포함) ──────────────────────────────────────
+// ── 납품 명세표 모달 (헤더 QR 1개) ─────────────────────────────────
 function DeliveryStatementModal({ receipts, partnerName, onClose }) {
-  const [qrUrls, setQrUrls] = useState({})
+  const [headerQr, setHeaderQr] = useState('')
 
   useEffect(() => {
-    receipts.forEach(async r => {
-      const url = `${window.location.origin}/api/portal/receipt/${r.gr_no}/view`
-      try {
-        const dataUrl = await QRCode.toDataURL(url, { width: 160, margin: 1, errorCorrectionLevel: 'M' })
-        setQrUrls(prev => ({ ...prev, [r.gr_no]: dataUrl }))
-      } catch {}
-    })
+    // 명세표 전체 대표 QR 1개 — 첫 번째 GR 번호로 생성 (LOT 추적 페이지 링크)
+    const firstGr = receipts[0]?.gr_no || ''
+    if (!firstGr) return
+    const url = `${window.location.origin}/purchase/receipt/${firstGr}/track`
+    QRCode.toDataURL(url, { width: 180, margin: 1, errorCorrectionLevel: 'M' })
+      .then(setHeaderQr).catch(() => {})
   }, [receipts])
 
   const handlePrint = () => {
     const rows = receipts.map(r => `
       <div style="border:1px solid #e2e8f0;border-radius:10px;padding:20px;margin-bottom:20px;page-break-inside:avoid;">
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;">
-          <div>
-            <div style="font-size:11px;color:#64748b;margin-bottom:4px;">입고번호</div>
-            <div style="font-family:monospace;font-size:14px;font-weight:700;color:#1e40af">${r.gr_no}</div>
-            <div style="font-size:11px;color:#6366f1;font-family:monospace;margin-top:4px;">LOT: ${r.lot_no || '—'}</div>
-            <div style="margin-top:12px;font-size:13px;font-weight:600;">${r.item_name || r.part_no}</div>
-            <div style="font-size:12px;color:#64748b;">${r.part_no}</div>
-            <div style="margin-top:8px;font-size:13px;">
-              수량: <strong>${fmt(r.qty)} ${r.item_unit || 'EA'}</strong>&nbsp;&nbsp;
-              단가: <strong>${fmt(r.unit_price)}원</strong>&nbsp;&nbsp;
-              금액: <strong>${fmt(r.amount)}원</strong>
-            </div>
-            <div style="font-size:12px;color:#64748b;margin-top:4px;">납품일: ${r.receipt_date}</div>
-          </div>
-          ${qrUrls[r.gr_no] ? `<img src="${qrUrls[r.gr_no]}" width="120" height="120" style="border:1px solid #e2e8f0;border-radius:6px;padding:4px;" />` : ''}
+        <div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap;">
+          <span style="font-family:monospace;font-size:13px;font-weight:700;color:#1e40af;background:#eff6ff;padding:3px 10px;border-radius:6px;">📦 ${r.gr_no}</span>
+          <span style="font-family:monospace;font-size:12px;color:#6366f1;background:#eef2ff;padding:3px 10px;border-radius:6px;">🏷️ ${r.lot_no || '—'}</span>
         </div>
+        <div style="font-weight:700;font-size:14px;">${r.item_name || r.part_no}</div>
+        <div style="font-size:12px;color:#64748b;">${r.part_no}</div>
+        <div style="margin-top:8px;font-size:13px;display:flex;gap:16px;flex-wrap:wrap;">
+          <span>수량 <strong>${fmt(r.qty)} ${r.item_unit || 'EA'}</strong></span>
+          <span>단가 <strong>${fmt(r.unit_price)}원</strong></span>
+          <span>금액 <strong style="color:#16a34a;">${fmt(r.amount)}원</strong></span>
+        </div>
+        <div style="font-size:12px;color:#94a3b8;margin-top:4px;">납품일: ${r.receipt_date}</div>
       </div>
     `).join('')
 
@@ -56,17 +51,24 @@ function DeliveryStatementModal({ receipts, partnerName, onClose }) {
         @media print { body { padding: 16px; } }
       </style>
     </head><body>
-      <div style="text-align:center;margin-bottom:28px;">
-        <div style="font-size:22px;font-weight:800;color:#1e293b;">납 품 명 세 표</div>
-        <div style="font-size:14px;color:#64748b;margin-top:6px;">
-          협력사: <strong>${partnerName}</strong>&nbsp;&nbsp;|&nbsp;&nbsp;
-          발행일: <strong>${new Date().toLocaleDateString('ko-KR')}</strong>&nbsp;&nbsp;|&nbsp;&nbsp;
-          총 ${receipts.length}건
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:28px;">
+        <div>
+          <div style="font-size:22px;font-weight:800;color:#1e293b;">납 품 명 세 표</div>
+          <div style="font-size:14px;color:#64748b;margin-top:6px;">
+            협력사: <strong>${partnerName}</strong>&nbsp;&nbsp;|&nbsp;&nbsp;
+            발행일: <strong>${new Date().toLocaleDateString('ko-KR')}</strong>&nbsp;&nbsp;|&nbsp;&nbsp;
+            총 ${receipts.length}건
+          </div>
+        </div>
+        <div style="text-align:center;border:2px solid #cbd5e1;border-radius:8px;padding:8px 12px;min-width:110px;">
+          <div style="font-size:11px;color:#475569;font-weight:700;margin-bottom:4px;">인 수 확 인</div>
+          ${headerQr ? `<img src="${headerQr}" width="96" height="96" style="display:block;" />` : '<div style="width:96px;height:96px;background:#f8fafc;border-radius:4px;"></div>'}
+          <div style="font-size:9px;color:#94a3b8;margin-top:4px;">스캔 → LOT 추적</div>
         </div>
       </div>
       ${rows}
-      <div style="margin-top:32px;text-align:right;font-size:12px;color:#94a3b8;">
-        ※ QR코드를 스캔하면 LOT 추적 및 입고 확정이 가능합니다.
+      <div style="margin-top:16px;text-align:right;font-size:12px;color:#94a3b8;">
+        ※ QR코드를 스캔하면 LOT 추적 및 입고 확인이 가능합니다.
       </div>
     </body></html>`)
     win.document.close()
@@ -82,63 +84,66 @@ function DeliveryStatementModal({ receipts, partnerName, onClose }) {
         background: '#fff', borderRadius: 12, padding: 28, width: '90%', maxWidth: 680,
         maxHeight: '88vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.25)',
       }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-          <div>
+        {/* 헤더: 제목 + 인수확인 QR */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
+          <div style={{ flex: 1 }}>
             <div style={{ fontSize: 18, fontWeight: 800 }}>납품 명세표</div>
             <div style={{ fontSize: 13, color: '#64748b', marginTop: 2 }}>
               협력사: <strong>{partnerName}</strong> | 총 {receipts.length}건
             </div>
+            <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+              <button
+                onClick={handlePrint}
+                style={{
+                  padding: '8px 20px', background: '#1e40af', color: '#fff',
+                  border: 'none', borderRadius: 8, fontWeight: 700, cursor: 'pointer', fontSize: 13,
+                }}
+              >🖨️ 인쇄 / PDF</button>
+              <button onClick={onClose}
+                style={{ padding: '8px 16px', background: '#f1f5f9', border: 'none', borderRadius: 8, cursor: 'pointer' }}>
+                닫기
+              </button>
+            </div>
           </div>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button
-              onClick={handlePrint}
-              style={{
-                padding: '8px 20px', background: '#1e40af', color: '#fff',
-                border: 'none', borderRadius: 8, fontWeight: 700, cursor: 'pointer', fontSize: 13,
-              }}
-            >🖨️ 인쇄 / PDF</button>
-            <button onClick={onClose}
-              style={{ padding: '8px 16px', background: '#f1f5f9', border: 'none', borderRadius: 8, cursor: 'pointer' }}>
-              닫기
-            </button>
+          {/* 인수확인 QR — 명세표 1장당 1개 */}
+          <div style={{
+            textAlign: 'center', border: '2px solid #cbd5e1', borderRadius: 8,
+            padding: '8px 12px', marginLeft: 20, flexShrink: 0,
+          }}>
+            <div style={{ fontSize: 11, color: '#475569', fontWeight: 700, marginBottom: 4 }}>인 수 확 인</div>
+            {headerQr
+              ? <img src={headerQr} width={100} height={100} style={{ display: 'block' }} />
+              : <div style={{ width: 100, height: 100, background: '#f8fafc', borderRadius: 4,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: 11, color: '#94a3b8' }}>QR 생성중...</div>
+            }
+            <div style={{ fontSize: 9, color: '#94a3b8', marginTop: 4 }}>스캔 → 입고확인</div>
           </div>
         </div>
 
+        {/* 기존 카드 형식 (QR 없음) */}
         {receipts.map(r => (
           <div key={r.gr_no} style={{
             border: '1px solid #e2e8f0', borderRadius: 10, padding: 18, marginBottom: 14,
-            display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start',
           }}>
-            <div style={{ flex: 1 }}>
-              <div style={{ display: 'flex', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
-                <span style={{
-                  fontFamily: 'monospace', fontSize: 13, fontWeight: 700, color: '#1e40af',
-                  background: '#eff6ff', padding: '3px 10px', borderRadius: 6,
-                }}>📦 {r.gr_no}</span>
-                <span style={{
-                  fontFamily: 'monospace', fontSize: 12, color: '#6366f1',
-                  background: '#eef2ff', padding: '3px 10px', borderRadius: 6,
-                }}>🏷️ {r.lot_no || '—'}</span>
-              </div>
-              <div style={{ fontWeight: 700, fontSize: 14 }}>{r.item_name || r.part_no}</div>
-              <div style={{ fontSize: 12, color: '#64748b' }}>{r.part_no}</div>
-              <div style={{ marginTop: 8, fontSize: 13, display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-                <span>수량 <strong>{fmt(r.qty)} {r.item_unit || 'EA'}</strong></span>
-                <span>단가 <strong>{fmt(r.unit_price)}원</strong></span>
-                <span>금액 <strong style={{ color: '#16a34a' }}>{fmt(r.amount)}원</strong></span>
-              </div>
-              <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 4 }}>납품일: {r.receipt_date}</div>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
+              <span style={{
+                fontFamily: 'monospace', fontSize: 13, fontWeight: 700, color: '#1e40af',
+                background: '#eff6ff', padding: '3px 10px', borderRadius: 6,
+              }}>📦 {r.gr_no}</span>
+              <span style={{
+                fontFamily: 'monospace', fontSize: 12, color: '#6366f1',
+                background: '#eef2ff', padding: '3px 10px', borderRadius: 6,
+              }}>🏷️ {r.lot_no || '—'}</span>
             </div>
-            <div style={{ marginLeft: 16, flexShrink: 0, textAlign: 'center' }}>
-              {qrUrls[r.gr_no]
-                ? <img src={qrUrls[r.gr_no]} width={120} height={120}
-                    style={{ border: '1px solid #e2e8f0', borderRadius: 6, padding: 3 }} />
-                : <div style={{ width: 120, height: 120, background: '#f8fafc', borderRadius: 6,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontSize: 11, color: '#94a3b8' }}>QR 생성중...</div>
-              }
-              <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 4 }}>스캔 → 입고확정</div>
+            <div style={{ fontWeight: 700, fontSize: 14 }}>{r.item_name || r.part_no}</div>
+            <div style={{ fontSize: 12, color: '#64748b' }}>{r.part_no}</div>
+            <div style={{ marginTop: 8, fontSize: 13, display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+              <span>수량 <strong>{fmt(r.qty)} {r.item_unit || 'EA'}</strong></span>
+              <span>단가 <strong>{fmt(r.unit_price)}원</strong></span>
+              <span>금액 <strong style={{ color: '#16a34a' }}>{fmt(r.amount)}원</strong></span>
             </div>
+            <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 4 }}>납품일: {r.receipt_date}</div>
           </div>
         ))}
       </div>
@@ -271,12 +276,64 @@ function PartnersTab({ partners, onSelectPartner }) {
   )
 }
 
-// ── 납품 이력 월별 탭 뷰 ────────────────────────────────────────────
-function ReceiptsByMonth({ grouped, months }) {
+// ── 납품 이력 월별 탭 뷰 (체크박스 + 역분개 삭제) ───────────────────────
+function ReceiptsByMonth({ grouped, months, onRefresh }) {
   const [selMonth, setSelMonth] = useState(months[0] || '')
+  const [checked, setChecked] = useState(new Set())
+  const [cancelling, setCancelling] = useState(false)
+
   const rows = grouped[selMonth] || []
   const totalAmt = rows.reduce((s, r) => s + Number(r.amount || 0), 0)
   const totalQty = rows.reduce((s, r) => s + Number(r.qty || 0), 0)
+
+  // 월 탭 변경 시 체크 초기화
+  const switchMonth = (ym) => { setSelMonth(ym); setChecked(new Set()) }
+
+  // 체크 토글 — 같은 po_no 는 묶음 처리
+  const toggleRow = (r) => {
+    const siblings = r.po_no
+      ? rows.filter(x => x.po_no && x.po_no === r.po_no).map(x => x.gr_no)
+      : [r.gr_no]
+    setChecked(prev => {
+      const next = new Set(prev)
+      const allChecked = siblings.every(gn => next.has(gn))
+      if (allChecked) siblings.forEach(gn => next.delete(gn))
+      else siblings.forEach(gn => next.add(gn))
+      return next
+    })
+  }
+
+  const toggleAll = () => {
+    if (checked.size === rows.length) setChecked(new Set())
+    else setChecked(new Set(rows.map(r => r.gr_no)))
+  }
+
+  const handleBatchCancel = async () => {
+    if (!checked.size) return
+    const grList = [...checked]
+    if (!window.confirm(`선택된 ${grList.length}건을 역분개(취소전표) 처리합니다.\n\n재고에서 차감됩니다. 계속하시겠습니까?`)) return
+    setCancelling(true)
+    try {
+      const res = await fetch(`${API}/purchase/receipts/batch-cancel`, {
+        method: 'POST',
+        headers: hdr(),
+        body: JSON.stringify(grList),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        const msg = typeof data.detail === 'string' ? data.detail : JSON.stringify(data.detail)
+        throw new Error(msg || '처리 실패')
+      }
+      const total = (data.cancelled?.length || 0) + (data.reversed?.length || 0)
+      alert(`완료: ${total}건 처리 (취소 ${data.cancelled?.length || 0}건, 역분개 ${data.reversed?.length || 0}건)${data.errors?.length ? '\n오류: ' + data.errors.map(e => e.gr_no + ' - ' + e.error).join(', ') : ''}`)
+      setChecked(new Set())
+      onRefresh?.()
+    } catch (e) {
+      alert('오류: ' + (e.message || String(e)))
+    } finally {
+      setCancelling(false)
+    }
+  }
 
   return (
     <div>
@@ -289,7 +346,7 @@ function ReceiptsByMonth({ grouped, months }) {
           return (
             <button
               key={ym}
-              onClick={() => setSelMonth(ym)}
+              onClick={() => switchMonth(ym)}
               style={{
                 padding: '5px 14px', borderRadius: 20, fontSize: 12, fontWeight: active ? 700 : 400,
                 border: active ? '2px solid var(--accent)' : '1px solid var(--border)',
@@ -304,42 +361,80 @@ function ReceiptsByMonth({ grouped, months }) {
         })}
       </div>
 
-      {/* 선택 월 헤더 */}
+      {/* 선택 월 헤더 + 역분개 버튼 */}
       <div style={{
-        display: 'flex', alignItems: 'center', gap: 16,
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
         padding: '8px 14px', background: 'var(--table-head)',
         borderRadius: '8px 8px 0 0', borderBottom: '2px solid var(--accent)',
         fontWeight: 700, fontSize: 13,
       }}>
-        <span>{selMonth.replace('-', '년 ')}월</span>
-        <span style={{ fontSize: 12, color: 'var(--text-xs)', fontWeight: 400 }}>
-          {rows.length}건 &nbsp;|&nbsp; 합계 ₩{fmt(totalAmt)}
-        </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <span>{selMonth.replace('-', '년 ')}월</span>
+          <span style={{ fontSize: 12, color: 'var(--text-xs)', fontWeight: 400 }}>
+            {rows.length}건 &nbsp;|&nbsp; 합계 ₩{fmt(totalAmt)}
+          </span>
+        </div>
+        {checked.size > 0 && (
+          <button
+            onClick={handleBatchCancel}
+            disabled={cancelling}
+            style={{
+              padding: '5px 14px', background: '#dc2626', color: '#fff',
+              border: 'none', borderRadius: 7, fontWeight: 700, fontSize: 12, cursor: 'pointer',
+            }}
+          >
+            {cancelling ? '처리 중...' : `🗑️ 선택 ${checked.size}건 취소처리`}
+          </button>
+        )}
       </div>
 
       <div style={{ overflowX: 'auto' }}>
         <table className="tbl" style={{ borderRadius: '0 0 8px 8px', marginTop: 0 }}>
           <thead>
             <tr>
+              <th style={{ width: 32 }}>
+                <input
+                  type="checkbox"
+                  checked={rows.length > 0 && checked.size === rows.length}
+                  onChange={toggleAll}
+                  style={{ cursor: 'pointer' }}
+                />
+              </th>
               <th>입고번호</th><th>LOT번호</th><th>협력사</th><th>품목</th>
               <th>수량</th><th>단가</th><th>금액</th><th>납품일</th><th>상태</th>
             </tr>
           </thead>
           <tbody>
-            {rows.map(r => (
-              <tr key={r.gr_no}>
-                <td style={{ fontFamily: 'monospace', fontSize: 12 }}>{r.gr_no}</td>
-                <td style={{ fontFamily: 'monospace', fontSize: 11, color: '#6366f1' }}>{r.lot_no || '—'}</td>
-                <td>{r.partner_name}</td>
-                <td>{r.item_name}<br /><span style={{ fontSize: 11, color: 'var(--text-xs)' }}>{r.part_no}</span></td>
-                <td style={{ textAlign: 'right' }}>{fmt(r.qty)} {r.item_unit}</td>
-                <td style={{ textAlign: 'right' }}>{fmt(r.unit_price)}</td>
-                <td style={{ textAlign: 'right' }}>{fmt(r.amount)}</td>
-                <td>{fmtDate(r.receipt_date)}</td>
-                <td><span className={STATUS_CLASS[r.status] || 'badge'}>{STATUS_LABEL[r.status] || r.status}</span></td>
-              </tr>
-            ))}
+            {rows.map(r => {
+              const isChecked = checked.has(r.gr_no)
+              return (
+                <tr
+                  key={r.gr_no}
+                  style={{ background: isChecked ? '#fef2f2' : undefined, cursor: 'pointer' }}
+                  onClick={() => toggleRow(r)}
+                >
+                  <td onClick={e => e.stopPropagation()} style={{ textAlign: 'center' }}>
+                    <input
+                      type="checkbox"
+                      checked={isChecked}
+                      onChange={() => toggleRow(r)}
+                      style={{ cursor: 'pointer' }}
+                    />
+                  </td>
+                  <td style={{ fontFamily: 'monospace', fontSize: 12 }}>{r.gr_no}</td>
+                  <td style={{ fontFamily: 'monospace', fontSize: 11, color: '#6366f1' }}>{r.lot_no || '—'}</td>
+                  <td>{r.partner_name}</td>
+                  <td>{r.item_name}<br /><span style={{ fontSize: 11, color: 'var(--text-xs)' }}>{r.part_no}</span></td>
+                  <td style={{ textAlign: 'right' }}>{fmt(r.qty)} {r.item_unit}</td>
+                  <td style={{ textAlign: 'right' }}>{fmt(r.unit_price)}</td>
+                  <td style={{ textAlign: 'right' }}>{fmt(r.amount)}</td>
+                  <td>{fmtDate(r.receipt_date)}</td>
+                  <td><span className={STATUS_CLASS[r.status] || 'badge'}>{STATUS_LABEL[r.status] || r.status}</span></td>
+                </tr>
+              )
+            })}
             <tr style={{ background: 'var(--table-head)', fontWeight: 700 }}>
+              <td />
               <td colSpan={4} style={{ textAlign: 'right', fontSize: 12, color: 'var(--text-xs)' }}>월 합계</td>
               <td style={{ textAlign: 'right' }}>{fmt(totalQty)}</td>
               <td />
@@ -508,7 +603,7 @@ function OrdersReceiptsTab({ partners }) {
           <p style={{ color: 'var(--text-xs)', fontSize: 13, padding: 12 }}>납품 이력 없음</p>
         )
         // selectedMonth는 이 IIFE 밖 state가 없으므로 별도 컴포넌트로 렌더
-        return <ReceiptsByMonth grouped={grouped} months={months} />
+        return <ReceiptsByMonth grouped={grouped} months={months} onRefresh={load} />
       })()}
     </div>
   )

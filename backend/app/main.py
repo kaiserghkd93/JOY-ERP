@@ -9,6 +9,8 @@ from app.routers import purchase_group, invoice, auto_order, import_ls, bom, rep
 from app.routers import auth, portal, admin_import, monthly_sales, monthly_purchase, sales_target
 from app.routers import material, mrp, cost_actual
 from app.routers import kpi_target
+from app.routers import receivable as receivable_router
+from app.models.sales import Payment as _payment_model  # noqa: ensure payment table
 from app.models import kpi as _kpi_models  # noqa: ensure kpi_target table
 from app.routers import inventory_adj
 from app.routers import quality_advanced
@@ -37,6 +39,7 @@ from sqlalchemy import text as _text
 with engine.connect() as _conn:
     for _sql in [
         "ALTER TABLE invoice ADD COLUMN IF NOT EXISTS closing_type VARCHAR(10)",
+        "ALTER TABLE invoice ADD COLUMN IF NOT EXISTS due_date DATE",
         "ALTER TABLE purchase_order ADD COLUMN IF NOT EXISTS po_type VARCHAR(20) DEFAULT 'outsource'",
         "ALTER TABLE purchase_order ADD COLUMN IF NOT EXISTS approval_status VARCHAR(20) DEFAULT '작성중'",
         "ALTER TABLE purchase_order ADD COLUMN IF NOT EXISTS approval_comment TEXT",
@@ -366,6 +369,7 @@ app.include_router(admin_maintenance.router)
 app.include_router(mes_floor_router.router)
 app.include_router(mes_monitor_router.router)
 app.include_router(hr_router.router)
+app.include_router(receivable_router.router)
 
 
 @app.on_event("startup")

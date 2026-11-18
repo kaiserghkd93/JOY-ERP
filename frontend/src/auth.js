@@ -7,11 +7,11 @@ const ROLE_PERMISSIONS = {
   executive:  ['/', '/dashboard', '/monthly-sales', '/monthly-purchase', '/sales-target', '/inventory', '/cost', '/cost-actual', '/mrp', '/management', '/exceptions',
                '/hr-employee', '/hr-attendance', '/hr-payroll'],
   manager:    ['/', '/sales-target', '/cost-actual', '/exceptions'],
-  accounting: ['/management', '/hr-employee', '/hr-attendance', '/hr-payroll'],
+  accounting: ['/management', '/hr-employee', '/hr-attendance', '/hr-payroll', '/receivable'],
   sales:      ['/', '/sales', '/invoice', '/monthly-sales', '/sales-target', '/inventory'],
   purchase:   ['/', '/purchase', '/receipt', '/mrp', '/monthly-purchase',
                '/inventory', '/master', '/bom',
-               '/quality', '/production', '/production-plan', '/exceptions', '/lot-trace'],
+               '/quality', '/production', '/production-plan', '/exceptions', '/lot-trace', '/receivable'],
   material:       ['/', '/purchase', '/mrp', '/inventory', '/inv-adjust', '/lot-trace'],
   manufacturing:  ['/', '/production', '/production-plan', '/production-gantt', '/sales', '/invoice', '/monthly-sales', '/sales-target', '/inventory', '/cost', '/cost-actual', '/mold', '/mrp', '/production-mrp', '/bom', '/inv-adjust', '/exceptions', '/lot-trace'],
   shipping:   ['/', '/sales', '/invoice', '/inventory', '/lot-trace'],
@@ -22,7 +22,7 @@ const ROLE_PERMISSIONS = {
                 '/quality', '/production', '/production-plan', '/production-mrp', '/production-gantt',
                 '/cost', '/cost-actual', '/mold', '/master', '/bom',
                 '/purchase', '/mrp', '/monthly-purchase', '/management', '/exceptions', '/lot-trace',
-                '/hr-employee', '/hr-attendance', '/hr-payroll'],
+                '/hr-employee', '/hr-attendance', '/hr-payroll', '/receivable'],
   supplier:   ['/'],
 }
 

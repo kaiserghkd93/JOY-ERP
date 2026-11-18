@@ -38,6 +38,7 @@ const Exceptions     = lazy(() => import('./pages/Exceptions'))
 const LotTrace        = lazy(() => import('./pages/LotTrace'))
 const SupplierPortal  = lazy(() => import('./pages/SupplierPortal'))
 const AdminPortal     = lazy(() => import('./pages/AdminPortal'))
+const Receivable      = lazy(() => import('./pages/Receivable'))
 
 // GNB: 대분류 / LNB: 소분류
 const allMenus = [
@@ -60,6 +61,7 @@ const allMenus = [
     { to: '/sales',         label: '수주/출하' },
     { to: '/monthly-sales', label: '월 매출 집계표' },
     { to: '/sales-target',  label: '매출 목표 관리' },
+    { to: '/receivable',    label: '수금 관리' },
   ]},
   { id: 'quality', label: '품질', items: [
     { to: '/quality', label: '품질·클레임' },
@@ -367,6 +369,9 @@ export default function App() {
             <Route path="/portal" element={<SupplierPortal />} />
             <Route path="/admin-portal" element={
               <ProtectedRoute path="/admin-portal"><AdminPortal /></ProtectedRoute>
+            } />
+            <Route path="/receivable" element={
+              <ProtectedRoute path="/receivable"><Receivable /></ProtectedRoute>
             } />
           </Routes>
         </Suspense>

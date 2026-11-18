@@ -65,6 +65,7 @@ class Invoice(Base):
     inv_no: Mapped[str] = mapped_column(String(30), primary_key=True)
     partner_id: Mapped[str] = mapped_column(ForeignKey("partner.partner_id"), nullable=False)
     issue_date: Mapped[date] = mapped_column(Date, nullable=False)
+    due_date: Mapped[date | None] = mapped_column(Date, nullable=True)       # 결제 만기일 (결제조건 기반)
     status: Mapped[InvoiceStatus] = mapped_column(SAEnum(InvoiceStatus, native_enum=False), default=InvoiceStatus.draft)
     note: Mapped[str | None] = mapped_column(String(500))
     closing_type: Mapped[str | None] = mapped_column(String(10), nullable=True, default=None)  # null=미설정, "금월"=금월마감, "이월"=이월
@@ -85,6 +86,37 @@ class InvoiceLine(Base):
 
     invoice: Mapped["Invoice"] = relationship(back_populates="lines")
     item: Mapped["Item"] = relationship()
+
+
+class PaymentMethod(str, enum.Enum):
+    transfer = "계좌이체"
+    cash     = "현금"
+    bill     = "어음"
+    card     = "카드"
+    offset   = "상계"
+
+
+class PaymentStatus(str, enum.Enum):
+    normal    = "정상"
+    cancelled = "취소"
+
+
+class Payment(Base):
+    """수금 전표 — ERP 원칙상 삭제 없이 취소전표 사용"""
+    __tablename__ = "payment"
+
+    pay_no:     Mapped[str]   = mapped_column(String(30), primary_key=True)
+    partner_id: Mapped[str]   = mapped_column(ForeignKey("partner.partner_id"), nullable=False)
+    pay_date:   Mapped[date]  = mapped_column(Date, nullable=False)
+    amount:     Mapped[float] = mapped_column(Numeric(18, 0), nullable=False)
+    method:     Mapped[PaymentMethod] = mapped_column(SAEnum(PaymentMethod, native_enum=False), default=PaymentMethod.transfer)
+    inv_no:     Mapped[str | None] = mapped_column(ForeignKey("invoice.inv_no"), nullable=True)
+    note:       Mapped[str | None] = mapped_column(String(500))
+    status:     Mapped[PaymentStatus] = mapped_column(SAEnum(PaymentStatus, native_enum=False), default=PaymentStatus.normal)
+    created_by: Mapped[str | None] = mapped_column(String(50))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+
+    partner: Mapped["Partner"] = relationship()
 
 
 class SalesTarget(Base):
