@@ -185,28 +185,27 @@ def my_items(user: User = Depends(get_current_user), db: Session = Depends(get_d
 
 # ── 전체 기준정보 품목 목록 (수동 추가 자동완성용) ───────────────
 @router.get("/all-items")
-def all_items(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    if not user.partner_id:
-        return []
+def all_items(
+    partner_id: str | None = None,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    # 관리자는 partner_id 쿼리 파라미터로 특정 업체 단가 기준 조회 가능
+    effective_partner = partner_id if (not user.partner_id) else user.partner_id
     items = db.query(Item).order_by(Item.name).all()
-    # 이 업체의 최신 발주 단가 맵
     price_map: dict = {}
-    partner_id = user.partner_id
-    pos = db.query(PurchaseOrder).filter(PurchaseOrder.partner_id == partner_id).all()
-    for po in pos:
-        if po.unit_price:
-            price_map[po.part_no] = float(po.unit_price)
-    # 이 업체의 품목만 우선 표시 (발주 이력 기준), 없으면 전체 마스터
+    if effective_partner:
+        pos = db.query(PurchaseOrder).filter(PurchaseOrder.partner_id == effective_partner).all()
+        for po in pos:
+            if po.unit_price:
+                price_map[po.part_no] = float(po.unit_price)
     partner_parts = set(price_map.keys())
-    def _sort_key(it):
-        return (0 if it.part_no in partner_parts else 1, it.name)
     return sorted(
         [
             {
                 "part_no": it.part_no,
                 "item_name": it.name,
                 "item_unit": it.unit or "EA",
-                # 발주단가 → 기준구매단가 순으로 fallback
                 "unit_price": price_map.get(it.part_no) or float(it.std_buy_price or 0),
             }
             for it in items

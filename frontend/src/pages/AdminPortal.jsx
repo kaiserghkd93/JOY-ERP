@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import QRCode from 'qrcode'
 
 const API = import.meta.env.VITE_API_URL || ''
@@ -142,6 +142,91 @@ function DeliveryStatementModal({ receipts, partnerName, onClose }) {
           </div>
         ))}
       </div>
+    </div>
+  )
+}
+
+// ── 품목 검색 자동완성 ───────────────────────────────────────────────
+function ItemSearch({ value, onChange, onSelect, items, placeholder }) {
+  const [open, setOpen] = useState(false)
+  const [query, setQuery] = useState(value || '')
+  const ref = useRef(null)
+
+  useEffect(() => { setQuery(value || '') }, [value])
+
+  useEffect(() => {
+    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false) }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
+
+  const filtered = useMemo(() => {
+    if (!query.trim()) return items.slice(0, 100)
+    const q = query.toLowerCase()
+    return items.filter(it =>
+      it.item_name.toLowerCase().includes(q) || it.part_no.toLowerCase().includes(q)
+    ).slice(0, 100)
+  }, [query, items])
+
+  const handleInput = (e) => {
+    const v = e.target.value
+    setQuery(v)
+    onChange(v)
+    setOpen(true)
+  }
+
+  const handleSelect = (item) => {
+    setQuery(item.item_name)
+    onSelect(item)
+    setOpen(false)
+  }
+
+  return (
+    <div ref={ref} style={{ position: 'relative', width: '100%' }}>
+      <input
+        value={query}
+        onChange={handleInput}
+        onFocus={() => setOpen(true)}
+        placeholder={placeholder || '품목명 검색...'}
+        style={{ width: '100%', padding: '4px 6px', borderRadius: 4,
+          border: `1px solid ${open ? '#2563eb' : 'var(--border)'}`,
+          fontSize: 12, boxSizing: 'border-box' }}
+      />
+      {open && (
+        <div style={{
+          position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 9999,
+          background: '#fff', border: '1px solid #2563eb', borderRadius: 6,
+          boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
+          maxHeight: 280, overflowY: 'auto', marginTop: 2,
+        }}>
+          {filtered.length === 0 ? (
+            <div style={{ padding: '10px 12px', fontSize: 12, color: '#94a3b8' }}>검색 결과 없음</div>
+          ) : filtered.map(it => (
+            <div key={it.part_no}
+              onMouseDown={() => handleSelect(it)}
+              style={{
+                padding: '7px 12px', fontSize: 12, cursor: 'pointer',
+                borderBottom: '1px solid #f1f5f9',
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+              }}
+              onMouseEnter={e => e.currentTarget.style.background = '#eff6ff'}
+              onMouseLeave={e => e.currentTarget.style.background = ''}
+            >
+              <div>
+                <span style={{ fontWeight: 600 }}>{it.item_name}</span>
+                <span style={{ color: '#94a3b8', marginLeft: 8, fontFamily: 'monospace', fontSize: 11 }}>
+                  {it.part_no}
+                </span>
+              </div>
+              {it.unit_price > 0 && (
+                <span style={{ color: '#64748b', fontSize: 11, flexShrink: 0, marginLeft: 8 }}>
+                  {fmt(it.unit_price)}원
+                </span>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
@@ -319,10 +404,22 @@ function DeliverAdminTab({ partners, onDone }) {
   const [note, setNote] = useState('')
   const [lines, setLines] = useState([{ ...EMPTY_LINE }])
   const [partnerOrders, setPartnerOrders] = useState([])
+  const [allItems, setAllItems] = useState([])
   const [saving, setSaving] = useState(false)
   const [result, setResult] = useState(null)
   const [showStatement, setShowStatement] = useState(false)
   const [err, setErr] = useState('')
+
+  // 전체 품목 목록 (관리자용, 협력사 선택 시 해당 업체 단가 우선)
+  useEffect(() => {
+    const url = partnerId
+      ? `${API}/portal/all-items?partner_id=${encodeURIComponent(partnerId)}`
+      : `${API}/portal/all-items`
+    fetch(url, { headers: hdr() })
+      .then(r => r.ok ? r.json() : [])
+      .then(data => setAllItems(data))
+      .catch(() => setAllItems([]))
+  }, [partnerId])
 
   useEffect(() => {
     if (!partnerId) { setPartnerOrders([]); return }
@@ -506,15 +603,36 @@ function DeliverAdminTab({ partners, onDone }) {
                 />
               </td>
               <td style={{ padding: '4px 8px', border: '1px solid var(--border)' }}>
-                <input
-                  value={line.item_name}
-                  onChange={e => setLine(idx, 'item_name', e.target.value)}
-                  placeholder={line.direct ? '품목명 직접 입력' : '자동입력'}
-                  readOnly={!line.direct && !!line.po_no}
-                  style={{ width: '100%', padding: '4px 6px', borderRadius: 4,
-                    border: '1px solid var(--border)', fontSize: 12,
-                    background: !line.direct && line.po_no ? 'var(--bg-subtle)' : undefined }}
-                />
+                {line.direct ? (
+                  <ItemSearch
+                    value={line.item_name}
+                    onChange={v => setLine(idx, 'item_name', v)}
+                    onSelect={item => {
+                      setLines(prev => {
+                        const next = [...prev]
+                        next[idx] = {
+                          ...next[idx],
+                          item_name: item.item_name,
+                          part_no: item.part_no,
+                          unit_price: String(item.unit_price || ''),
+                        }
+                        return next
+                      })
+                    }}
+                    items={allItems}
+                    placeholder="품목명 또는 품번 검색"
+                  />
+                ) : (
+                  <input
+                    value={line.item_name}
+                    onChange={e => setLine(idx, 'item_name', e.target.value)}
+                    placeholder="자동입력"
+                    readOnly={!!line.po_no}
+                    style={{ width: '100%', padding: '4px 6px', borderRadius: 4,
+                      border: '1px solid var(--border)', fontSize: 12,
+                      background: line.po_no ? 'var(--bg-subtle)' : undefined }}
+                  />
+                )}
               </td>
               <td style={{ padding: '4px 8px', border: '1px solid var(--border)' }}>
                 <input
