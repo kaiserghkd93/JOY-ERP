@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 
 const API = import.meta.env.VITE_API_URL || ''
-const tok = () => localStorage.getItem('token') || ''
+const tok = () => sessionStorage.getItem('jwt_token') || ''
 const hdr = () => ({ 'Content-Type': 'application/json', Authorization: `Bearer ${tok()}` })
 
 const STATUS_LABEL = { pending: '검사대기', confirmed: '입고확정', cancelled: '취소' }

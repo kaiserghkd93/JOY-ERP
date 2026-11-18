@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import QRCode from 'qrcode'
 import api from '../api'
+import { getRole } from '../auth'
 
 const TABS = [
   { k: 'orders', label: '📋 발주 현황' },
@@ -608,8 +610,18 @@ function NcrTab() {
 
 /* ── 메인 포털 페이지 ─────────────────────────────────── */
 export default function SupplierPortal() {
+  const navigate = useNavigate()
   const [tab, setTab] = useState('orders')
   const [user, setUser] = useState(null)
+
+  // admin/owner는 관리자 포탈로 리다이렉트
+  useEffect(() => {
+    const role = getRole()
+    if (role && role !== 'supplier') {
+      navigate('/admin-portal', { replace: true })
+      return
+    }
+  }, [navigate])
 
   useEffect(() => {
     const stored = localStorage.getItem('user')
