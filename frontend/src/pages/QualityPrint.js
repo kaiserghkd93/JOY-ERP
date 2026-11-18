@@ -583,6 +583,22 @@ export function printIqcReport(insp) {
   if (!insp) return
   const docNo = `IQC-${(insp.inspect_date||today().replace(/\./g,'-')).replace(/-/g,'')}-${String(insp.id||'001').padStart(3,'0')}`
   const passQty = insp.pass_qty ?? (insp.inspect_qty - (insp.fail_qty||0))
+  const sampleN  = Math.max(1, parseInt(insp.sample_size || insp.inspect_qty || 5))
+  const inspType = insp.inspect_type || ''
+
+  // 치수 측정표: 샘플 수만큼 측정값 열 생성 (최대 10개로 제한)
+  const shotCols = Math.min(sampleN, 10)
+  const shotHeaders = Array.from({length: shotCols}, (_, i) => `<th style="min-width:28px">S${i+1}</th>`).join('')
+  const BLANK_ROWS = 10
+  const dimRows = Array.from({length: BLANK_ROWS}, () => `
+    <tr style="height:22px">
+      <td style="border:1px solid #000;padding:3px 6px"></td>
+      <td style="border:1px solid #000;padding:3px 6px;text-align:center"></td>
+      <td style="border:1px solid #000;padding:3px 6px;text-align:center"></td>
+      <td style="border:1px solid #000;padding:3px 6px;text-align:center"></td>
+      ${Array.from({length: shotCols}, () => '<td style="border:1px solid #000;padding:3px 6px;text-align:center"></td>').join('')}
+      <td style="border:1px solid #000;padding:3px 6px;text-align:center"></td>
+    </tr>`).join('')
 
   const html = `<!DOCTYPE html><html lang="ko"><head><meta charset="UTF-8">
 <title>수입검사 성적서 ${docNo}</title>
@@ -594,6 +610,9 @@ export function printIqcReport(insp) {
   .cell-val { font-size:9.5pt; font-weight:700; }
   .section-h { background:#0d1f3c; color:#fff; padding:4px 8px; font-size:9pt; font-weight:900; margin:10px 0 0; letter-spacing:1px; }
   .iatf-ref { font-size:7pt; color:#93c5fd; float:right; font-weight:400; }
+  .chk { display:inline-block; width:11px; height:11px; border:1.5px solid #000; margin-right:3px; vertical-align:middle; text-align:center; line-height:10px; font-size:9pt; }
+  .dim-table { width:100%; border-collapse:collapse; margin-top:4px; font-size:8pt; }
+  .dim-table th { background:#d9d9d9; border:1px solid #000; padding:4px 5px; text-align:center; font-size:7.5pt; font-weight:700; }
 </style></head><body>
 
 <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px">
@@ -618,9 +637,15 @@ export function printIqcReport(insp) {
 </div>
 <div class="box4" style="border-top:none;margin-bottom:0">
   <div class="cell"><span class="cell-label">로트 크기</span><span class="cell-val">${(insp.lot_size||insp.inspect_qty||0).toLocaleString()}</span></div>
-  <div class="cell"><span class="cell-label">샘플 크기 (AQL)</span><span class="cell-val">${insp.sample_size||insp.inspect_qty||'—'}</span></div>
+  <div class="cell"><span class="cell-label">샘플 크기 (AQL)</span><span class="cell-val">${sampleN} pcs</span></div>
   <div class="cell"><span class="cell-label">합격기준 (Ac / Re)</span><span class="cell-val">${insp.ac!=null?`${insp.ac} / ${insp.re}`:'—'}</span></div>
-  <div class="cell" style="border-right:none"><span class="cell-label">승인상태</span><span class="cell-val">${insp.approval_status||'작성중'}</span></div>
+  <div class="cell" style="border-right:none;padding:5px 8px">
+    <span class="cell-label">검사방식</span>
+    <span style="font-size:8.5pt">
+      <span class="chk">${inspType==='sampling'?'✓':''}</span>샘플링 검사 &nbsp;
+      <span class="chk">${inspType==='skip'?'✓':''}</span>무검사(전수면제)
+    </span>
+  </div>
 </div>
 
 <div class="section-h">2. 검사 결과 <span class="iatf-ref">§8.6.2 Inspection Results</span></div>
@@ -648,6 +673,24 @@ export function printIqcReport(insp) {
     </tr>
   </tbody>
 </table>
+
+<div class="section-h">3. 치수 검사 기록 (${shotCols}-Shot) <span class="iatf-ref">§8.6.3 Dimensional Inspection</span></div>
+<table class="dim-table">
+  <thead>
+    <tr>
+      <th style="min-width:100px">검사 항목</th>
+      <th style="min-width:70px">규격 (기준값)</th>
+      <th style="min-width:40px">Ac</th>
+      <th style="min-width:40px">Re</th>
+      ${shotHeaders}
+      <th style="min-width:36px">판정</th>
+    </tr>
+  </thead>
+  <tbody>
+    ${dimRows}
+  </tbody>
+</table>
+<div style="font-size:7pt;color:#666;margin-top:3px">※ 판정: ○ 합격 / × 불합격 &nbsp;|&nbsp; 측정값 단위: mm (별도 지정 없을 경우)</div>
 
 <div class="sign-row" style="margin-top:16px">
   <div class="sign-box"><div class="sign-title">검사자 (서명)</div></div>

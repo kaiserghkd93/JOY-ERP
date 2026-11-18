@@ -94,6 +94,7 @@ class Inspection(Base):
     sample_size: Mapped[int | None] = mapped_column(Integer, nullable=True)
     ac: Mapped[int | None] = mapped_column(Integer, nullable=True)
     re: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    inspect_type: Mapped[str | None] = mapped_column(String(20), nullable=True)  # "sampling" | "skip"
 
     # 승인 워크플로 필드
     approval_status: Mapped[str] = mapped_column(String(50), default="작성중", nullable=False)

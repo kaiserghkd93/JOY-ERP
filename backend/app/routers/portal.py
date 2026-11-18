@@ -87,19 +87,36 @@ def my_completed_orders(
     partner_id = user.partner_id
     result = []
 
-    # 1) PO 기반 완료 건
+    # 1) PO 기반 완료 건 — 납기일이 아닌 실제 confirmed 입고일 기준으로 필터
+    from sqlalchemy import func as sa_func
+    # confirmed 입고가 있는 PO의 최신 입고일을 서브쿼리로 계산
+    confirmed_receipt_dates = (
+        db.query(
+            Receipt.po_no,
+            sa_func.max(Receipt.receipt_date).label("last_confirmed_date"),
+        )
+        .filter(
+            Receipt.partner_id == partner_id,
+            Receipt.status == ReceiptStatus.confirmed,
+            Receipt.po_no.isnot(None),
+        )
+        .group_by(Receipt.po_no)
+        .subquery()
+    )
+
     q_po = (
-        db.query(PurchaseOrder)
+        db.query(PurchaseOrder, confirmed_receipt_dates.c.last_confirmed_date)
+        .join(confirmed_receipt_dates, PurchaseOrder.po_no == confirmed_receipt_dates.c.po_no)
         .filter(
             PurchaseOrder.partner_id == partner_id,
             PurchaseOrder.po_type == "outsource",
         )
     )
     if year:
-        q_po = q_po.filter(sa_extract("year", PurchaseOrder.due_date) == year)
+        q_po = q_po.filter(sa_extract("year", confirmed_receipt_dates.c.last_confirmed_date) == year)
     if month:
-        q_po = q_po.filter(sa_extract("month", PurchaseOrder.due_date) == month)
-    for po in q_po.order_by(PurchaseOrder.due_date.desc()).all():
+        q_po = q_po.filter(sa_extract("month", confirmed_receipt_dates.c.last_confirmed_date) == month)
+    for po, last_confirmed_date in q_po.order_by(confirmed_receipt_dates.c.last_confirmed_date.desc()).all():
         item = db.get(Item, po.part_no)
         delivered = sum(r.qty for r in po.receipts if r.status == ReceiptStatus.confirmed)
         remaining = po.qty - delivered
@@ -121,7 +138,6 @@ def my_completed_orders(
         })
 
     # 2) 직접입고 (po_no 없는 confirmed 입고) — part_no별 net qty 집계, 역분개 상쇄
-    from sqlalchemy import func as sa_func
     dr_q = (
         db.query(
             Receipt.part_no,

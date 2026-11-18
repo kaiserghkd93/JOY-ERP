@@ -58,6 +58,7 @@ class InspectionOut(BaseModel):
     sample_size: int | None = None
     ac: int | None = None
     re: int | None = None
+    inspect_type: str | None = None
 
 
 class ClaimCreate(BaseModel):

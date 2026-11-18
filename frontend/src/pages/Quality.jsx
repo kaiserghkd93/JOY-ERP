@@ -1713,6 +1713,35 @@ export default function Quality() {
                           </span>
                       }
                     </div>
+                    {/* 검사방식 — 샘플링 / 무검사 선택 */}
+                    <div style={{ display: 'flex', alignItems: 'center', borderBottom: '1px solid var(--border)', padding: '10px 0', gridColumn: '1/-1' }}>
+                      <span style={{ fontSize: 11, color: 'var(--text-sm)', width: 110, flexShrink: 0 }}>검사방식</span>
+                      <div style={{ display: 'flex', gap: 16 }}>
+                        {[{ v: 'sampling', label: '☑ 샘플링 검사' }, { v: 'skip', label: '☑ 무검사 (전수면제)' }].map(opt => (
+                          <label key={opt.v} style={{ display: 'flex', alignItems: 'center', gap: 5, cursor: 'pointer', fontSize: 12 }}>
+                            <input type="radio" name={`inspect_type_${selectedInsp.id}`}
+                              checked={selectedInsp.inspect_type === opt.v}
+                              onChange={async () => {
+                                try {
+                                  await api.patch(`/quality/inspections/${selectedInsp.id}/inspect-type`, { inspect_type: opt.v })
+                                  load()
+                                } catch(e) { alert(e.response?.data?.detail || '저장 실패') }
+                              }}
+                            />
+                            {opt.label.replace('☑ ', '')}
+                          </label>
+                        ))}
+                        {selectedInsp.inspect_type && (
+                          <button style={{ fontSize: 10, color: 'var(--text-sm)', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}
+                            onClick={async () => {
+                              try {
+                                await api.patch(`/quality/inspections/${selectedInsp.id}/inspect-type`, { inspect_type: '' })
+                                load()
+                              } catch(e) { alert(e.response?.data?.detail || '저장 실패') }
+                            }}>초기화</button>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 )}
 

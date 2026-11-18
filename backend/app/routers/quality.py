@@ -160,7 +160,7 @@ def list_inspections(limit: int = 500, offset: int = 0, db: Session = Depends(ge
                defect_note, approval_status::text AS approval_status,
                inspector_id, requested_at, approver_id, approved_at,
                rejection_reason, confirmer_id, confirmed_at,
-               standard_id, lot_size, sample_size, ac, re
+               standard_id, lot_size, sample_size, ac, re, inspect_type
         FROM inspection
         ORDER BY inspect_date DESC
         OFFSET :offset LIMIT :limit
@@ -240,6 +240,19 @@ def _get_insp(insp_id: int, db: Session) -> Inspection:
 
 class InspectorPatch(BaseModel):
     inspector_id: str
+
+class InspectTypePatch(BaseModel):
+    inspect_type: str  # "sampling" | "skip"
+
+@router.patch("/inspections/{insp_id}/inspect-type")
+def patch_inspect_type(insp_id: int, body: InspectTypePatch, db: Session = Depends(get_db), _: User = Depends(_require_quality)):
+    """검사방식 수정 (샘플링/무검사)"""
+    insp = _get_insp(insp_id, db)
+    if body.inspect_type not in ("sampling", "skip", ""):
+        raise HTTPException(400, "inspect_type must be 'sampling' or 'skip'")
+    insp.inspect_type = body.inspect_type or None
+    db.commit()
+    return {"ok": True, "inspect_type": insp.inspect_type}
 
 @router.patch("/inspections/{insp_id}/inspector")
 def patch_inspector(insp_id: int, body: InspectorPatch, db: Session = Depends(get_db), user: User = Depends(_require_quality)):
