@@ -97,6 +97,7 @@ const allMenus = [
   ]},
   { id: 'outsource-admin', label: '외주포탈', items: [
     { to: '/admin-portal', label: '관리자 포탈' },
+    { to: '/portal-app', label: '협력사 포탈 (업체용)', external: true },
   ]},
   { id: 'master', label: '기준정보', items: [
     { to: '/master',     label: '품목·거래처' },
@@ -239,7 +240,17 @@ export default function App() {
           <span className="lnb-module">{activeGroup.label}</span>
           {activeGroup.items
             .filter(item => hasPermission(item.to))
-            .map(item => (
+            .map(item => item.external ? (
+              <a
+                key={item.to}
+                href={item.to}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="lnb-tab"
+              >
+                {item.label} ↗
+              </a>
+            ) : (
               <NavLink
                 key={item.to}
                 to={item.to}
