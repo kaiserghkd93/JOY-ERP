@@ -57,6 +57,7 @@ with engine.connect() as _conn:
         "ALTER TABLE inspection ADD COLUMN IF NOT EXISTS sample_size INTEGER",
         "ALTER TABLE inspection ADD COLUMN IF NOT EXISTS ac INTEGER",
         "ALTER TABLE inspection ADD COLUMN IF NOT EXISTS re INTEGER",
+        "ALTER TABLE inspection ADD COLUMN IF NOT EXISTS inspect_type VARCHAR(20)",
         "ALTER TABLE mold ADD COLUMN IF NOT EXISTS lent_to_partner_id VARCHAR(50)",
         "ALTER TABLE mold ADD COLUMN IF NOT EXISTS lent_date DATE",
         # BOM 사출 특화 확장
