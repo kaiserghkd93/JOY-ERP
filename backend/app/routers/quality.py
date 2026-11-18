@@ -30,7 +30,7 @@ from app.routers.auth import get_current_user
 router = APIRouter(prefix="/quality", tags=["품질"])
 
 # ── 담당자 고정값 (회사 지정) ─────────────────────────────────────
-IQC_INSPECTOR  = "원현"   # 검사원 / 작성
+IQC_INSPECTOR  = "원현이"  # 검사원 / 작성
 IQC_APPROVER   = "신우성"  # 승인완료
 IQC_CONFIRMER  = "김필수"  # 최종확정
 
