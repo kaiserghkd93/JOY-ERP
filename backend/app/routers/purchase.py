@@ -657,6 +657,22 @@ def monthly_closing(
     }
 
 
+@router.patch("/orders/{po_no}/status")
+def update_po_status(po_no: str, body: dict, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    """PO 상태 수동 변경 (admin only). status: open|partial|closed"""
+    if user.role != "admin":
+        raise HTTPException(403, "관리자만 가능")
+    po = db.get(PurchaseOrder, po_no)
+    if not po:
+        raise HTTPException(404, "발주 없음")
+    new_status = body.get("status")
+    if new_status not in ("open", "partial", "closed"):
+        raise HTTPException(400, "status 값: open | partial | closed")
+    po.status = new_status
+    db.commit()
+    return {"po_no": po_no, "status": po.status}
+
+
 @router.patch("/orders/{po_no}/due-date")
 def update_po_due_date(po_no: str, body: dict, db: Session = Depends(get_db)):
     """발주 라인 납기일 수정"""

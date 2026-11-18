@@ -204,7 +204,7 @@ function ItemSearch({ value, onChange, onSelect, items, placeholder }) {
             <div style={{ padding: '12px 16px', fontSize: 13, color: '#94a3b8' }}>검색 결과 없음</div>
           ) : filtered.map(it => (
             <div key={it.part_no}
-              onMouseDown={() => handleSelect(it)}
+              onMouseDown={(e) => { e.preventDefault(); handleSelect(it) }}
               style={{
                 padding: '9px 16px', fontSize: 13, cursor: 'pointer',
                 borderBottom: '1px solid #f1f5f9',

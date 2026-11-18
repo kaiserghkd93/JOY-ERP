@@ -2134,10 +2134,10 @@ export default function Purchase() {
             <div className="table-wrap">
               <table>
                 <thead>
-                  <tr><th>발주번호</th><th>외주처</th><th>품번</th><th>발주수량</th><th>잔량</th><th>발주일</th><th>Due Date</th><th>상태</th></tr>
+                  <tr><th>발주번호</th><th>외주처</th><th>품번</th><th>발주수량</th><th>잔량</th><th>발주일</th><th>Due Date</th><th>상태</th>{isAdmin && <th>상태변경</th>}</tr>
                 </thead>
                 <tbody>
-                  {filteredOrders.length === 0 && <tr><td colSpan={8} className="empty">발주 없음</td></tr>}
+                  {filteredOrders.length === 0 && <tr><td colSpan={isAdmin?9:8} className="empty">발주 없음</td></tr>}
                   {filteredOrders.map(o => {
                     const remQty = remMap[o.po_no] ?? o.qty
                     const remColor = remQty <= 0 ? '#9ca3af' : remQty < o.qty ? '#d97706' : '#111827'
@@ -2151,6 +2151,21 @@ export default function Purchase() {
                         <td>{o.order_date}</td>
                         <td>{o.due_date}</td>
                         <td><span className={`badge ${STATUS_BADGE[o.status] || 'badge-gray'}`}>{o.status}</span></td>
+                        {isAdmin && (
+                          <td>
+                            {o.status === 'closed' && (
+                              <button className="btn btn-sm"
+                                style={{background:'#fef3c7',color:'#92400e',border:'1px solid #fcd34d',fontSize:11}}
+                                onClick={async () => {
+                                  if (!window.confirm(`${o.po_no} 상태를 "open"으로 재설정하시겠습니까?\n(납품완료 → 발주중으로 변경)`)) return
+                                  try {
+                                    await api.patch(`/purchase/orders/${o.po_no}/status`, { status: 'open' })
+                                    load()
+                                  } catch (e) { alert('변경 실패: ' + (e.response?.data?.detail || e.message)) }
+                                }}>재오픈</button>
+                            )}
+                          </td>
+                        )}
                       </tr>
                     )
                   })}

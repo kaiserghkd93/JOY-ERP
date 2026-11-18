@@ -475,7 +475,8 @@ tbody tr:hover { background: #f8fafc; }
 .inv-title-block { text-align: center; flex: 1; }
 .inv-title-block h1 { font-size: 28px; font-weight: 900; letter-spacing: 12px; color: #111; margin-bottom: 4px; }
 .inv-title-block .inv-docno { font-size: 12px; color: #666; letter-spacing: 0; }
-.inv-stamp-area { width: 72px; height: 72px; border: 2px solid #ccc; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; color: #aaa; flex-shrink: 0; }
+.inv-stamp-area { width: 90px; height: 90px; border: 1px solid #ddd; border-radius: 6px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; overflow: hidden; background: #fff; }
+.inv-stamp-area canvas { display: block; }
 
 .inv-parties { display: grid; grid-template-columns: 1fr 1fr; gap: 0; border: 2px solid #222; margin-bottom: 0; }
 .inv-party { padding: 0; }
@@ -518,6 +519,7 @@ tbody tr:hover { background: #f8fafc; }
   @page { margin: 10mm; size: A4; }
 }
 </style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 </head>
 <body>
 
@@ -773,7 +775,7 @@ tbody tr:hover { background: #f8fafc; }
           <h1>거 래 명 세 서</h1>
           <div class="inv-docno">No. <span id="inv-grno"></span> &nbsp;|&nbsp; 발행일: <span id="inv-date"></span></div>
         </div>
-        <div class="inv-stamp-area">인수<br>확인</div>
+        <div class="inv-stamp-area" id="inv-stamp-area"><span style="font-size:11px;color:#aaa">QR</span></div>
       </div>
 
       <!-- 공급받는자 / 공급자 -->
@@ -1199,7 +1201,7 @@ function renderManualTable() {
     <td>
       <div class="ac-wrap">
         <input class="qty-input" style="width:180px" type="text" value="${r.item_name}" placeholder="품목명 검색..."
-          oninput="filterAc(${r.id},this.value)"
+          oninput="filterAc(${r.id},this.value);updateManual(${r.id},'item_name',this.value)"
           onfocus="filterAc(${r.id},this.value)"
           onblur="setTimeout(()=>hideAc(${r.id}),180)"
           autocomplete="off" />
@@ -1525,6 +1527,15 @@ async function submitAndPrint() {
     document.getElementById('inv-tbody').innerHTML = rows;
     document.getElementById('inv-total-amt').textContent = `￦ ${Math.round(total).toLocaleString()} 원`;
     document.getElementById('invoice-modal').style.display = 'block';
+
+    // QR 코드 생성
+    const stampArea = document.getElementById('inv-stamp-area');
+    stampArea.innerHTML = '';
+    const firstGrNo = r.receipts[0]?.gr_no || grNos;
+    const qrText = `${window.location.origin}/portal-app?grno=${encodeURIComponent(firstGrNo)}`;
+    try {
+      new QRCode(stampArea, { text: qrText, width: 86, height: 86, correctLevel: QRCode.CorrectLevel.M });
+    } catch(e) { stampArea.textContent = grNos; }
 
     // 초기화
     selectedPOs = {};

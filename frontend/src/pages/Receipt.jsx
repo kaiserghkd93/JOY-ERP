@@ -1,6 +1,7 @@
 ﻿import { useEffect, useState, useCallback, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import api from '../api'
+import { getRole } from '../auth'
 
 const today = () => { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0') }
 
@@ -1148,6 +1149,7 @@ export default function Receipt() {
   const [assignPartnerId, setAssignPartnerId] = useState('')
   const [assignOutsourcePrice, setAssignOutsourcePrice] = useState('')
   const [tab, setTab] = useState('receipts')
+  const [receiptView, setReceiptView] = useState('all')
   const [showModal, setShowModal] = useState(false)
   const [showDirectModal, setShowDirectModal] = useState(false)
   const [showOutsourceModal, setShowOutsourceModal] = useState(false)
@@ -1193,8 +1195,26 @@ export default function Receipt() {
 
   useEffect(() => { load() }, [load])
 
+  const isAdmin = getRole() === 'admin'
+
+  const filteredReceipts = receiptView === 'outsource'
+    ? receipts.filter(r => r.partner_id)
+    : receiptView === 'material'
+      ? receipts.filter(r => !r.partner_id)
+      : receipts
+
   const confirm = async (gr_no) => {
     await api.post(`/purchase/receipts/${gr_no}/confirm`)
+    load()
+  }
+
+  const confirmAll = async () => {
+    const pending = filteredReceipts.filter(r => r.status === '대기')
+    if (!pending.length) { alert('대기 중인 입고가 없습니다'); return }
+    if (!window.confirm(`대기 중인 입고 ${pending.length}건을 모두 즉시확정하시겠습니까?`)) return
+    for (const r of pending) {
+      try { await api.post(`/purchase/receipts/${r.gr_no}/confirm`) } catch {}
+    }
     load()
   }
 
@@ -1236,8 +1256,22 @@ export default function Receipt() {
           </div>
           <div className="spacer"/>
           {tab==='receipts' && <>
+            {/* 자재/외주 필터 */}
+            {[['all','전체'],['material','자재 입고'],
+              ...(isAdmin ? [['outsource','외주 입고']] : [])
+            ].map(([v,l]) => (
+              <button key={v}
+                className={`btn btn-sm${receiptView===v?' btn-primary':' btn-outline'}`}
+                style={receiptView===v?{}:{borderColor:'#94a3b8',color:'#64748b'}}
+                onClick={() => setReceiptView(v)}>{l}</button>
+            ))}
+            <div style={{width:1,height:20,background:'#e2e8f0',margin:'0 4px'}}/>
+            <button className="btn btn-sm btn-outline"
+              style={{borderColor:'#f59e0b',color:'#b45309',fontWeight:700}}
+              onClick={confirmAll}>⚡ 일괄확정</button>
+            <div style={{width:1,height:20,background:'#e2e8f0',margin:'0 4px'}}/>
             <button className="btn btn-sm btn-outline" style={{borderColor:'#7c3aed',color:'#7c3aed',fontWeight:700}} onClick={()=>setShowQrScan(true)}>📷 QR 스캔 입고</button>
-            <button className="btn btn-sm btn-outline" style={{borderColor:'#16a34a',color:'#16a34a'}} onClick={()=>setShowOutsourceModal(true)}>외주 입고</button>
+            {isAdmin && <button className="btn btn-sm btn-outline" style={{borderColor:'#16a34a',color:'#16a34a'}} onClick={()=>setShowOutsourceModal(true)}>외주 입고</button>}
             <button className="btn btn-sm btn-outline" style={{borderColor:'#0f766e',color:'#0f766e'}} onClick={()=>setShowDirectModal(true)}>직접 입고</button>
             <button className="btn btn-sm btn-primary" onClick={()=>setShowModal(true)}>＋ 입고 등록</button>
           </>}
@@ -1248,7 +1282,7 @@ export default function Receipt() {
         <>
         <div className="result-bar">
           <span className="result-bar-title">입고 목록</span>
-          <span className="result-bar-count">{receipts.length}건</span>
+          <span className="result-bar-count">{filteredReceipts.length}건</span>
         </div>
         <div className="table-wrap">
           <table>
@@ -1256,8 +1290,8 @@ export default function Receipt() {
               <tr><th>입고번호</th><th>발주번호</th><th>품번</th><th>품명</th><th>수량</th><th>단가</th><th>입고일</th><th>상태</th><th>처리</th></tr>
             </thead>
             <tbody>
-              {receipts.length === 0 && <tr><td colSpan={9} className="empty">입고 없음</td></tr>}
-              {receipts.map(r => (
+              {filteredReceipts.length === 0 && <tr><td colSpan={9} className="empty">입고 없음</td></tr>}
+              {filteredReceipts.map(r => (
                 <tr key={r.gr_no}>
                   <td><span style={{ fontFamily: 'monospace', fontSize: 12 }}>{r.gr_no}</span></td>
                   <td>
