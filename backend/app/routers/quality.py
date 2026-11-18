@@ -160,14 +160,18 @@ def list_inspections(limit: int = 500, offset: int = 0, db: Session = Depends(ge
     from sqlalchemy import text as _sql
     # raw SQL: enum 컬럼을 ::text로 캐스팅해 ORM enum 변환 오류 우회
     sql = _sql("""
-        SELECT id, gr_no, inspect_date, inspect_qty, pass_qty, fail_qty,
-               result::text AS result, disposal::text AS disposal,
-               defect_note, approval_status::text AS approval_status,
-               inspector_id, requested_at, approver_id, approved_at,
-               rejection_reason, confirmer_id, confirmed_at,
-               standard_id, lot_size, sample_size, ac, re, inspect_type
-        FROM inspection
-        ORDER BY inspect_date DESC
+        SELECT i.id, i.gr_no, i.inspect_date, i.inspect_qty, i.pass_qty, i.fail_qty,
+               i.result::text AS result, i.disposal::text AS disposal,
+               i.defect_note, i.approval_status::text AS approval_status,
+               i.inspector_id, i.requested_at, i.approver_id, i.approved_at,
+               i.rejection_reason, i.confirmer_id, i.confirmed_at,
+               i.standard_id, i.lot_size, i.sample_size, i.ac, i.re, i.inspect_type,
+               r.part_no, it.name AS part_name, r.partner_id, p.name AS partner_name
+        FROM inspection i
+        LEFT JOIN receipt r ON r.gr_no = i.gr_no
+        LEFT JOIN item it ON it.part_no = r.part_no
+        LEFT JOIN partner p ON p.partner_id = r.partner_id
+        ORDER BY i.inspect_date DESC
         OFFSET :offset LIMIT :limit
     """)
     rows = db.execute(sql, {"offset": offset, "limit": limit}).mappings().all()

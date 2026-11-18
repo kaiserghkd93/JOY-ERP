@@ -770,6 +770,223 @@ export const PROCEDURES = [
     related_docs: ['QMS-P-001 품질경영시스템 절차', 'AUD-P-001 내부심사 절차', 'NCR-P-002 시정조치 절차'],
     records: ['QMS-F-050 경영검토 보고서', 'QMS-F-051 경영검토 의사록'],
   },
+
+  // ══════════════════════════════════════════════════════════════
+  // VDA 6.3 공정심사 절차 (독일 자동차 산업 표준)
+  // ══════════════════════════════════════════════════════════════
+
+  // ── VDA 6.3 공정심사 총괄 절차 ───────────────────────────────
+  {
+    no: 'VDA-P-001', title: 'VDA 6.3 공정심사(Process Audit) 절차', rev: '01',
+    date: '2026-01-02', author: '품질보증팀장', approver: '대표이사',
+    clause: 'VDA 6.3 : 2023 / IATF 16949 §8.4.1', status: '승인완료',
+    purpose: 'VDA 6.3 공정심사 체계에 따라 양산 공정을 체계적으로 평가·개선함으로써 고객 요구사항(특히 독일계 고객사: BMW, Volkswagen 그룹, Mercedes-Benz 등)의 공급업체 심사에 대응하고 공정 품질을 지속적으로 향상시킨다.',
+    scope: '자사 양산 공정 전체(사출·조립·검사 공정) 및 외주 공급업체 공정심사에 적용한다. VDA 6.3 : 2023 3판 기준.',
+    definitions: [
+      { term: 'VDA 6.3', def: 'Verband der Automobilindustrie (독일자동차공업협회) 발행 공정심사 표준. 7개 Process Element(P1~P7)로 구성' },
+      { term: '공정심사 (Process Audit)', def: '공정의 적합성·효율성·효과성을 체계적이고 독립적으로 검토하는 활동. 현장심사(On-site Audit)를 기반으로 함' },
+      { term: '잠재성 분석 (P1)', def: '신규 공급업체 선정 시 공정 능력·자원·리스크를 사전 평가하는 프로세스' },
+      { term: '거북이 다이어그램', def: '공정 입력(5M: 사람·기계·재료·방법·측정)과 출력(품질·납기·원가)의 상호관계를 시각화한 도구' },
+      { term: '심사점수 (Rating)', def: 'VDA 6.3 각 질문에 대해 0/4/6/8/10점으로 평가. 종합점수 = (취득점수 합계 / 최대가능점수 합계) × 100 (%)' },
+      { term: 'ABC 등급', def: 'A: ≥90% (우수), B: 75~90% (조건부 적합), C: <75% (부적합) — C등급 시 즉각 개선계획 제출 의무' },
+    ],
+    responsibilities: [
+      { role: '수석심사원 (Lead Auditor)', resp: 'VDA 6.3 심사계획 수립·주도, 심사보고서 작성·서명, 심사원 역량 관리' },
+      { role: '심사원 (Auditor)', resp: '담당 P-Element 현장심사 수행, 증거자료 수집·기록, 지적사항 도출' },
+      { role: '공정 책임자', resp: '심사 대상 공정 현장 안내, 관련 문서·기록 제공, 지적사항 시정계획 수립' },
+      { role: '품질보증팀장', resp: 'VDA 심사 일정 조정, 심사 결과 경영진 보고, 공급업체 심사 대응 총괄' },
+    ],
+    procedure: [
+      {
+        section: 'P1 — 잠재성 분석 (Potential Analysis)',
+        steps: [
+          '신규 공급업체 선정 시 또는 신규 품목 개발 착수 전 잠재성 분석을 실시한다.',
+          '평가 항목: 경영층 품질 의지, ISO 9001/IATF 16949 인증 현황, 공정 능력(Cpk) 이력, 재무 안정성, 위기관리 계획(BCP).',
+          '잠재성 분석 점수 60% 미만 시 공급망 편입 보류 및 개선 조건부 재심사를 실시한다.',
+        ]
+      },
+      {
+        section: 'P2 — 프로젝트 관리 (Project Management)',
+        steps: [
+          '프로젝트 타임라인(GANTT)에 VDA 6.3 심사 일정을 반영하고 Gate Review 시점에 공정심사를 수행한다.',
+          '양산이관(SOP) 전 최종 공정심사를 완료하고 A등급(≥90%) 이상 취득 후 양산을 승인한다.',
+          '양산 초기 흐름(Initial Run-off): 심사 후 300 로트 또는 3개월 중 먼저 도달하는 시점까지 집중 모니터링을 실시한다.',
+        ]
+      },
+      {
+        section: 'P3 — 제품·공정 개발 계획 (Planning)',
+        steps: [
+          '고객 도면·DFMEA를 기반으로 PFMEA를 작성하고 관리계획서(Control Plan)에 반영한다.',
+          '특별특성(KPC/KCC)은 공정흐름도(PFD) → PFMEA → CP로 연계되어 추적 가능하도록 한다.',
+          '공정 검증 시험(Process Validation): 초기 공정능력(Ppk ≥ 1.67), Gage R&R(%R&R < 10%)을 확인한다.',
+        ]
+      },
+      {
+        section: 'P4 — 협력업체 / 투입자원 관리 (Supplier Management)',
+        steps: [
+          '구매 부품·재료의 협력업체는 승인 공급업체 목록(ASL, Approved Supplier List)에 등록하고 연 1회 이상 평가한다.',
+          '협력업체 VDA 6.3 심사: C등급 이하 협력업체에 대해 발주 60일 전까지 개선계획(8D) 제출을 요구한다.',
+          '투입 자재 변경 시 고객 사전 승인(PPAP Level 3 이상)을 획득 후 양산에 반영한다.',
+        ]
+      },
+      {
+        section: 'P5 — 공정 투입 관리 (Process Input — 5M+1E)',
+        steps: [
+          '거북이 다이어그램으로 5M+1E(Man·Machine·Material·Method·Measurement·Environment)를 가시화하고 각 항목의 적합성을 심사한다.',
+          '작업표준서(WI)는 현행 공정과 일치하는지 연 1회 이상 검토하고 작업자 서명을 유지한다.',
+          '설비 예방보전(PM) 계획이 수립되고 실적이 기록되어 있는지 확인하며, 예방보전 완료율 ≥ 95%를 목표로 관리한다.',
+          '측정장비는 MSA 기준(Gage R&R ≤ 10%)을 충족하고 교정 이력이 추적 가능한지 확인한다.',
+        ]
+      },
+      {
+        section: 'P6 — 공정 분석 · 양산 (Process Analysis)',
+        steps: [
+          '각 공정 단계별 공정능력(Cpk) ≥ 1.33을 유지하고, 특별특성 항목은 Cpk ≥ 1.67을 목표로 한다.',
+          '불량 예방(Error-Proofing, Poka-Yoke) 장치 현황 및 정기 검증 기록을 확인한다.',
+          '이상 발생 시 대응 절차(제품 격리 → 원인분석 → 임시조치 → 재발방지)가 작업표준에 명시되고 작업자가 숙지하고 있는지 확인한다.',
+          '공정 변경(4M 변경) 발생 시 품질보증팀 검토 후 고객 승인 필요 여부를 판단하고 변경이력을 기록한다.',
+        ]
+      },
+      {
+        section: 'P7 — 고객 지원 및 고객만족 (Customer Care)',
+        steps: [
+          '고객 불만(클레임) 발생 시 24시간 내 초기 대응(Containment), 72시간 내 원인분석 착수, 10영업일 내 8D 보고서를 제출한다.',
+          '고객 CSR(Customer-Specific Requirements) 목록을 작성하고 최신 버전을 유지한다.',
+          '고객 성과 지표(PPM, OTD, Field Return Rate)를 월별 추적하고 목표 미달 시 개선계획을 수립한다.',
+        ]
+      },
+      {
+        section: '심사 결과 처리 및 개선 Follow-up',
+        steps: [
+          '심사 완료 후 5영업일 이내 심사보고서(VDA-F-001)를 작성하고 피심사 부서장의 확인서명을 받는다.',
+          'B등급(75~90%) 이하 항목에 대해 개선계획서(VDA-F-002)를 작성하고 개선 완료 기한을 명시한다.',
+          'C등급(<75%) 취득 시 즉각 현장 개선조치를 실시하고 30일 이내 재심사를 수행한다.',
+          '개선 완료 여부는 심사보고서에 Close-out 처리하고 차기 정기심사에서 효과를 검증한다.',
+        ]
+      },
+    ],
+    related_docs: ['VDA-P-002 5M 공정분석 절차', 'INS-P-001 수입검사(IQC) 절차', 'NCR-P-002 CAPA 절차', 'SUP-P-001 외주공급업체 관리 절차', 'QMS-P-001 품질경영시스템 절차'],
+    records: ['VDA-F-001 VDA 6.3 심사보고서', 'VDA-F-002 개선계획서 (Improvement Plan)', 'VDA-F-003 거북이 다이어그램', 'VDA-F-004 잠재성 분석 체크시트', 'VDA-F-005 공정심사 질문서 (P1~P7)'],
+  },
+
+  // ── VDA 6.3 5M 공정분석 절차 ─────────────────────────────────
+  {
+    no: 'VDA-P-002', title: 'VDA 6.3 5M+1E 공정분석 절차', rev: '01',
+    date: '2026-01-02', author: '품질보증팀장', approver: '대표이사',
+    clause: 'VDA 6.3 : 2023 §P5~P6 / IATF 16949 §8.5.1', status: '승인완료',
+    purpose: 'VDA 6.3의 P5·P6 요소에 따라 공정 투입 요소(5M+1E: 사람·기계·재료·방법·측정·환경)를 체계적으로 분석하고 각 요소의 관리 수준을 평가하여 공정 품질 리스크를 사전에 제거한다.',
+    scope: '자사 사출·조립·검사 양산 공정 전체에 적용하며, 외주 공급업체 공정분석 지도에도 활용한다.',
+    definitions: [
+      { term: '5M+1E', def: '공정 투입 요소: Man(사람), Machine(설비), Material(재료), Method(방법), Measurement(측정), Environment(환경)' },
+      { term: '거북이 다이어그램 (Turtle Diagram)', def: '공정의 투입(5M+1E)과 산출(Output)을 연결하여 공정 맥락을 시각화하는 도구. VDA 6.3 심사 시 기본 증거자료' },
+      { term: 'Poka-Yoke', def: '실수를 물리적·기계적으로 방지하는 오류 예방 장치 또는 검출 시스템' },
+      { term: 'SMED', def: 'Single Minute Exchange of Die — 금형/치공구 교체 시간 단축 활동 (10분 이내 달성 목표)' },
+    ],
+    responsibilities: [
+      { role: '공정 엔지니어', resp: '거북이 다이어그램 작성·유지, 5M 위험 요인 도출, 개선 과제 발굴' },
+      { role: '품질보증팀', resp: '공정분석 결과 검토, VDA 6.3 심사 대응자료 준비, 측정시스템 적합성 확인' },
+      { role: '생산팀장', resp: '설비 PM 계획 이행, 작업표준 준수 현장 감독, 이상 발생 시 즉각 보고' },
+    ],
+    procedure: [
+      {
+        section: 'Man (사람) — 역량 및 교육훈련',
+        steps: [
+          '작업자 역량 매트릭스(Skill Matrix)를 작성하고 각 공정별 필요 역량 수준과 현재 수준을 대비 관리한다.',
+          '신규 작업자는 최소 OJT 8시간 완료 후 담당자 서명을 받은 교육이수증을 보관한다.',
+          '특별특성(KPC/KCC) 취급 작업자는 추가 전문 교육 이수를 의무화하고 연 1회 역량 재확인을 실시한다.',
+        ]
+      },
+      {
+        section: 'Machine (설비) — 예방보전 및 능력 확인',
+        steps: [
+          '각 설비에 대해 연간 PM 계획서(VDA-F-010)를 작성하고 계획 대비 실적을 월별 추적한다. 목표: PM 완료율 ≥ 95%.',
+          '공정능력 모니터링: 주요 설비는 Cpk를 주간 단위로 측정하고 1.33 미만 발생 시 즉시 원인분석을 실시한다.',
+          'SMED 활동을 통해 금형 교체 시간을 지속 단축하고 비가동 손실을 OEE 보고서에 기록한다.',
+        ]
+      },
+      {
+        section: 'Material (재료) — 협력업체 및 입고검사',
+        steps: [
+          '수입검사(IQC) 성적서를 로트별 100% 발행하고 AQL 기반 샘플링 검사 결과를 기록한다.',
+          '재질인증서(Mill Sheet / 성분분석표)는 로트별 수취하여 3년 이상 보관한다.',
+          '불합격 자재는 적색 "부적합" 태그를 부착하고 격리 구역에 즉시 이동하며 협력업체에 NCR을 발행한다.',
+        ]
+      },
+      {
+        section: 'Method (방법) — 작업표준 및 공정흐름',
+        steps: [
+          '공정흐름도(PFD) → PFMEA → 관리계획서(CP) → 작업표준서(WI) 연계성을 연 1회 검토하여 일관성을 확인한다.',
+          '작업표준서는 현행 공정과 불일치 발생 시 30일 이내 개정하고 개정 이력을 유지한다.',
+          'Error-Proofing 장치는 월 1회 정기 기능 점검을 실시하고 점검 결과를 Poka-Yoke 대장(VDA-F-011)에 기록한다.',
+        ]
+      },
+      {
+        section: 'Measurement (측정) — MSA 및 교정 관리',
+        steps: [
+          'Gage R&R 연구를 측정시스템별 연 1회 이상 수행하고 %R&R ≤ 10%를 목표로 관리한다.',
+          '교정 계획서(INS-F-001)에 따라 측정장비를 정기 교정하고 "교정 유효" 스티커를 부착한다.',
+          'Attribute Agreement Analysis(계수형 측정시스템 분석)를 외관 검사 기준에 연 1회 적용한다.',
+        ]
+      },
+      {
+        section: 'Environment (환경) — 작업 환경 및 5S',
+        steps: [
+          '5S(정리·정돈·청소·청결·습관화) 월별 현장 순회점검을 실시하고 점수를 게시한다. 목표: 5S 점수 ≥ 85점.',
+          'ESD(정전기 방전) 민감 부품 취급 구역은 습도(40~60%), 온도(20±5℃), 접지 상태를 일별 기록한다.',
+          '방진·방습·이물질 혼입 방지 대책이 작업장별로 수립되어 있는지 확인한다.',
+        ]
+      },
+    ],
+    related_docs: ['VDA-P-001 VDA 6.3 공정심사 절차', 'INS-P-001 수입검사(IQC) 절차', 'INS-P-004 측정장비 관리 절차', 'PRD-P-001 생산 관리 절차'],
+    records: ['VDA-F-010 설비 PM 계획서', 'VDA-F-011 Poka-Yoke 점검 대장', 'VDA-F-012 작업자 역량 매트릭스', 'VDA-F-013 거북이 다이어그램 (Turtle Diagram)', 'VDA-F-014 5S 점검표'],
+  },
+
+  // ── VDA 6.3 고객요구사항 관리 절차 ───────────────────────────
+  {
+    no: 'VDA-P-003', title: '고객요구사항(CSR) 관리 절차', rev: '01',
+    date: '2026-01-02', author: '품질보증팀장', approver: '대표이사',
+    clause: 'VDA 6.3 : 2023 §P7 / IATF 16949 §8.2.3 / IATF §4.3.2', status: '승인완료',
+    purpose: '고객별 특수 요구사항(CSR: Customer-Specific Requirements)을 체계적으로 식별·문서화·전파하여 고객 요구사항의 완전한 반영과 고객만족을 달성한다. 특히 독일계 고객사(현대·기아 협력 계통의 VDA 적용 고객사 포함)의 요구사항에 대응한다.',
+    scope: '수주·개발·생산·납품·A/S 전 단계에 걸쳐 모든 고객사의 CSR에 적용한다.',
+    definitions: [
+      { term: 'CSR', def: 'Customer-Specific Requirements: 고객이 계약서·도면·기술규격 외에 추가로 요구하는 특수 품질 요건' },
+      { term: 'IATF 고객요구사항', def: 'BMW, Daimler, Ford, GM, Stellantis, Volkswagen 등 IATF 회원사의 추가 요구사항 (IATF 웹사이트 공식 게시 문서)' },
+      { term: 'PPAP', def: 'Production Part Approval Process: 고객이 요구하는 양산 부품 승인 절차 (AIAG 4th Ed.)' },
+    ],
+    responsibilities: [
+      { role: '영업팀', resp: '고객 계약서·기술규격서 접수, 품질팀에 CSR 목록 전달, 고객 불만 1차 접수' },
+      { role: '품질보증팀장', resp: 'CSR 목록 작성·유지·관리, CSR 변경 사항 전사 전파, PPAP 패키지 작성 주관' },
+      { role: '개발팀', resp: 'CSR을 DFMEA/PFMEA/CP에 반영, 초도품 승인(ISIR) 제출' },
+    ],
+    procedure: [
+      {
+        section: '1. CSR 식별 및 등록',
+        steps: [
+          '영업팀은 계약 체결 시 고객 제공 기술문서(Technical Specification, Quality Manual, 특수요건 목록)를 품질팀에 전달한다.',
+          '품질팀은 CSR 목록(VDA-F-020)에 고객사명, 요구사항 항목, 적용 기준, 담당자, 적용 여부를 등록하고 최신 버전을 유지한다.',
+          'IATF 16949 적용 고객사의 CSR은 IATF 공식 사이트(iatfglobaloversight.org)에서 최신 버전 여부를 연 1회 이상 확인한다.',
+        ]
+      },
+      {
+        section: '2. CSR 전파 및 교육',
+        steps: [
+          '신규 CSR 등록 시 품질팀장은 관련 부서(생산·개발·구매·영업)에 7일 이내 공지하고 교육을 실시한다.',
+          '중요 CSR은 작업표준서, 관리계획서, PFMEA에 직접 반영하고 개정 이력을 유지한다.',
+          '연 1회 CSR 준수 현황 점검을 실시하고 미준수 항목에 대한 개선 조치를 취한다.',
+        ]
+      },
+      {
+        section: '3. VDA 7 — 고객 성과 KPI 관리',
+        steps: [
+          '고객별 성과 KPI: PPM(불량률), OTD(납기준수율), Field Return Rate, Warranty Rate를 월별 집계하고 경영진에 보고한다.',
+          'PPM 목표: 고객사 요구 목표치 이하 유지 (일반적으로 ≤ 50 PPM). 초과 시 24시간 내 고객 보고.',
+          '고객 불만 처리 KPI: 초기 대응 24hr, 원인분석 착수 72hr, 최종 8D 보고서 제출 10영업일 이내.',
+        ]
+      },
+    ],
+    related_docs: ['VDA-P-001 VDA 6.3 공정심사 절차', 'NCR-P-002 CAPA 절차', 'QMS-P-001 품질경영시스템 절차'],
+    records: ['VDA-F-020 고객요구사항(CSR) 목록', 'VDA-F-021 고객 성과 KPI 보고서', 'VDA-F-022 PPAP 패키지 체크리스트'],
+  },
 ]
 
 // ─────────────────────────────────────────────────────────────
@@ -1018,6 +1235,7 @@ export default function QualityProcedures() {
         { prefix: 'PRD', label: '🏭 생산 관리 (PRD)', color: '#5f4e1e' },
         { prefix: 'TRC', label: '🔍 식별 및 추적성 (TRC)', color: '#1e5f5a' },
         { prefix: 'AUD', label: '📊 심사 및 경영검토 (AUD)', color: '#2d1e5f' },
+        { prefix: 'VDA', label: '🇩🇪 VDA 6.3 공정심사 (독일 자동차 표준)', color: '#1a1a2e' },
       ].map(cat => {
         const procs = filtered.filter(p => p.no.startsWith(cat.prefix) || (cat.prefix === 'AUD' && (p.no.startsWith('AUD') || p.no === 'QMS-P-014')))
         if (procs.length === 0) return null

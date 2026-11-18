@@ -585,120 +585,182 @@ export function printIqcReport(insp) {
   const passQty = insp.pass_qty ?? (insp.inspect_qty - (insp.fail_qty||0))
   const sampleN  = Math.max(1, parseInt(insp.sample_size || insp.inspect_qty || 5))
   const inspType = insp.inspect_type || ''
-
-  // 치수 측정표: 샘플 수만큼 측정값 열 생성 (최대 10개로 제한)
   const shotCols = Math.min(sampleN, 10)
-  const shotHeaders = Array.from({length: shotCols}, (_, i) => `<th style="min-width:28px">S${i+1}</th>`).join('')
-  const BLANK_ROWS = 10
-  const dimRows = Array.from({length: BLANK_ROWS}, () => `
-    <tr style="height:22px">
-      <td style="border:1px solid #000;padding:3px 6px"></td>
-      <td style="border:1px solid #000;padding:3px 6px;text-align:center"></td>
-      <td style="border:1px solid #000;padding:3px 6px;text-align:center"></td>
-      <td style="border:1px solid #000;padding:3px 6px;text-align:center"></td>
-      ${Array.from({length: shotCols}, () => '<td style="border:1px solid #000;padding:3px 6px;text-align:center"></td>').join('')}
-      <td style="border:1px solid #000;padding:3px 6px;text-align:center"></td>
+  const shotW = Math.max(18, Math.floor(170 / shotCols))
+  const shotHeaders = Array.from({length: shotCols}, (_, i) =>
+    `<th style="width:${shotW}px">X${i+1}</th>`).join('')
+  const resultColor = insp.result === '합격' ? '#166534' : insp.result === '불합격' ? '#991b1b' : '#555'
+  const resultBg   = insp.result === '합격' ? '#dcfce7' : insp.result === '불합격' ? '#fee2e2' : '#f8f8f8'
+
+  // 표준 검사항목 (IATF 16949 §8.6.1 수입검사 기본 항목)
+  const DEFAULT_ITEMS = [
+    { no:'1', name:'외관 검사', spec:'스크래치·크랙·이물·변형 없음', unit:'육안' },
+    { no:'2', name:'치수 검사 1', spec:'', unit:'mm' },
+    { no:'3', name:'치수 검사 2', spec:'', unit:'mm' },
+    { no:'4', name:'치수 검사 3', spec:'', unit:'mm' },
+    { no:'5', name:'치수 검사 4', spec:'', unit:'mm' },
+    { no:'6', name:'재질 / 경도', spec:'도면 재질 기준', unit:'-' },
+    { no:'7', name:'표면 처리', spec:'도금/도장 상태 기준', unit:'육안' },
+    { no:'8', name:'기능 확인', spec:'조립 가능 여부', unit:'-' },
+  ]
+
+  const dimRows = DEFAULT_ITEMS.map(it => `
+    <tr style="height:21px">
+      <td style="border:1px solid #000;padding:2px 4px;text-align:center;font-size:7.5pt;color:#666">${it.no}</td>
+      <td style="border:1px solid #000;padding:2px 5px;font-size:7.5pt">${it.name}</td>
+      <td style="border:1px solid #000;padding:2px 4px;font-size:7pt;color:#444">${it.spec}</td>
+      <td style="border:1px solid #000;padding:2px 3px;text-align:center;font-size:7pt">${it.unit}</td>
+      ${Array.from({length: shotCols}, () => '<td style="border:1px solid #000;padding:2px 3px;text-align:center;font-size:7.5pt"></td>').join('')}
+      <td style="border:1px solid #000;padding:2px 4px;text-align:center;font-size:8pt"></td>
     </tr>`).join('')
 
   const html = `<!DOCTYPE html><html lang="ko"><head><meta charset="UTF-8">
 <title>수입검사 성적서 ${docNo}</title>
-<style>${BASE_CSS}
-  .box4 { display:grid; grid-template-columns:repeat(4,1fr); border:2px solid #000; }
-  .cell { border-right:1px solid #000; border-bottom:1px solid #000; padding:5px 8px; }
-  .cell:last-child { border-right:none; }
-  .cell-label { font-size:7.5pt; color:#555; font-weight:700; display:block; margin-bottom:2px; }
-  .cell-val { font-size:9.5pt; font-weight:700; }
-  .section-h { background:#0d1f3c; color:#fff; padding:4px 8px; font-size:9pt; font-weight:900; margin:10px 0 0; letter-spacing:1px; }
-  .iatf-ref { font-size:7pt; color:#93c5fd; float:right; font-weight:400; }
-  .chk { display:inline-block; width:11px; height:11px; border:1.5px solid #000; margin-right:3px; vertical-align:middle; text-align:center; line-height:10px; font-size:9pt; }
-  .dim-table { width:100%; border-collapse:collapse; margin-top:4px; font-size:8pt; }
-  .dim-table th { background:#d9d9d9; border:1px solid #000; padding:4px 5px; text-align:center; font-size:7.5pt; font-weight:700; }
+<style>
+  @page { size: A4 portrait; margin: 8mm 9mm; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Malgun Gothic', 'Apple SD Gothic Neo', Arial, sans-serif; font-size: 8.5pt; color: #000; background: #fff; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { border: 1px solid #000; padding: 3px 5px; }
+  th { background: #d9d9d9; font-size: 7.5pt; font-weight: 700; text-align: center; }
+  .sec-h { background: #0d1f3c; color: #fff; padding: 4px 8px; font-size: 8.5pt; font-weight: 900; letter-spacing: 1px; display: flex; justify-content: space-between; align-items: center; margin-top: 6px; }
+  .sec-ref { font-size: 6.5pt; color: #93c5fd; font-weight: 400; }
+  @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
 </style></head><body>
 
-<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px">
-  <div>
-    <div style="font-size:8pt;color:#555">${COMPANY}</div>
-    <div style="font-size:8pt;color:#555">품질보증부 (QA)</div>
-  </div>
-  <div style="text-align:right">
-    <div style="font-size:7.5pt;color:#555">문서번호: <strong>${docNo}</strong></div>
-    <div style="font-size:7.5pt;color:#555">개정번호: 00 &nbsp;|&nbsp; 발행일: ${today()}</div>
-  </div>
-</div>
+<!-- 헤더: 회사 + 제목 + 담당/검토/결재 -->
+<table style="border: 2px solid #000; margin-bottom: 0">
+  <tr>
+    <td style="width:19%; border:none; border-right:1px solid #000; padding:5px 8px; vertical-align:middle">
+      <div style="font-size:10pt;font-weight:900">${COMPANY}</div>
+      <div style="font-size:7pt;color:#555">품질보증부 (QA)</div>
+      <div style="font-size:6.5pt;color:#888;margin-top:2px">NEX-QP-IQC-001</div>
+    </td>
+    <td style="border:none; border-right:1px solid #000; text-align:center; padding:5px 0; vertical-align:middle">
+      <div style="font-size:15pt;font-weight:900;letter-spacing:4px">수 입 검 사 성 적 서</div>
+      <div style="font-size:8pt;color:#555;letter-spacing:1px;margin-top:2px">INCOMING QUALITY INSPECTION REPORT</div>
+      <div style="font-size:7pt;color:#888;margin-top:1px">IATF 16949 §8.6.1 / ISO 9001 §8.4.3</div>
+    </td>
+    <td style="border:none; width:28%; padding:0; vertical-align:top">
+      <table style="height:58px; border:none; width:100%">
+        <tr style="height:18px">
+          <td style="border:none;border-left:1px solid #000;border-bottom:1px solid #000;width:33%;text-align:center;font-size:7pt;font-weight:700;vertical-align:bottom;padding-bottom:2px">작&nbsp;성</td>
+          <td style="border:none;border-left:1px solid #000;border-bottom:1px solid #000;width:33%;text-align:center;font-size:7pt;font-weight:700;vertical-align:bottom;padding-bottom:2px">검&nbsp;토</td>
+          <td style="border:none;border-left:1px solid #000;border-bottom:1px solid #000;width:34%;text-align:center;font-size:7pt;font-weight:700;vertical-align:bottom;padding-bottom:2px">승&nbsp;인</td>
+        </tr>
+        <tr style="height:40px">
+          <td style="border:none;border-left:1px solid #000;text-align:center;font-size:9pt;font-weight:700;vertical-align:middle">${insp.inspector_id||''}</td>
+          <td style="border:none;border-left:1px solid #000;text-align:center;font-size:9pt;font-weight:700;vertical-align:middle">${insp.approver_id||''}</td>
+          <td style="border:none;border-left:1px solid #000;text-align:center;font-size:9pt;font-weight:700;vertical-align:middle">${insp.confirmer_id||''}</td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+</table>
 
-<h1>수입검사 성적서 (INCOMING QUALITY INSPECTION REPORT)</h1>
-
-<div class="section-h">1. 검사 기본 정보 <span class="iatf-ref">§8.6.1 Receiving Inspection</span></div>
-<div class="box4" style="margin-bottom:0">
-  <div class="cell"><span class="cell-label">검사일</span><span class="cell-val">${insp.inspect_date||'—'}</span></div>
-  <div class="cell"><span class="cell-label">입고번호 (GR No.)</span><span class="cell-val" style="font-family:monospace">${insp.gr_no||'—'}</span></div>
-  <div class="cell"><span class="cell-label">품번</span><span class="cell-val" style="font-family:monospace">${insp.part_no||'—'}</span></div>
-  <div class="cell" style="border-right:none"><span class="cell-label">검사원</span><span class="cell-val">${insp.inspector_id||'—'}</span></div>
-</div>
-<div class="box4" style="border-top:none;margin-bottom:0">
-  <div class="cell"><span class="cell-label">로트 크기</span><span class="cell-val">${(insp.lot_size||insp.inspect_qty||0).toLocaleString()}</span></div>
-  <div class="cell"><span class="cell-label">샘플 크기 (AQL)</span><span class="cell-val">${sampleN} pcs</span></div>
-  <div class="cell"><span class="cell-label">합격기준 (Ac / Re)</span><span class="cell-val">${insp.ac!=null?`${insp.ac} / ${insp.re}`:'—'}</span></div>
-  <div class="cell" style="border-right:none;padding:5px 8px">
-    <span class="cell-label">검사방식</span>
-    <span style="font-size:8.5pt">
-      <span class="chk">${inspType==='sampling'?'✓':''}</span>샘플링 검사 &nbsp;
-      <span class="chk">${inspType==='skip'?'✓':''}</span>무검사(전수면제)
-    </span>
-  </div>
-</div>
-
-<div class="section-h">2. 검사 결과 <span class="iatf-ref">§8.6.2 Inspection Results</span></div>
-<table>
-  <thead><tr>
+<!-- 기본 정보 -->
+<div class="sec-h">1. 검사 기본 정보 <span class="sec-ref">§8.6.1 Receiving Inspection</span></div>
+<table style="border-top:none">
+  <tr>
+    <th style="width:11%">문서번호</th>
+    <td style="width:17%;font-family:monospace;font-size:8pt;font-weight:700">${docNo}</td>
+    <th style="width:11%">입고번호</th>
+    <td style="width:17%;font-family:monospace;font-size:8pt">${insp.gr_no||'—'}</td>
+    <th style="width:10%">검사일자</th>
+    <td style="width:14%">${insp.inspect_date||'—'}</td>
+    <th style="width:8%">Rev</th>
+    <td style="width:12%">00</td>
+  </tr>
+  <tr>
     <th>품번</th>
-    <th style="text-align:right">검사수량</th>
-    <th style="text-align:right">합격수량</th>
-    <th style="text-align:right">불합격수량</th>
-    <th>불량내용</th>
-    <th>판정</th>
-  </tr></thead>
+    <td colspan="3" style="font-family:monospace;font-size:9pt;font-weight:700;color:#0d1f3c">${insp.part_no||'—'}</td>
+    <th>품명</th>
+    <td colspan="3">${insp.part_name||'—'}</td>
+  </tr>
+  <tr>
+    <th>공급업체</th>
+    <td colspan="3">${insp.partner_name||insp.partner_id||'—'}</td>
+    <th>검사방식</th>
+    <td colspan="3" style="font-size:8pt">
+      <span style="display:inline-block;width:10px;height:10px;border:1.5px solid #000;margin-right:3px;text-align:center;line-height:9px;font-size:8.5pt">${inspType==='sampling'?'✓':''}</span>샘플링 검사 &nbsp;&nbsp;
+      <span style="display:inline-block;width:10px;height:10px;border:1.5px solid #000;margin-right:3px;text-align:center;line-height:9px;font-size:8.5pt">${inspType==='skip'?'✓':''}</span>무검사(전수면제)
+    </td>
+  </tr>
+  <tr>
+    <th>로트 크기</th>
+    <td>${(insp.lot_size||insp.inspect_qty||0).toLocaleString()} pcs</td>
+    <th>샘플 크기</th>
+    <td>${sampleN} pcs</td>
+    <th>합격기준 (Ac/Re)</th>
+    <td>${insp.ac!=null?`${insp.ac} / ${insp.re}`:'— / —'}</td>
+    <th>검사원</th>
+    <td style="font-weight:700">${insp.inspector_id||'—'}</td>
+  </tr>
+</table>
+
+<!-- 검사 결과 요약 -->
+<div class="sec-h">2. 검사 결과 요약 <span class="sec-ref">§8.6.2 Inspection Results</span></div>
+<table style="border-top:none">
+  <thead>
+    <tr>
+      <th style="width:22%">품번</th>
+      <th style="width:14%">검사수량</th>
+      <th style="width:14%">합격수량</th>
+      <th style="width:14%">불합격수량</th>
+      <th>불량내용</th>
+      <th style="width:13%">최종 판정</th>
+    </tr>
+  </thead>
   <tbody>
     <tr>
-      <td style="font-family:monospace">${insp.part_no||'—'}</td>
-      <td class="right">${(insp.inspect_qty||0).toLocaleString()}</td>
-      <td class="right" style="color:#166534;font-weight:700">${passQty.toLocaleString()}</td>
-      <td class="right" style="${(insp.fail_qty||0)>0?'color:#cc0000;font-weight:700':''}">
+      <td style="font-family:monospace;font-size:8pt;font-weight:700">${insp.part_no||'—'}</td>
+      <td style="text-align:right;font-weight:700">${(insp.inspect_qty||0).toLocaleString()}</td>
+      <td style="text-align:right;color:#166534;font-weight:700">${passQty.toLocaleString()}</td>
+      <td style="text-align:right;${(insp.fail_qty||0)>0?'color:#991b1b;font-weight:700;':''}">
         ${(insp.fail_qty||0).toLocaleString()}
       </td>
-      <td>${insp.defect_note||'—'}</td>
-      <td class="center" style="${insp.result==='합격'?'color:#166534;font-weight:700':'color:#cc0000;font-weight:700'}">
-        ${insp.result||'—'}
+      <td style="font-size:7.5pt">${insp.defect_note||'이상 없음'}</td>
+      <td style="text-align:center;font-size:12pt;font-weight:900;background:${resultBg};color:${resultColor}">
+        ${insp.result||'검사대기'}
       </td>
     </tr>
   </tbody>
 </table>
 
-<div class="section-h">3. 치수 검사 기록 (${shotCols}-Shot) <span class="iatf-ref">§8.6.3 Dimensional Inspection</span></div>
-<table class="dim-table">
+<!-- 치수 검사 기록 -->
+<div class="sec-h">3. 치수 · 품질 검사 기록 (${shotCols}-Shot) <span class="sec-ref">§8.6.3 Dimensional Inspection</span></div>
+<table style="border-top:none;font-size:7.5pt">
   <thead>
     <tr>
-      <th style="min-width:100px">검사 항목</th>
-      <th style="min-width:70px">규격 (기준값)</th>
-      <th style="min-width:40px">Ac</th>
-      <th style="min-width:40px">Re</th>
+      <th style="width:4%">No.</th>
+      <th style="width:14%">검사 항목</th>
+      <th style="width:18%">규격 / 기준값</th>
+      <th style="width:5%">단위</th>
       ${shotHeaders}
-      <th style="min-width:36px">판정</th>
+      <th style="width:7%">판정</th>
     </tr>
   </thead>
   <tbody>
     ${dimRows}
   </tbody>
 </table>
-<div style="font-size:7pt;color:#666;margin-top:3px">※ 판정: ○ 합격 / × 불합격 &nbsp;|&nbsp; 측정값 단위: mm (별도 지정 없을 경우)</div>
+<div style="font-size:6.5pt;color:#555;margin-top:2px">※ 판정: ○ 합격 / × 불합격 &nbsp;|&nbsp; 측정값 단위: mm (별도 지정 없을 경우) &nbsp;|&nbsp; 외관 판정: Ac = 합격 / Rj = 불합격</div>
 
-<div class="sign-row" style="margin-top:16px">
-  <div class="sign-box"><div class="sign-title">검사자 (서명)</div></div>
-  <div class="sign-box"><div class="sign-title">검토자 (서명)</div></div>
-  <div class="sign-box"><div class="sign-title">승인 (서명)</div></div>
-</div>
-<div class="footer">
-  <span>${COMPANY} — 수입검사 절차 (IATF 16949 §8.6)</span>
+<!-- 서명란 -->
+<table style="margin-top:5px;height:36px">
+  <tr>
+    <th style="width:16%">작성자 (서명)</th>
+    <td style="width:18%;text-align:center;font-weight:700">${insp.inspector_id||''}</td>
+    <th style="width:16%">검토자 (서명)</th>
+    <td style="width:18%;text-align:center;font-weight:700">${insp.approver_id||''}</td>
+    <th style="width:16%">승인자 (서명)</th>
+    <td style="text-align:center;font-weight:700">${insp.confirmer_id||''}</td>
+  </tr>
+</table>
+
+<div style="display:flex;justify-content:space-between;margin-top:3px;font-size:6.5pt;color:#555;border-top:1px solid #ccc;padding-top:2px">
+  <span>${COMPANY} — 수입검사 절차서 NEX-QP-IQC-001 (IATF 16949 §8.6 / ISO 9001 §8.4.3)</span>
+  <span>A4 (210mm × 297mm)</span>
   <span>출력일: ${today()}</span>
 </div>
 </body></html>`

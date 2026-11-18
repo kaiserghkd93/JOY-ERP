@@ -59,6 +59,10 @@ class InspectionOut(BaseModel):
     ac: int | None = None
     re: int | None = None
     inspect_type: str | None = None
+    part_no: str | None = None
+    part_name: str | None = None
+    partner_id: str | None = None
+    partner_name: str | None = None
 
 
 class ClaimCreate(BaseModel):
