@@ -687,15 +687,8 @@ def return_mold(mold_no: str, user: User = Depends(get_current_user), db: Sessio
 def admin_partners(user: User = Depends(require_admin), db: Session = Depends(get_db)):
     """모든 외주 협력사 현황 요약 (관리자 전용)"""
     from sqlalchemy import func
-    # 외주 발주가 실제로 존재하는 협력사 ID 집합
-    outsource_partner_ids = {
-        row[0] for row in db.query(PurchaseOrder.partner_id)
-        .filter(PurchaseOrder.po_type == "outsource")
-        .distinct().all()
-    }
     partners = db.query(Partner).filter(
-        Partner.partner_type.in_(["supplier", "both"]),
-        Partner.partner_id.in_(outsource_partner_ids),
+        Partner.partner_type.in_(["supplier", "both"])
     ).all()
     item_map = {i.part_no: i for i in db.query(Item).all()}
 
