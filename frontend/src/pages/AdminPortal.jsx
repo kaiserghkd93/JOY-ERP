@@ -411,36 +411,76 @@ function OrdersReceiptsTab({ partners }) {
         </div>
       )}
 
-      {tab === 'receipts' && !loading && (
-        <div style={{ overflowX: 'auto' }}>
-          <table className="tbl">
-            <thead>
-              <tr>
-                <th>입고번호</th><th>LOT번호</th><th>협력사</th><th>품목</th>
-                <th>수량</th><th>단가</th><th>금액</th><th>납품일</th><th>상태</th>
-              </tr>
-            </thead>
-            <tbody>
-              {receipts.length === 0 && (
-                <tr><td colSpan={9} style={{ textAlign: 'center', color: 'var(--text-xs)' }}>납품 이력 없음</td></tr>
-              )}
-              {receipts.map(r => (
-                <tr key={r.gr_no}>
-                  <td style={{ fontFamily: 'monospace', fontSize: 12 }}>{r.gr_no}</td>
-                  <td style={{ fontFamily: 'monospace', fontSize: 11, color: '#6366f1' }}>{r.lot_no || '—'}</td>
-                  <td>{r.partner_name}</td>
-                  <td>{r.item_name}<br /><span style={{ fontSize: 11, color: 'var(--text-xs)' }}>{r.part_no}</span></td>
-                  <td style={{ textAlign: 'right' }}>{fmt(r.qty)} {r.item_unit}</td>
-                  <td style={{ textAlign: 'right' }}>{fmt(r.unit_price)}</td>
-                  <td style={{ textAlign: 'right' }}>{fmt(r.amount)}</td>
-                  <td>{fmtDate(r.receipt_date)}</td>
-                  <td><span className={STATUS_CLASS[r.status] || 'badge'}>{STATUS_LABEL[r.status] || r.status}</span></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+      {tab === 'receipts' && !loading && (() => {
+        // 월별 그룹핑
+        const grouped = {}
+        receipts.forEach(r => {
+          const ym = (r.receipt_date || '').slice(0, 7) // "2026-11"
+          if (!grouped[ym]) grouped[ym] = []
+          grouped[ym].push(r)
+        })
+        const months = Object.keys(grouped).sort((a, b) => b.localeCompare(a))
+        if (!months.length) return (
+          <p style={{ color: 'var(--text-xs)', fontSize: 13, padding: 12 }}>납품 이력 없음</p>
+        )
+        return (
+          <div>
+            {months.map(ym => {
+              const rows = grouped[ym]
+              const totalAmt = rows.reduce((s, r) => s + Number(r.amount || 0), 0)
+              const totalQty = rows.reduce((s, r) => s + Number(r.qty || 0), 0)
+              const [y, m] = ym.split('-')
+              return (
+                <div key={ym} style={{ marginBottom: 24 }}>
+                  <div style={{
+                    display: 'flex', alignItems: 'center', gap: 16,
+                    padding: '8px 12px', background: 'var(--table-head)',
+                    borderRadius: '8px 8px 0 0', borderBottom: '2px solid var(--accent)',
+                    fontWeight: 700, fontSize: 13,
+                  }}>
+                    <span>{y}년 {m}월</span>
+                    <span style={{ fontSize: 12, color: 'var(--text-xs)', fontWeight: 400 }}>
+                      {rows.length}건 납품 &nbsp;|&nbsp; 합계 ₩{fmt(totalAmt)}
+                    </span>
+                  </div>
+                  <div style={{ overflowX: 'auto' }}>
+                    <table className="tbl" style={{ borderRadius: '0 0 8px 8px', marginTop: 0 }}>
+                      <thead>
+                        <tr>
+                          <th>입고번호</th><th>LOT번호</th><th>협력사</th><th>품목</th>
+                          <th>수량</th><th>단가</th><th>금액</th><th>납품일</th><th>상태</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {rows.map(r => (
+                          <tr key={r.gr_no}>
+                            <td style={{ fontFamily: 'monospace', fontSize: 12 }}>{r.gr_no}</td>
+                            <td style={{ fontFamily: 'monospace', fontSize: 11, color: '#6366f1' }}>{r.lot_no || '—'}</td>
+                            <td>{r.partner_name}</td>
+                            <td>{r.item_name}<br /><span style={{ fontSize: 11, color: 'var(--text-xs)' }}>{r.part_no}</span></td>
+                            <td style={{ textAlign: 'right' }}>{fmt(r.qty)} {r.item_unit}</td>
+                            <td style={{ textAlign: 'right' }}>{fmt(r.unit_price)}</td>
+                            <td style={{ textAlign: 'right' }}>{fmt(r.amount)}</td>
+                            <td>{fmtDate(r.receipt_date)}</td>
+                            <td><span className={STATUS_CLASS[r.status] || 'badge'}>{STATUS_LABEL[r.status] || r.status}</span></td>
+                          </tr>
+                        ))}
+                        <tr style={{ background: 'var(--table-head)', fontWeight: 700 }}>
+                          <td colSpan={4} style={{ textAlign: 'right', fontSize: 12, color: 'var(--text-xs)' }}>월 합계</td>
+                          <td style={{ textAlign: 'right' }}>{fmt(totalQty)}</td>
+                          <td />
+                          <td style={{ textAlign: 'right', color: '#16a34a' }}>₩{fmt(totalAmt)}</td>
+                          <td colSpan={2} />
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )
+      })()}
     </div>
   )
 }
