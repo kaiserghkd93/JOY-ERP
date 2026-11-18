@@ -27,7 +27,7 @@ function PartnersTab({ partners, onSelectPartner }) {
             <span className={p.pending_po_count > 0 ? 'badge badge-amber' : 'badge badge-green'}>
               미납 발주 {p.pending_po_count}건
             </span>
-            <span className="badge badge-blue" style={{ '--badge-bg': '#e0f2fe', '--badge-txt': '#0369a1' } as any}>
+            <span className="badge badge-blue" style={{ '--badge-bg': '#e0f2fe', '--badge-txt': '#0369a1' }}>
               미납 수량 {fmt(p.pending_po_qty)}
             </span>
           </div>
