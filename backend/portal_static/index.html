@@ -948,6 +948,16 @@ async function initMain() {
   const me = await api('GET', '/auth/me');
   if (!me) return;
   currentUser = me;
+  // 관리자/내부직원은 ERP 관리자 포탈로 리다이렉트
+  if (me.role !== 'supplier') {
+    // ERP 세션에도 토큰 저장 후 이동
+    sessionStorage.setItem('jwt_token', token);
+    sessionStorage.setItem('kaiser_user', JSON.stringify({
+      id: me.username, role: me.role, name: me.name, partner_id: me.partner_id || null
+    }));
+    window.location.href = '/admin-portal';
+    return;
+  }
   document.getElementById('user-name').textContent = me.name;
   document.getElementById('login-page').style.display = 'none';
   document.getElementById('main-page').style.display = 'block';

@@ -9,6 +9,198 @@ import { printControlPlan, printPfmea, printCalibrationCert, printAuditReport, p
 
 const isManager = () => ['admin', 'quality_manager', 'owner'].includes(getRole())
 const today = () => new Date().toISOString().slice(0, 10)
+const fmtBytes = (b) => b >= 1048576 ? `${(b/1048576).toFixed(1)}MB` : `${Math.round(b/1024)}KB`
+
+// ── 관리계획서 첨부파일 컴포넌트 ──────────────────────────────────────
+const CATEGORIES = ['도면', '작업표준서', '검사기준서', '기타']
+const CATEGORY_COLOR = { '도면': '#1e40af', '작업표준서': '#15803d', '검사기준서': '#7c3aed', '기타': '#64748b' }
+const CATEGORY_BG = { '도면': '#eff6ff', '작업표준서': '#f0fdf4', '검사기준서': '#f5f3ff', '기타': '#f8fafc' }
+
+function CpAttachments({ cpId }) {
+  const [files, setFiles] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [uploading, setUploading] = useState(false)
+  const [category, setCategory] = useState('기타')
+  const [description, setDescription] = useState('')
+  const [dragOver, setDragOver] = useState(false)
+  const [err, setErr] = useState('')
+
+  const load = useCallback(() => {
+    setLoading(true)
+    api.get(`/quality-adv/control-plan/${cpId}/attachments`)
+      .then(r => setFiles(r.data))
+      .catch(() => setFiles([]))
+      .finally(() => setLoading(false))
+  }, [cpId])
+
+  useEffect(() => { load() }, [load])
+
+  const upload = async (file) => {
+    if (!file) return
+    setErr('')
+    const allowed = ['application/pdf', 'image/jpeg', 'image/png', 'image/gif',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'application/msword', 'application/vnd.ms-excel']
+    if (!allowed.includes(file.type)) { setErr('PDF, 이미지, Word, Excel 파일만 업로드 가능합니다'); return }
+    if (file.size > 20 * 1024 * 1024) { setErr('파일 크기가 20MB를 초과합니다'); return }
+
+    const fd = new FormData()
+    fd.append('file', file)
+    fd.append('category', category)
+    fd.append('description', description)
+    setUploading(true)
+    try {
+      await api.post(`/quality-adv/control-plan/${cpId}/attachments`, fd, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      })
+      setDescription('')
+      load()
+    } catch (e) {
+      setErr(e.response?.data?.detail || '업로드 실패')
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  const handleDrop = (e) => {
+    e.preventDefault(); setDragOver(false)
+    const f = e.dataTransfer.files[0]
+    if (f) upload(f)
+  }
+
+  const handleDelete = async (id) => {
+    if (!window.confirm('이 첨부파일을 삭제하시겠습니까?')) return
+    try {
+      await api.delete(`/quality-adv/control-plan/attachments/${id}`)
+      load()
+    } catch (e) {
+      setErr(e.response?.data?.detail || '삭제 실패')
+    }
+  }
+
+  const handleDownload = async (att) => {
+    try {
+      const r = await api.get(`/quality-adv/control-plan/attachments/${att.id}/download`, { responseType: 'blob' })
+      const url = URL.createObjectURL(new Blob([r.data], { type: att.file_type }))
+      const a = document.createElement('a')
+      a.href = url; a.download = att.filename; a.click()
+      URL.revokeObjectURL(url)
+    } catch {
+      setErr('다운로드 실패')
+    }
+  }
+
+  const fileIcon = (type) => {
+    if (type === 'application/pdf') return '📄'
+    if (type.startsWith('image/')) return '🖼️'
+    if (type.includes('word')) return '📝'
+    if (type.includes('excel') || type.includes('spreadsheet')) return '📊'
+    return '📎'
+  }
+
+  const catColor = (c) => CATEGORY_COLOR[c] || '#64748b'
+  const catBg = (c) => CATEGORY_BG[c] || '#f8fafc'
+
+  return (
+    <div>
+      {/* 업로드 영역 */}
+      <div
+        onDragOver={e => { e.preventDefault(); setDragOver(true) }}
+        onDragLeave={() => setDragOver(false)}
+        onDrop={handleDrop}
+        style={{
+          border: `2px dashed ${dragOver ? '#2563eb' : 'var(--border)'}`,
+          borderRadius: 10, padding: 24, textAlign: 'center',
+          background: dragOver ? '#eff6ff' : 'var(--bg)', marginBottom: 16,
+          cursor: 'pointer', transition: 'all .15s',
+        }}
+        onClick={() => document.getElementById('cp-file-input').click()}
+      >
+        <input id="cp-file-input" type="file"
+          accept=".pdf,.jpg,.jpeg,.png,.gif,.doc,.docx,.xls,.xlsx"
+          style={{ display: 'none' }}
+          onChange={e => { if (e.target.files[0]) upload(e.target.files[0]); e.target.value = '' }}
+        />
+        <div style={{ fontSize: 32, marginBottom: 8 }}>📎</div>
+        <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 4 }}>
+          {uploading ? '업로드 중...' : '파일을 여기에 드래그하거나 클릭하여 선택'}
+        </div>
+        <div style={{ fontSize: 12, color: 'var(--text-sm)' }}>
+          PDF, 이미지, Word, Excel · 최대 20MB
+        </div>
+      </div>
+
+      {/* 카테고리 + 설명 */}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
+        {CATEGORIES.map(c => (
+          <button key={c} onClick={() => setCategory(c)}
+            style={{
+              padding: '5px 14px', border: `1.5px solid ${category === c ? catColor(c) : 'var(--border)'}`,
+              borderRadius: 20, background: category === c ? catBg(c) : 'transparent',
+              color: category === c ? catColor(c) : 'var(--text-sm)',
+              fontWeight: category === c ? 700 : 400, fontSize: 12, cursor: 'pointer',
+            }}>
+            {c}
+          </button>
+        ))}
+        <input value={description} onChange={e => setDescription(e.target.value)}
+          placeholder="파일 설명 (선택)"
+          style={{ flex: 1, minWidth: 160, padding: '5px 10px', borderRadius: 6,
+            border: '1px solid var(--border)', fontSize: 12 }} />
+      </div>
+
+      {err && (
+        <div style={{ color: '#dc2626', fontSize: 12, padding: '6px 10px',
+          background: '#fef2f2', borderRadius: 6, marginBottom: 12 }}>⚠ {err}</div>
+      )}
+
+      {/* 파일 목록 */}
+      {loading ? (
+        <div style={{ textAlign: 'center', padding: 24, color: 'var(--text-sm)' }}>불러오는 중...</div>
+      ) : files.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: 32, color: 'var(--text-sm)', fontSize: 13 }}>
+          첨부된 파일이 없습니다
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {files.map(f => (
+            <div key={f.id} style={{
+              display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px',
+              border: '1px solid var(--border)', borderRadius: 8, background: 'var(--bg)',
+            }}>
+              <span style={{ fontSize: 22 }}>{fileIcon(f.file_type)}</span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: 600, fontSize: 13, whiteSpace: 'nowrap',
+                  overflow: 'hidden', textOverflow: 'ellipsis' }}>{f.filename}</div>
+                <div style={{ fontSize: 11, color: 'var(--text-sm)', marginTop: 2 }}>
+                  {fmtBytes(f.file_size)} · {f.uploaded_by} · {f.uploaded_at.slice(0,10)}
+                  {f.description && <span> · {f.description}</span>}
+                </div>
+              </div>
+              <span style={{
+                fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 10,
+                color: catColor(f.category), background: catBg(f.category),
+              }}>{f.category}</span>
+              <button onClick={() => handleDownload(f)}
+                style={{ padding: '4px 12px', fontSize: 12, background: '#1e40af', color: '#fff',
+                  border: 'none', borderRadius: 6, cursor: 'pointer', fontWeight: 600 }}>
+                ⬇ 다운로드
+              </button>
+              {isManager() && (
+                <button onClick={() => handleDelete(f.id)}
+                  style={{ padding: '4px 10px', fontSize: 12, background: '#fef2f2', color: '#dc2626',
+                    border: '1px solid #fca5a5', borderRadius: 6, cursor: 'pointer' }}>
+                  삭제
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
 
 // ── 공통 컬러 유틸 ─────────────────────────────────────────────────
 const cpkColor = (v) => v == null ? 'var(--text-sm)' : v >= 1.67 ? '#16a34a' : v >= 1.33 ? '#2563eb' : v >= 1.0 ? '#d97706' : '#dc2626'
@@ -435,11 +627,7 @@ export function ControlPlanPanel() {
               )}
 
               {detailTab === 'attachments' && (
-                <div style={{ textAlign: 'center', padding: '48px 0', color: 'var(--text-sm)' }}>
-                  <div style={{ fontSize: 40, marginBottom: 12, opacity: 0.3 }}>📎</div>
-                  <div style={{ marginBottom: 4 }}>첨부파일</div>
-                  <div style={{ fontSize: 11 }}>관리계획서 원본, 도면 등을 여기에 첨부할 수 있습니다 (개발 중)</div>
-                </div>
+                <CpAttachments cpId={selected.id} />
               )}
 
               {detailTab === 'history' && (

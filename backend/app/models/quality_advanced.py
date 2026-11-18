@@ -1,6 +1,6 @@
 """IATF 16949 / VDA 6.3 고도화 품질 모델"""
 from datetime import date, datetime
-from sqlalchemy import String, Integer, Numeric, Date, DateTime, Text, JSON, ForeignKey
+from sqlalchemy import String, Integer, Numeric, Date, DateTime, Text, JSON, ForeignKey, LargeBinary
 from sqlalchemy import Enum as SAEnum
 from sqlalchemy.orm import Mapped, mapped_column
 from app.database import Base
@@ -92,6 +92,23 @@ class ControlPlanItem(Base):
     control_method: Mapped[str | None] = mapped_column(String(100))  # SPC, 버니어, 육안
     reaction_plan: Mapped[str | None] = mapped_column(String(200))
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
+
+
+# ── 관리계획서 첨부파일 ─────────────────────────────────────────────
+
+class ControlPlanAttachment(Base):
+    """관리계획서 첨부파일 (도면, 작업표준서 등 PDF/이미지)"""
+    __tablename__ = "control_plan_attachment"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    cp_id: Mapped[int] = mapped_column(ForeignKey("control_plan.id"), nullable=False)
+    filename: Mapped[str] = mapped_column(String(255), nullable=False)
+    file_type: Mapped[str] = mapped_column(String(100), nullable=False)   # MIME type
+    file_size: Mapped[int] = mapped_column(Integer, nullable=False)        # bytes
+    file_data: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)  # DB 저장
+    category: Mapped[str] = mapped_column(String(50), default="기타")     # 도면/작업표준서/검사기준서/기타
+    description: Mapped[str | None] = mapped_column(String(200))
+    uploaded_by: Mapped[str] = mapped_column(String(50), nullable=False)
+    uploaded_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
 
 
 # ── PFMEA ──────────────────────────────────────────────────────────

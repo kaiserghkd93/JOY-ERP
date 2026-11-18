@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
+import QRCode from 'qrcode'
 
 const API = import.meta.env.VITE_API_URL || ''
 const tok = () => sessionStorage.getItem('jwt_token') || ''
@@ -9,6 +10,141 @@ const STATUS_CLASS = { pending: 'badge badge-amber', confirmed: 'badge badge-gre
 
 function fmt(n) { return Number(n || 0).toLocaleString() }
 function fmtDate(s) { return s ? s.slice(0, 10) : '—' }
+
+// ── 납품 명세표 모달 (QR 포함) ──────────────────────────────────────
+function DeliveryStatementModal({ receipts, partnerName, onClose }) {
+  const [qrUrls, setQrUrls] = useState({})
+
+  useEffect(() => {
+    receipts.forEach(async r => {
+      const url = `${window.location.origin}/api/portal/receipt/${r.gr_no}/view`
+      try {
+        const dataUrl = await QRCode.toDataURL(url, { width: 160, margin: 1, errorCorrectionLevel: 'M' })
+        setQrUrls(prev => ({ ...prev, [r.gr_no]: dataUrl }))
+      } catch {}
+    })
+  }, [receipts])
+
+  const handlePrint = () => {
+    const rows = receipts.map(r => `
+      <div style="border:1px solid #e2e8f0;border-radius:10px;padding:20px;margin-bottom:20px;page-break-inside:avoid;">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+          <div>
+            <div style="font-size:11px;color:#64748b;margin-bottom:4px;">입고번호</div>
+            <div style="font-family:monospace;font-size:14px;font-weight:700;color:#1e40af">${r.gr_no}</div>
+            <div style="font-size:11px;color:#6366f1;font-family:monospace;margin-top:4px;">LOT: ${r.lot_no || '—'}</div>
+            <div style="margin-top:12px;font-size:13px;font-weight:600;">${r.item_name || r.part_no}</div>
+            <div style="font-size:12px;color:#64748b;">${r.part_no}</div>
+            <div style="margin-top:8px;font-size:13px;">
+              수량: <strong>${fmt(r.qty)} ${r.item_unit || 'EA'}</strong>&nbsp;&nbsp;
+              단가: <strong>${fmt(r.unit_price)}원</strong>&nbsp;&nbsp;
+              금액: <strong>${fmt(r.amount)}원</strong>
+            </div>
+            <div style="font-size:12px;color:#64748b;margin-top:4px;">납품일: ${r.receipt_date}</div>
+          </div>
+          ${qrUrls[r.gr_no] ? `<img src="${qrUrls[r.gr_no]}" width="120" height="120" style="border:1px solid #e2e8f0;border-radius:6px;padding:4px;" />` : ''}
+        </div>
+      </div>
+    `).join('')
+
+    const win = window.open('', '_blank')
+    win.document.write(`<!DOCTYPE html><html lang="ko"><head>
+      <meta charset="UTF-8">
+      <title>납품 명세표 — ${partnerName}</title>
+      <style>
+        body { font-family: 'Malgun Gothic', sans-serif; padding: 32px; max-width: 700px; margin: 0 auto; }
+        @media print { body { padding: 16px; } }
+      </style>
+    </head><body>
+      <div style="text-align:center;margin-bottom:28px;">
+        <div style="font-size:22px;font-weight:800;color:#1e293b;">납 품 명 세 표</div>
+        <div style="font-size:14px;color:#64748b;margin-top:6px;">
+          협력사: <strong>${partnerName}</strong>&nbsp;&nbsp;|&nbsp;&nbsp;
+          발행일: <strong>${new Date().toLocaleDateString('ko-KR')}</strong>&nbsp;&nbsp;|&nbsp;&nbsp;
+          총 ${receipts.length}건
+        </div>
+      </div>
+      ${rows}
+      <div style="margin-top:32px;text-align:right;font-size:12px;color:#94a3b8;">
+        ※ QR코드를 스캔하면 LOT 추적 및 입고 확정이 가능합니다.
+      </div>
+    </body></html>`)
+    win.document.close()
+    setTimeout(() => win.print(), 400)
+  }
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)',
+      zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center',
+    }}>
+      <div style={{
+        background: '#fff', borderRadius: 12, padding: 28, width: '90%', maxWidth: 680,
+        maxHeight: '88vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.25)',
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+          <div>
+            <div style={{ fontSize: 18, fontWeight: 800 }}>납품 명세표</div>
+            <div style={{ fontSize: 13, color: '#64748b', marginTop: 2 }}>
+              협력사: <strong>{partnerName}</strong> | 총 {receipts.length}건
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button
+              onClick={handlePrint}
+              style={{
+                padding: '8px 20px', background: '#1e40af', color: '#fff',
+                border: 'none', borderRadius: 8, fontWeight: 700, cursor: 'pointer', fontSize: 13,
+              }}
+            >🖨️ 인쇄 / PDF</button>
+            <button onClick={onClose}
+              style={{ padding: '8px 16px', background: '#f1f5f9', border: 'none', borderRadius: 8, cursor: 'pointer' }}>
+              닫기
+            </button>
+          </div>
+        </div>
+
+        {receipts.map(r => (
+          <div key={r.gr_no} style={{
+            border: '1px solid #e2e8f0', borderRadius: 10, padding: 18, marginBottom: 14,
+            display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start',
+          }}>
+            <div style={{ flex: 1 }}>
+              <div style={{ display: 'flex', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
+                <span style={{
+                  fontFamily: 'monospace', fontSize: 13, fontWeight: 700, color: '#1e40af',
+                  background: '#eff6ff', padding: '3px 10px', borderRadius: 6,
+                }}>📦 {r.gr_no}</span>
+                <span style={{
+                  fontFamily: 'monospace', fontSize: 12, color: '#6366f1',
+                  background: '#eef2ff', padding: '3px 10px', borderRadius: 6,
+                }}>🏷️ {r.lot_no || '—'}</span>
+              </div>
+              <div style={{ fontWeight: 700, fontSize: 14 }}>{r.item_name || r.part_no}</div>
+              <div style={{ fontSize: 12, color: '#64748b' }}>{r.part_no}</div>
+              <div style={{ marginTop: 8, fontSize: 13, display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+                <span>수량 <strong>{fmt(r.qty)} {r.item_unit || 'EA'}</strong></span>
+                <span>단가 <strong>{fmt(r.unit_price)}원</strong></span>
+                <span>금액 <strong style={{ color: '#16a34a' }}>{fmt(r.amount)}원</strong></span>
+              </div>
+              <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 4 }}>납품일: {r.receipt_date}</div>
+            </div>
+            <div style={{ marginLeft: 16, flexShrink: 0, textAlign: 'center' }}>
+              {qrUrls[r.gr_no]
+                ? <img src={qrUrls[r.gr_no]} width={120} height={120}
+                    style={{ border: '1px solid #e2e8f0', borderRadius: 6, padding: 3 }} />
+                : <div style={{ width: 120, height: 120, background: '#f8fafc', borderRadius: 6,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: 11, color: '#94a3b8' }}>QR 생성중...</div>
+              }
+              <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 4 }}>스캔 → 입고확정</div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
 
 // ── 협력사 현황 카드 ────────────────────────────────────────────────
 function PartnersTab({ partners, onSelectPartner }) {
@@ -185,6 +321,7 @@ function DeliverAdminTab({ partners, onDone }) {
   const [partnerOrders, setPartnerOrders] = useState([])
   const [saving, setSaving] = useState(false)
   const [result, setResult] = useState(null)
+  const [showStatement, setShowStatement] = useState(false)
   const [err, setErr] = useState('')
 
   useEffect(() => {
@@ -249,17 +386,34 @@ function DeliverAdminTab({ partners, onDone }) {
   return (
     <div style={{ maxWidth: 900 }}>
       {result && (
-        <div style={{ background: '#f0fdf4', border: '1px solid #86efac', borderRadius: 8, padding: 16, marginBottom: 20 }}>
-          <div style={{ fontWeight: 700, color: '#15803d', marginBottom: 8 }}>✅ 납품 등록 완료</div>
-          {result.map(r => (
-            <div key={r.gr_no} style={{ fontSize: 13, marginBottom: 4 }}>
-              <span style={{ fontFamily: 'monospace', marginRight: 8 }}>{r.gr_no}</span>
-              <span style={{ color: '#6366f1', fontFamily: 'monospace', marginRight: 8 }}>{r.lot_no}</span>
-              {r.item_name} {fmt(r.qty)}{r.item_unit} — {fmt(r.amount)}원
+        <>
+          {showStatement && (
+            <DeliveryStatementModal
+              receipts={result}
+              partnerName={partners.find(p => p.partner_id === partnerId)?.partner_name || partnerId}
+              onClose={() => setShowStatement(false)}
+            />
+          )}
+          <div style={{ background: '#f0fdf4', border: '1px solid #86efac', borderRadius: 8, padding: 16, marginBottom: 20 }}>
+            <div style={{ fontWeight: 700, color: '#15803d', marginBottom: 8 }}>✅ 납품 등록 완료</div>
+            {result.map(r => (
+              <div key={r.gr_no} style={{ fontSize: 13, marginBottom: 4 }}>
+                <span style={{ fontFamily: 'monospace', marginRight: 8 }}>{r.gr_no}</span>
+                <span style={{ color: '#6366f1', fontFamily: 'monospace', marginRight: 8 }}>{r.lot_no}</span>
+                {r.item_name} {fmt(r.qty)}{r.item_unit} — {fmt(r.amount)}원
+              </div>
+            ))}
+            <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+              <button
+                onClick={() => setShowStatement(true)}
+                style={{ padding: '8px 20px', background: '#1e40af', color: '#fff',
+                  border: 'none', borderRadius: 8, fontWeight: 700, cursor: 'pointer', fontSize: 13 }}>
+                🖨️ 납품 명세표 발행
+              </button>
+              <button className="btn-sm" onClick={() => { setResult(null); setShowStatement(false) }}>닫기</button>
             </div>
-          ))}
-          <button className="btn-sm" style={{ marginTop: 8 }} onClick={() => setResult(null)}>닫기</button>
-        </div>
+          </div>
+        </>
       )}
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginBottom: 20 }}>

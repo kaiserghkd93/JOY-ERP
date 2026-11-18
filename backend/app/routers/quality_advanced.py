@@ -1,7 +1,8 @@
 """IATF 16949 / VDA 6.3 고도화 품질 API"""
 import math, statistics
 from datetime import date, datetime, timedelta
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
+from fastapi.responses import Response
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import Optional
@@ -13,6 +14,7 @@ from app.services.doc_no import next_doc_no
 from app.models.quality_advanced import (
     SpcChart, SpcMeasurement,
     ControlPlan, ControlPlanItem, CpStatus, CharType,
+    ControlPlanAttachment,
     Pfmea, PfmeaItem, PfmeaStatus,
     Instrument, CalibrationRecord, InstrumentStatus,
     AuditPlan, AuditFinding, AuditStatus, FindingType, FindingStatus,
@@ -1006,3 +1008,121 @@ def iatf_summary(year: int, month: int, db: Session = Depends(get_db)):
             "items": msa_items,
         },
     }
+
+
+# ═══════════════════════════════════════════════════════════════════
+# 관리계획서 첨부파일
+
+ALLOWED_TYPES = {
+    "application/pdf", "image/jpeg", "image/png", "image/gif",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "application/msword", "application/vnd.ms-excel",
+}
+MAX_FILE_SIZE = 20 * 1024 * 1024  # 20MB
+
+CATEGORY_LABELS = {
+    "도면": "도면",
+    "작업표준서": "작업표준서",
+    "검사기준서": "검사기준서",
+    "기타": "기타",
+}
+
+
+@router.post("/control-plan/{cp_id}/attachments")
+async def upload_cp_attachment(
+    cp_id: int,
+    file: UploadFile = File(...),
+    category: str = Form("기타"),
+    description: str = Form(""),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    cp = db.get(ControlPlan, cp_id)
+    if not cp:
+        raise HTTPException(404, "관리계획서를 찾을 수 없습니다")
+
+    if file.content_type not in ALLOWED_TYPES:
+        raise HTTPException(400, f"지원하지 않는 파일 형식입니다: {file.content_type}")
+
+    file_data = await file.read()
+    if len(file_data) > MAX_FILE_SIZE:
+        raise HTTPException(400, "파일 크기가 20MB를 초과합니다")
+
+    att = ControlPlanAttachment(
+        cp_id=cp_id,
+        filename=file.filename,
+        file_type=file.content_type,
+        file_size=len(file_data),
+        file_data=file_data,
+        category=category if category in CATEGORY_LABELS else "기타",
+        description=description or None,
+        uploaded_by=user.username,
+        uploaded_at=datetime.now(),
+    )
+    db.add(att)
+    db.commit()
+    db.refresh(att)
+    return {
+        "id": att.id, "filename": att.filename, "file_type": att.file_type,
+        "file_size": att.file_size, "category": att.category,
+        "description": att.description, "uploaded_by": att.uploaded_by,
+        "uploaded_at": att.uploaded_at.isoformat(),
+    }
+
+
+@router.get("/control-plan/{cp_id}/attachments")
+def list_cp_attachments(
+    cp_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    cp = db.get(ControlPlan, cp_id)
+    if not cp:
+        raise HTTPException(404, "관리계획서를 찾을 수 없습니다")
+
+    rows = db.query(ControlPlanAttachment).filter(
+        ControlPlanAttachment.cp_id == cp_id
+    ).order_by(ControlPlanAttachment.uploaded_at.desc()).all()
+
+    return [
+        {
+            "id": r.id, "filename": r.filename, "file_type": r.file_type,
+            "file_size": r.file_size, "category": r.category,
+            "description": r.description, "uploaded_by": r.uploaded_by,
+            "uploaded_at": r.uploaded_at.isoformat(),
+        }
+        for r in rows
+    ]
+
+
+@router.get("/control-plan/attachments/{att_id}/download")
+def download_cp_attachment(
+    att_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    att = db.get(ControlPlanAttachment, att_id)
+    if not att:
+        raise HTTPException(404, "첨부파일을 찾을 수 없습니다")
+
+    return Response(
+        content=att.file_data,
+        media_type=att.file_type,
+        headers={"Content-Disposition": f'attachment; filename="{att.filename}"'},
+    )
+
+
+@router.delete("/control-plan/attachments/{att_id}")
+def delete_cp_attachment(
+    att_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    att = db.get(ControlPlanAttachment, att_id)
+    if not att:
+        raise HTTPException(404, "첨부파일을 찾을 수 없습니다")
+
+    db.delete(att)
+    db.commit()
+    return {"ok": True}
