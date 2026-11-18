@@ -389,10 +389,13 @@ function OrdersReceiptsTab({ partners }) {
         method: 'DELETE', headers: hdr(),
       })
       const data = await res.json()
-      if (!res.ok) throw new Error(data.detail || '삭제 실패')
+      if (!res.ok) {
+        const msg = typeof data.detail === 'string' ? data.detail : JSON.stringify(data.detail)
+        throw new Error(msg || '삭제 실패')
+      }
       alert(`완료: 입고 ${data.purged}건 삭제, 발주 ${data.reset_pos?.length || 0}건 초기화`)
       load()
-    } catch (e) { alert('오류: ' + e.message) }
+    } catch (e) { alert('오류: ' + (e.message || String(e))) }
   }
 
   const handleBulkStatement = () => {

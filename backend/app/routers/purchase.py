@@ -1002,7 +1002,7 @@ def purge_receipt(gr_no: str, db: Session = Depends(get_db), _: User = Depends(r
 
 
 @router.delete("/admin/partner/{partner_id}/purge-all")
-def purge_partner_all_receipts(partner_id: int, db: Session = Depends(get_db), _: User = Depends(require_admin)):
+def purge_partner_all_receipts(partner_id: str, db: Session = Depends(get_db), _: User = Depends(require_admin)):
     """관리자 전용: 거래처의 모든 입고전표 + 재고원장 완전삭제 + 발주 open 초기화 (오입력 데이터 정리용)"""
     from app.models.quality import Inspection, NonConformance
     from app.models.ledger import StockLedger
