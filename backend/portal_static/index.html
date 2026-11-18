@@ -874,7 +874,7 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('deliver-date').value = today;
   currentMonth = today.slice(0, 7);
   buildMonthSelect();
-  if (token) initMain();
+  // 페이지 직접 열 때는 자동 로그인 안 함 (업체별 테스트 위해 항상 로그인 화면 표시)
 });
 
 function buildMonthSelect() {
