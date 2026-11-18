@@ -18,9 +18,11 @@ from app.services.ledger_service import post_ledger
 router = APIRouter(prefix="/portal", tags=["외주처 포털"])
 
 
-def _supplier_partner(user: User) -> str:
-    """로그인한 업체 계정의 partner_id 반환"""
+def _supplier_partner(user: User, allow_admin: bool = False) -> str:
+    """로그인한 업체 계정의 partner_id 반환. allow_admin=True면 admin에게도 허용."""
     if not user.partner_id:
+        if allow_admin:
+            return ""
         raise HTTPException(403, "연결된 협력사가 없습니다. 관리자에게 문의하세요.")
     return user.partner_id
 
@@ -28,7 +30,9 @@ def _supplier_partner(user: User) -> str:
 # ── 내 발주 목록 (잔량 > 0인 미납 건) ──────────────────────────
 @router.get("/orders")
 def my_orders(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    partner_id = _supplier_partner(user)
+    if not user.partner_id:
+        return []  # admin/owner는 빈 목록 반환 (관리자 포탈 사용)
+    partner_id = user.partner_id
     from datetime import date as date_cls
     cutoff = date_cls(2026, 10, 1)
     orders = (
@@ -78,7 +82,9 @@ def my_completed_orders(
     db: Session = Depends(get_db),
 ):
     from sqlalchemy import extract as sa_extract
-    partner_id = _supplier_partner(user)
+    if not user.partner_id:
+        return []
+    partner_id = user.partner_id
     result = []
 
     # 1) PO 기반 완료 건
@@ -153,7 +159,9 @@ def my_completed_orders(
 # ── 내 업체 품목 목록 (발주 기준, 발주목록 자동완성용) ───────────
 @router.get("/my-items")
 def my_items(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    partner_id = _supplier_partner(user)
+    if not user.partner_id:
+        return []
+    partner_id = user.partner_id
     pos = (
         db.query(PurchaseOrder)
         .filter(PurchaseOrder.partner_id == partner_id)
@@ -178,7 +186,8 @@ def my_items(user: User = Depends(get_current_user), db: Session = Depends(get_d
 # ── 전체 기준정보 품목 목록 (수동 추가 자동완성용) ───────────────
 @router.get("/all-items")
 def all_items(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    _supplier_partner(user)  # 협력사 계정 확인
+    if not user.partner_id:
+        return []
     items = db.query(Item).order_by(Item.name).all()
     # 이 업체의 최신 발주 단가 맵
     price_map: dict = {}
@@ -438,7 +447,9 @@ def view_receipt_mobile(gr_no: str, db: Session = Depends(get_db)):
 @router.get("/monthly-summary")
 def monthly_summary(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     from sqlalchemy import func, extract
-    partner_id = _supplier_partner(user)
+    if not user.partner_id:
+        return []
+    partner_id = user.partner_id
     receipts = (
         db.query(Receipt)
         .filter(Receipt.partner_id == partner_id, Receipt.status == ReceiptStatus.confirmed)
@@ -481,7 +492,9 @@ def monthly_summary(user: User = Depends(get_current_user), db: Session = Depend
 # ── 내 납품 이력 ────────────────────────────────────────────────
 @router.get("/history")
 def my_history(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    partner_id = _supplier_partner(user)
+    if not user.partner_id:
+        return []
+    partner_id = user.partner_id
     receipts = (
         db.query(Receipt)
         .filter(Receipt.partner_id == partner_id)
@@ -512,7 +525,9 @@ def my_history(user: User = Depends(get_current_user), db: Session = Depends(get
 @router.get("/ncr")
 def my_ncr(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """내 업체에 발송된 부적합 통보 목록"""
-    partner_id = _supplier_partner(user)
+    if not user.partner_id:
+        return []
+    partner_id = user.partner_id
     ncrs = (
         db.query(NonConformance)
         .filter(NonConformance.partner_id == partner_id)
@@ -571,7 +586,9 @@ def portal_appeal(ncr_no: str, body: PortalAppealBody,
 # ── 대여 금형 목록 ───────────────────────────────────────────────
 @router.get("/my-molds")
 def my_molds(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    partner_id = _supplier_partner(user)
+    if not user.partner_id:
+        return []
+    partner_id = user.partner_id
     molds = (
         db.query(Mold)
         .filter(Mold.lent_to_partner_id == partner_id)
