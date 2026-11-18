@@ -449,8 +449,11 @@ function DeliverAdminTab({ partners, onDone }) {
       <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: 12 }}>
         <thead>
           <tr style={{ background: 'var(--table-head)', fontSize: 12 }}>
-            <th style={{ padding: '6px 10px', textAlign: 'left', border: '1px solid var(--border)' }}>직납여부</th>
+            <th style={{ padding: '6px 10px', textAlign: 'center', border: '1px solid var(--border)', width: 70 }}>
+              직접입고
+            </th>
             <th style={{ padding: '6px 10px', textAlign: 'left', border: '1px solid var(--border)', minWidth: 160 }}>발주번호</th>
+            <th style={{ padding: '6px 10px', textAlign: 'left', border: '1px solid var(--border)', width: 110 }}>품번</th>
             <th style={{ padding: '6px 10px', textAlign: 'left', border: '1px solid var(--border)' }}>품목명</th>
             <th style={{ padding: '6px 10px', textAlign: 'right', border: '1px solid var(--border)', width: 90 }}>수량</th>
             <th style={{ padding: '6px 10px', textAlign: 'right', border: '1px solid var(--border)', width: 110 }}>단가</th>
@@ -461,12 +464,19 @@ function DeliverAdminTab({ partners, onDone }) {
           {lines.map((line, idx) => (
             <tr key={idx}>
               <td style={{ padding: '4px 8px', border: '1px solid var(--border)', textAlign: 'center' }}>
-                <input type="checkbox" checked={line.direct}
-                  onChange={e => setLine(idx, 'direct', e.target.checked)} />
+                <label style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, cursor: 'pointer' }}>
+                  <input type="checkbox" checked={line.direct}
+                    onChange={e => setLine(idx, 'direct', e.target.checked)} />
+                  {line.direct && (
+                    <span style={{ fontSize: 10, color: '#1e40af', fontWeight: 700 }}>직접</span>
+                  )}
+                </label>
               </td>
               <td style={{ padding: '4px 8px', border: '1px solid var(--border)' }}>
                 {line.direct ? (
-                  <span style={{ color: 'var(--text-xs)', fontSize: 12 }}>직납</span>
+                  <span style={{ color: 'var(--text-xs)', fontSize: 12, padding: '4px 6px', display: 'block' }}>
+                    발주 없음
+                  </span>
                 ) : (
                   <select
                     value={line.po_no}
@@ -483,6 +493,17 @@ function DeliverAdminTab({ partners, onDone }) {
                     ))}
                   </select>
                 )}
+              </td>
+              <td style={{ padding: '4px 8px', border: '1px solid var(--border)' }}>
+                <input
+                  value={line.part_no}
+                  onChange={e => setLine(idx, 'part_no', e.target.value)}
+                  placeholder={line.direct ? '품번 입력' : '자동'}
+                  readOnly={!line.direct && !!line.po_no}
+                  style={{ width: '100%', padding: '4px 6px', borderRadius: 4,
+                    border: '1px solid var(--border)', fontSize: 12,
+                    background: !line.direct && line.po_no ? 'var(--bg-subtle)' : undefined }}
+                />
               </td>
               <td style={{ padding: '4px 8px', border: '1px solid var(--border)' }}>
                 <input
