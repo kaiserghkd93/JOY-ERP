@@ -58,6 +58,14 @@ with engine.connect() as _conn:
         "ALTER TABLE inspection ADD COLUMN IF NOT EXISTS ac INTEGER",
         "ALTER TABLE inspection ADD COLUMN IF NOT EXISTS re INTEGER",
         "ALTER TABLE inspection ADD COLUMN IF NOT EXISTS inspect_type VARCHAR(20)",
+        # 담당자 FK 제약 해제 — 실명(원현/신우성/김필수) 직접 저장
+        "ALTER TABLE inspection DROP CONSTRAINT IF EXISTS inspection_inspector_id_fkey",
+        "ALTER TABLE inspection DROP CONSTRAINT IF EXISTS inspection_approver_id_fkey",
+        "ALTER TABLE inspection DROP CONSTRAINT IF EXISTS inspection_confirmer_id_fkey",
+        # 기존 데이터 담당자명 일괄 치환
+        "UPDATE inspection SET inspector_id = '원현' WHERE inspector_id IS NOT NULL",
+        "UPDATE inspection SET approver_id = '신우성' WHERE approver_id IS NOT NULL",
+        "UPDATE inspection SET confirmer_id = '김필수' WHERE confirmer_id IS NOT NULL",
         "ALTER TABLE mold ADD COLUMN IF NOT EXISTS lent_to_partner_id VARCHAR(50)",
         "ALTER TABLE mold ADD COLUMN IF NOT EXISTS lent_date DATE",
         # BOM 사출 특화 확장

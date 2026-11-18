@@ -29,6 +29,11 @@ from app.routers.auth import get_current_user
 
 router = APIRouter(prefix="/quality", tags=["품질"])
 
+# ── 담당자 고정값 (회사 지정) ─────────────────────────────────────
+IQC_INSPECTOR  = "원현"   # 검사원 / 작성
+IQC_APPROVER   = "신우성"  # 승인완료
+IQC_CONFIRMER  = "김필수"  # 최종확정
+
 QUALITY_ROLES = {"admin", "quality", "quality_manager"}
 MANAGER_ROLES = {"admin", "quality_manager", "owner"}
 
@@ -89,7 +94,7 @@ def post_inspection(body: InspectionCreate, db: Session = Depends(get_db), user:
         "sample_size = :ss, ac = :ac, re = :re "
         "WHERE id = :id"
     ), {
-        "uid": user.username,
+        "uid": IQC_INSPECTOR,
         "astat": "작성중",
         "std": body.standard_id,
         "lot": lot,
@@ -272,7 +277,7 @@ def request_approval(insp_id: int, db: Session = Depends(get_db), user: User = D
     if insp.approval_status not in (ApprovalStatus.draft, ApprovalStatus.rejected):
         raise HTTPException(400, f"승인 요청 불가 상태: {insp.approval_status}")
     insp.approval_status = ApprovalStatus.pending
-    insp.inspector_id = user.username
+    insp.inspector_id = IQC_INSPECTOR
     insp.requested_at = datetime.now()
     insp.rejection_reason = None
     db.commit()
@@ -293,7 +298,7 @@ def approve_inspection(insp_id: int, db: Session = Depends(get_db), user: User =
     if insp.inspector_id == user.username and user.role not in ("admin", "owner"):
         raise HTTPException(403, "본인이 요청한 검사결과는 직접 승인할 수 없습니다")
     insp.approval_status = ApprovalStatus.approved
-    insp.approver_id = user.username
+    insp.approver_id = IQC_APPROVER
     insp.approved_at = datetime.now()
     insp.rejection_reason = None
     db.commit()
@@ -307,7 +312,7 @@ def reject_inspection(insp_id: int, body: RejectBody, db: Session = Depends(get_
     if insp.approval_status != ApprovalStatus.pending:
         raise HTTPException(400, "승인대기 상태가 아닙니다")
     insp.approval_status = ApprovalStatus.rejected
-    insp.approver_id = user.username
+    insp.approver_id = IQC_APPROVER
     insp.approved_at = datetime.now()
     insp.rejection_reason = body.reason
     db.commit()
@@ -324,7 +329,7 @@ def confirm_inspection(insp_id: int, db: Session = Depends(get_db), user: User =
     if insp.inspector_id == user.username and user.role not in ("admin", "owner", "quality_manager"):
         raise HTTPException(403, "본인이 등록한 검사결과는 직접 확정할 수 없습니다")
     insp.approval_status = ApprovalStatus.confirmed
-    insp.confirmer_id = user.username
+    insp.confirmer_id = IQC_CONFIRMER
     insp.confirmed_at = datetime.now()
 
     # 합격(전량 또는 부분합격 중 처리방법이 반품/폐기가 아닌 경우) → 자동 입고 확정
