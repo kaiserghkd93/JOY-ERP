@@ -56,8 +56,8 @@ class BomLine(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     product_part_no: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
     component_part_no: Mapped[str] = mapped_column(String(50), nullable=False)
-    qty_per: Mapped[float] = mapped_column(Numeric(15, 4), default=1)  # 제품 1EA당 소요량 (g)
-    unit: Mapped[str] = mapped_column(String(20), default="g")
+    qty_per: Mapped[float] = mapped_column(Numeric(15, 4), default=1)  # 제품 1EA당 소요량 (kg)
+    unit: Mapped[str] = mapped_column(String(20), default="kg")
     note: Mapped[str | None] = mapped_column(String(200))
     # ── 사출 특화 표준값 ──
     net_weight_g: Mapped[float] = mapped_column(Numeric(12, 4), default=0)       # 순중량(g)

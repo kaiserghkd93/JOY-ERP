@@ -247,6 +247,8 @@ with engine.connect() as _conn:
         "UPDATE worker_session SET status = '진행'  WHERE status = 'running'",
         "UPDATE worker_session SET status = '완료'  WHERE status = 'completed'",
         "UPDATE worker_session SET status = '중단'  WHERE status = 'stopped'",
+        # BOM 단위 g → kg 일괄 변환 (qty_per ÷ 1000, unit = 'kg')
+        "UPDATE bom_line SET qty_per = ROUND(qty_per / 1000, 4), unit = 'kg' WHERE unit = 'g'",
     ]:
         try:
             _conn.execute(_text(_sql))
