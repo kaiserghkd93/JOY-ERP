@@ -168,7 +168,7 @@ def _build_req_list(
             "is_urgent": 0 <= days_to_order <= 3,
             "std_price": std_price,
             "avg_cost": avg_cost,
-            "estimated_amount": round(order_qty * use_price, 0),
+            "estimated_amount": round((order_qty / 1000 if (item and item.unit == "g") else order_qty) * use_price, 0),
             "need_order": order_qty > 0,
             "req_type": req_type,
             "sources": demand_source.get(part_no, []),

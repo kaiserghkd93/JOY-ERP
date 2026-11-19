@@ -167,7 +167,9 @@ def mrp_plan(year: int, month: int, db: Session = Depends(get_db)):
         result = []
         for d in material_req.values():
             d["order_qty"] = max(0, d["required_qty"] - d["stock_qty"])
-            d["order_amount"] = d["order_qty"] * d["buy_price"]
+            # g 단위 품목은 단가가 kg 기준이므로 ÷1000 변환
+            qty_for_price = d["order_qty"] / 1000 if d["unit"] == "g" else d["order_qty"]
+            d["order_amount"] = qty_for_price * d["buy_price"]
             result.append(d)
         result.sort(key=lambda x: -x["required_qty"])
         return result
