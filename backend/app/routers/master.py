@@ -771,3 +771,56 @@ def migrate_part_codes(
         "table_updates": table_counts,
         "sample_mapping": dict(list(mapping.items())[:20]),
     }
+
+
+@router.post("/admin/apply-part-mapping")
+def apply_part_mapping(
+    body: dict,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    """명시적 매핑으로 품번 변경: {"mapping": {"old": "new", ...}, "dry_run": true}"""
+    from sqlalchemy import text as T
+
+    mapping: dict = body.get("mapping", {})
+    dry_run: bool = body.get("dry_run", True)
+
+    if not mapping:
+        return {"error": "mapping이 비어있습니다"}
+
+    if dry_run:
+        return {"dry_run": True, "count": len(mapping), "sample": dict(list(mapping.items())[:20])}
+
+    db.execute(T("CREATE TEMP TABLE IF NOT EXISTS _rename_map (old_no VARCHAR(100) PRIMARY KEY, new_no VARCHAR(100) NOT NULL)"))
+    db.execute(T("TRUNCATE _rename_map"))
+    db.execute(T("INSERT INTO _rename_map (old_no, new_no) VALUES (:old, :new)"),
+               [{"old": o, "new": n} for o, n in mapping.items()])
+
+    db.execute(T("""
+        INSERT INTO item (part_no, name, spec, supplier, unit, item_type,
+                          std_buy_price, std_sell_price, safety_stock, moq, lead_time_days,
+                          location, weight_g, raw_material, avg_cost,
+                          machine_ct_sec, manual_ct_sec, cavity_count, active, created_at)
+        SELECT m.new_no, i.name, i.spec, i.supplier, i.unit, i.item_type,
+               i.std_buy_price, i.std_sell_price, i.safety_stock, i.moq, i.lead_time_days,
+               i.location, i.weight_g, i.raw_material, i.avg_cost,
+               i.machine_ct_sec, i.manual_ct_sec, i.cavity_count, i.active, i.created_at
+        FROM item i JOIN _rename_map m ON i.part_no = m.old_no
+    """))
+
+    table_counts: dict = {}
+    for tbl, col in _CHILD_TABLES:
+        try:
+            sp = db.begin_nested()
+            res = db.execute(T(f"UPDATE {tbl} t SET {col} = m.new_no FROM _rename_map m WHERE t.{col} = m.old_no"))
+            sp.commit()
+            if res.rowcount:
+                table_counts[f"{tbl}.{col}"] = res.rowcount
+        except Exception as e:
+            sp.rollback()
+            table_counts[f"{tbl}.{col}"] = f"SKIP:{str(e)[:40]}"
+
+    del_res = db.execute(T("DELETE FROM item WHERE part_no IN (SELECT old_no FROM _rename_map)"))
+    db.commit()
+
+    return {"dry_run": False, "applied": len(mapping), "deleted_old": del_res.rowcount, "table_updates": table_counts}
