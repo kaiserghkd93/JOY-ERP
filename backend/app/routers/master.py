@@ -796,6 +796,7 @@ def apply_part_mapping(
     db.execute(T("INSERT INTO _rename_map (old_no, new_no) VALUES (:old, :new)"),
                [{"old": o, "new": n} for o, n in mapping.items()])
 
+    # INSERT only for new_no values that don't already exist in item table
     db.execute(T("""
         INSERT INTO item (part_no, name, spec, supplier, unit, item_type,
                           std_buy_price, std_sell_price, safety_stock, moq, lead_time_days,
@@ -806,6 +807,7 @@ def apply_part_mapping(
                i.location, i.weight_g, i.raw_material, i.avg_cost,
                i.machine_ct_sec, i.manual_ct_sec, i.cavity_count, i.active, i.created_at
         FROM item i JOIN _rename_map m ON i.part_no = m.old_no
+        WHERE NOT EXISTS (SELECT 1 FROM item WHERE part_no = m.new_no)
     """))
 
     table_counts: dict = {}
