@@ -6,11 +6,12 @@ import enum
 
 
 class ItemType(str, enum.Enum):
-    raw = "raw"
-    sub = "sub"
-    outsourced = "outsourced"
-    semi = "semi"
-    finished = "finished"
+    raw = "raw"              # RM: 원자재 (사출용 수지, 원료)
+    sub = "sub"              # PM: 부자재 (포장재, 보조자재)
+    outsourced = "outsourced"  # CP: 구매부품 (조립용 구매부품)
+    semi = "semi"            # SF: 반제품 (사출 후 조립 전)
+    finished = "finished"    # FG: 완제품 (최종 납품제품)
+    consumable = "consumable"  # CS: 소모품 (장갑, 세척제 등 비BOM)
 
 
 class PartnerType(str, enum.Enum):

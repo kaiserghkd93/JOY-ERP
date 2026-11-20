@@ -10,6 +10,63 @@ import openpyxl, io
 
 router = APIRouter(prefix="/master", tags=["기준정보"])
 
+# 품목구분 → 자재코드 prefix 매핑
+_TYPE_PREFIX = {
+    "raw": "RM",
+    "sub": "PM",
+    "outsourced": "CP",
+    "semi": "SF",
+    "finished": "FG",
+    "consumable": "CS",
+}
+
+
+@router.get("/items/next-code")
+def next_item_code(item_type: str, db: Session = Depends(get_db)):
+    """품목구분에 맞는 다음 자재코드 반환 (예: RM-052)"""
+    prefix = _TYPE_PREFIX.get(item_type)
+    if not prefix:
+        raise HTTPException(400, f"알 수 없는 품목구분: {item_type}")
+    pattern = f"{prefix}-%"
+    rows = db.query(Item.part_no).filter(Item.part_no.like(pattern)).all()
+    max_num = 0
+    for (pno,) in rows:
+        try:
+            num = int(pno.split("-")[1])
+            if num > max_num:
+                max_num = num
+        except Exception:
+            pass
+    next_num = max_num + 1
+    return {"next_code": f"{prefix}-{next_num:03d}", "prefix": prefix}
+
+
+@router.post("/items/reclassify")
+def bulk_reclassify(
+    changes: list[dict],
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin)
+):
+    """품목 타입 일괄 변경 [{part_no, item_type}, ...]"""
+    from app.models.master import ItemType
+    updated, errors = [], []
+    for c in changes:
+        part_no = c.get("part_no", "")
+        new_type = c.get("item_type", "")
+        try:
+            ItemType(new_type)
+        except ValueError:
+            errors.append({"part_no": part_no, "error": f"유효하지 않은 타입: {new_type}"})
+            continue
+        item = db.get(Item, part_no)
+        if not item:
+            errors.append({"part_no": part_no, "error": "품목 없음"})
+            continue
+        item.item_type = new_type
+        updated.append(part_no)
+    db.commit()
+    return {"updated": updated, "errors": errors}
+
 
 @router.post("/items", response_model=ItemOut)
 def create_item(body: ItemCreate, db: Session = Depends(get_db), current_user: User = Depends(require_admin)):
@@ -123,11 +180,12 @@ def bulk_upload_all(file: UploadFile = File(...), db: Session = Depends(get_db),
     from app.services.ledger_service import get_stock
 
     _ITEM_TYPE_MAP = {
-        '제품': 'finished', '완제품': 'finished',
-        '반제품': 'semi',
-        '외주품': 'outsourced', '외주': 'outsourced',
-        '원자재': 'raw',
-        '부자재': 'sub',
+        '제품': 'finished', '완제품': 'finished', 'FG': 'finished',
+        '반제품': 'semi', 'SF': 'semi',
+        '외주품': 'outsourced', '외주': 'outsourced', '구매부품': 'outsourced', 'CP': 'outsourced',
+        '원자재': 'raw', 'RM': 'raw',
+        '부자재': 'sub', 'PM': 'sub',
+        '소모품': 'consumable', 'CS': 'consumable',
     }
 
     content = file.file.read()

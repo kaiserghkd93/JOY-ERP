@@ -403,6 +403,7 @@ tbody tr:hover td { background: #F5F8FC; }
 .badge-gray   { background: #E9ECEF; color: #495057; border-color: #CED4DA; }
 .badge-purple { background: #E8DCFF; color: #3B1A6E; border-color: #C9B3F5; }
 .badge-orange { background: #FFE5CC; color: #7A3000; border-color: #FFBB80; }
+.badge-brown  { background: #F5EBD8; color: #5C3A1E; border-color: #D4A96A; }
 
 /* ================================================================
    CARDS & KPI

@@ -47,7 +47,25 @@ function ItemModal({ item, onClose, onSaved }) {
       <div className="modal">
         <h3>{editing ? '품목 수정' : '품목 등록'}</h3>
         <div className="grid-2">
-          <div className="form-group"><label>품번</label><input value={form.part_no} onChange={e => set('part_no', e.target.value)} disabled={editing} /></div>
+          <div className="form-group">
+            <label>품번</label>
+            <div style={{display:'flex', gap:6}}>
+              <input value={form.part_no} onChange={e => set('part_no', e.target.value)} disabled={editing} style={{flex:1}} />
+              {!editing && (
+                <button type="button" className="btn btn-sm btn-outline"
+                  onClick={async () => {
+                    try {
+                      const res = await api.get(`/master/items/next-code?item_type=${form.item_type}`)
+                      set('part_no', res.data.next_code)
+                    } catch(e) { alert('자동채번 실패') }
+                  }}
+                  title="품목구분에 맞는 다음 번호 자동 입력"
+                  style={{whiteSpace:'nowrap', fontSize:11}}>
+                  자동채번
+                </button>
+              )}
+            </div>
+          </div>
           <div className="form-group"><label>품명</label><input value={form.name} onChange={e => set('name', e.target.value)} /></div>
         </div>
         <div className="form-group">
@@ -82,17 +100,23 @@ function ItemModal({ item, onClose, onSaved }) {
           <div className="form-group">
             <label>Unit</label>
             <select value={form.unit} onChange={e => set('unit', e.target.value)}>
-              <option value="EA">EA</option><option value="KG">KG</option><option value="M">M</option><option value="SET">SET</option>
+              <option value="EA">EA</option>
+              <option value="g">g</option>
+              <option value="KG">KG</option>
+              <option value="M">M</option>
+              <option value="SET">SET</option>
+              <option value="L">L</option>
             </select>
           </div>
           <div className="form-group">
             <label>품목구분</label>
             <select value={form.item_type} onChange={e => set('item_type', e.target.value)}>
-              <option value="finished">제품 (완제품)</option>
-              <option value="semi">반제품</option>
-              <option value="outsourced">외주품</option>
-              <option value="raw">원자재</option>
-              <option value="sub">부자재</option>
+              <option value="finished">완제품 (FG)</option>
+              <option value="semi">반제품 (SF)</option>
+              <option value="outsourced">구매부품 (CP)</option>
+              <option value="raw">원자재 (RM)</option>
+              <option value="sub">부자재 (PM)</option>
+              <option value="consumable">소모품 (CS)</option>
             </select>
           </div>
         </div>
@@ -289,13 +313,21 @@ export default function Master() {
   const suppliers = partners.filter(p => p.partner_type === '외주처' || p.partner_type === '공용')
 
   const TYPE_GROUPS = {
-    '제품': ['finished', 'semi'],
-    '외주품': ['outsourced'],
+    '완제품': ['finished'],
+    '반제품': ['semi'],
+    '구매부품': ['outsourced'],
     '원자재': ['raw'],
     '부자재': ['sub'],
+    '소모품': ['consumable'],
   }
-  const TYPE_LABEL = { finished: '제품', semi: '반제품', outsourced: '외주품', raw: '원자재', sub: '부자재' }
-  const TYPE_BADGE = { finished: 'badge-green', semi: 'badge-purple', outsourced: 'badge-blue', raw: 'badge-orange', sub: 'badge-gray' }
+  const TYPE_LABEL = {
+    finished: '완제품 (FG)', semi: '반제품 (SF)', outsourced: '구매부품 (CP)',
+    raw: '원자재 (RM)', sub: '부자재 (PM)', consumable: '소모품 (CS)'
+  }
+  const TYPE_BADGE = {
+    finished: 'badge-green', semi: 'badge-purple', outsourced: 'badge-blue',
+    raw: 'badge-orange', sub: 'badge-gray', consumable: 'badge-brown'
+  }
 
   const filteredItems = items.filter(i => {
     const matchQ = i.part_no.toLowerCase().includes(q.toLowerCase()) || i.name.toLowerCase().includes(q.toLowerCase())
@@ -392,7 +424,7 @@ export default function Master() {
             <div className="erp-label">품목구분</div>
             <div className="erp-value">
               <div className="qdate-bar">
-                {['','제품','외주품','원자재','부자재'].map(t=>(
+                {['','완제품','반제품','구매부품','원자재','부자재','소모품'].map(t=>(
                   <button key={t} className={`qdate-btn${typeFilter===t?' active':''}`} onClick={()=>{setTypeFilter(t);resetItemPage()}}>
                     {t||'전체'}{t&&` (${items.filter(i=>(TYPE_GROUPS[t]||[t]).includes(i.item_type)).length})`}
                   </button>
