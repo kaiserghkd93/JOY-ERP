@@ -596,3 +596,178 @@ def update_partner(partner_id: str, body: PartnerUpdate, db: Session = Depends(g
     db.commit()
     db.refresh(p)
     return p
+
+
+# ─────────────────────────────────────────────
+#  품번 전면 변경 마이그레이션
+# ─────────────────────────────────────────────
+
+_CHILD_TABLES = [
+    # BOM
+    ("bom_line",             "product_part_no"),
+    ("bom_line",             "component_part_no"),
+    ("bom_history",          "product_part_no"),
+    ("bom_history",          "component_part_no"),
+    # 구매
+    ("purchase_order",       "part_no"),
+    ("purchase_request",     "part_no"),
+    ("receipt",              "part_no"),
+    ("carryover",            "part_no"),
+    # 판매
+    ("sales_order",          "part_no"),
+    ("shipment",             "part_no"),
+    ("invoice_line",         "part_no"),
+    # 재고
+    ("stock_ledger",         "part_no"),
+    # 원가
+    ("product_cost_std",     "part_no"),
+    # 재고조정
+    ("inventory_adjustment", "part_no"),
+    ("production_loss",      "part_no"),
+    ("production_loss",      "raw_part_no"),
+    # MES 현장
+    ("mes_work_order",       "part_no"),
+    ("mes_pallet",           "part_no"),
+    ("mes_material_req",     "part_no"),
+    ("mes_worker_skill",     "part_no"),
+    ("mes_session_cost",     "part_no"),
+    # 생산
+    ("weekly_plan",          "part_no"),
+    ("production_order",     "part_no"),
+    ("mold",                 "part_no"),
+    ("monthly_plan",         "part_no"),
+    # 품질
+    ("inspection_standard",  "part_no"),
+    ("non_conformance",      "part_no"),
+    ("quality_claim",        "part_no"),
+    ("process_outgoing_defect", "part_no"),
+    ("control_plan",         "part_no"),
+    ("pfmea",                "part_no"),
+    ("ppap",                 "part_no"),
+    ("msa_study",            "part_no"),
+    ("spc_chart",            "part_no"),
+    # MES 연동
+    ("mes_part_map",         "erp_part_no"),
+    ("mes_production_cost",  "part_no"),
+    ("mes_defect_detail",    "part_no"),
+    ("mes_production_log",   "part_no"),
+    # TPS
+    ("oee_daily",            "part_no"),
+    ("mold_change_log",      "part_no"),
+    ("andon_alert",          "part_no"),
+    ("kaizen_task",          "part_no"),
+]
+
+
+@router.post("/admin/migrate-part-codes")
+def migrate_part_codes(
+    dry_run: bool = True,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    """기존 임의 품번 → RM-001/PM-001/CP-001/SF-001/FG-001/CS-001 형식으로 전면 변경.
+    dry_run=true(기본): 변경 목록만 반환.  dry_run=false: 실제 DB 변경."""
+    import re
+    from sqlalchemy import text as T
+
+    PREFIX = {
+        "raw": "RM", "sub": "PM", "outsourced": "CP",
+        "semi": "SF", "finished": "FG", "consumable": "CS",
+    }
+
+    def already_ok(pno: str, itype: str) -> bool:
+        p = PREFIX.get(itype, "")
+        return bool(re.match(rf"^{re.escape(p)}-\d{{3,}}$", pno)) if p else False
+
+    rows = db.execute(T("SELECT part_no, item_type FROM item ORDER BY part_no")).fetchall()
+
+    # 타입별 현재 최대 번호 파악
+    max_num: dict = {t: 0 for t in PREFIX}
+    for r in rows:
+        itype = r.item_type
+        if itype in PREFIX and already_ok(r.part_no, itype):
+            n = int(r.part_no.split("-")[1])
+            if n > max_num[itype]:
+                max_num[itype] = n
+
+    # 변경 대상 목록 (타입별·품번 순 정렬로 일관된 번호 부여)
+    need = [(r.part_no, r.item_type) for r in rows if not already_ok(r.part_no, r.item_type)]
+    need.sort(key=lambda x: (x[1], x[0]))
+
+    counters = dict(max_num)
+    mapping: dict = {}
+    by_type: dict = {}
+    for old_no, itype in need:
+        if itype not in PREFIX:
+            continue
+        counters[itype] += 1
+        mapping[old_no] = f"{PREFIX[itype]}-{counters[itype]:03d}"
+        label = PREFIX[itype]
+        by_type[label] = by_type.get(label, 0) + 1
+
+    if dry_run or not mapping:
+        return {
+            "dry_run": True,
+            "total_items": len(rows),
+            "already_ok": len(rows) - len(need),
+            "to_rename": len(mapping),
+            "by_type": by_type,
+            "sample_mapping": dict(list(mapping.items())[:40]),
+        }
+
+    # ── 실제 마이그레이션 ──────────────────────────────
+    # 임시 매핑 테이블
+    db.execute(T("""
+        CREATE TEMP TABLE IF NOT EXISTS _rename_map
+        (old_no VARCHAR(50) PRIMARY KEY, new_no VARCHAR(50) NOT NULL)
+    """))
+    db.execute(T("TRUNCATE _rename_map"))
+    db.execute(
+        T("INSERT INTO _rename_map (old_no, new_no) VALUES (:old, :new)"),
+        [{"old": o, "new": n} for o, n in mapping.items()],
+    )
+
+    # 새 item 레코드 삽입 (old 복사본에 new part_no 부여)
+    db.execute(T("""
+        INSERT INTO item (part_no, name, spec, supplier, unit, item_type,
+                          std_buy_price, std_sell_price, safety_stock, moq, lead_time_days,
+                          location, weight_g, raw_material, avg_cost,
+                          machine_ct_sec, manual_ct_sec, cavity_count, active, created_at)
+        SELECT m.new_no, i.name, i.spec, i.supplier, i.unit, i.item_type,
+               i.std_buy_price, i.std_sell_price, i.safety_stock, i.moq, i.lead_time_days,
+               i.location, i.weight_g, i.raw_material, i.avg_cost,
+               i.machine_ct_sec, i.manual_ct_sec, i.cavity_count, i.active, i.created_at
+        FROM item i JOIN _rename_map m ON i.part_no = m.old_no
+    """))
+
+    # 모든 하위 테이블 일괄 업데이트
+    table_counts: dict = {}
+    for tbl, col in _CHILD_TABLES:
+        try:
+            sp = db.begin_nested()
+            res = db.execute(T(f"""
+                UPDATE {tbl} t
+                SET {col} = m.new_no
+                FROM _rename_map m
+                WHERE t.{col} = m.old_no
+            """))
+            sp.commit()
+            if res.rowcount:
+                table_counts[f"{tbl}.{col}"] = res.rowcount
+        except Exception as e:
+            sp.rollback()
+            table_counts[f"{tbl}.{col}"] = f"SKIP:{str(e)[:60]}"
+
+    # 구 item 레코드 삭제
+    del_res = db.execute(T("DELETE FROM item WHERE part_no IN (SELECT old_no FROM _rename_map)"))
+
+    db.commit()
+
+    return {
+        "dry_run": False,
+        "renamed": len(mapping),
+        "deleted_old": del_res.rowcount,
+        "by_type": by_type,
+        "table_updates": table_counts,
+        "sample_mapping": dict(list(mapping.items())[:20]),
+    }
