@@ -12,6 +12,7 @@ class ItemCreate(BaseModel):
     supplier: str | None = None
     unit: str = "EA"
     item_type: ItemType = ItemType.outsourced
+    purchase_type: str | None = None  # 외주구매 | 자재구매 (item_type=outsourced일 때)
     std_buy_price: float = 0
     std_sell_price: float = 0
     safety_stock: int = 0
@@ -25,6 +26,7 @@ class ItemUpdate(BaseModel):
     supplier: str | None = None
     unit: str | None = None
     item_type: ItemType | None = None
+    purchase_type: str | None = None  # 외주구매 | 자재구매
     std_buy_price: float | None = None
     std_sell_price: float | None = None
     safety_stock: int | None = None
@@ -44,6 +46,7 @@ class ItemOut(BaseModel):
     supplier: str | None
     unit: str
     item_type: ItemType
+    purchase_type: str | None = None
     std_buy_price: float
     std_sell_price: float
     safety_stock: int

@@ -231,6 +231,7 @@ with engine.connect() as _conn:
         "ALTER TABLE mold_order ADD COLUMN IF NOT EXISTS production_shot_count INTEGER DEFAULT 0",
         "ALTER TABLE mold_order ADD COLUMN IF NOT EXISTS pm_cycle_shot INTEGER DEFAULT 500000",
         "ALTER TABLE mold_order ADD COLUMN IF NOT EXISTS last_pm_shot INTEGER DEFAULT 0",
+        "ALTER TABLE item ADD COLUMN IF NOT EXISTS purchase_type VARCHAR(20)",
         # 작업지시 상태 — native PostgreSQL enum → VARCHAR 변환 (한국어 값 저장 가능하도록)
         "ALTER TABLE mes_work_order DROP CONSTRAINT IF EXISTS mes_work_order_status_check",
         "ALTER TABLE mes_work_order ALTER COLUMN status TYPE VARCHAR(20) USING status::TEXT",

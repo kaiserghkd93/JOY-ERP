@@ -43,6 +43,7 @@ class Item(Base):
     machine_ct_sec: Mapped[float | None] = mapped_column(Float)   # 설비 C/T (초)
     manual_ct_sec: Mapped[float | None] = mapped_column(Float)    # 공수 C/T (초)
     cavity_count: Mapped[int | None] = mapped_column(Integer)      # 캐비티 수
+    purchase_type: Mapped[str | None] = mapped_column(String(20), default=None)  # 외주구매 | 자재구매
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
 

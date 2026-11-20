@@ -9,7 +9,7 @@ function ItemModal({ item, onClose, onSaved }) {
   const editing = !!item
   const [form, setForm] = useState(item || {
     part_no: '', name: '', spec: '', supplier: '', unit: 'EA', item_type: 'outsourced',
-    std_buy_price: '', std_sell_price: '', safety_stock: '', moq: '', lead_time_days: '', location: '',
+    purchase_type: '', std_buy_price: '', std_sell_price: '', safety_stock: '', moq: '', lead_time_days: '', location: '',
   })
   const [suppliers, setSuppliers] = useState([])
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
@@ -110,7 +110,7 @@ function ItemModal({ item, onClose, onSaved }) {
           </div>
           <div className="form-group">
             <label>품목구분</label>
-            <select value={form.item_type} onChange={e => set('item_type', e.target.value)}>
+            <select value={form.item_type} onChange={e => { set('item_type', e.target.value); if (e.target.value !== 'outsourced') set('purchase_type', '') }}>
               <option value="finished">완제품 (FG)</option>
               <option value="semi">반제품 (SF)</option>
               <option value="outsourced">구매부품 (CP)</option>
@@ -119,6 +119,16 @@ function ItemModal({ item, onClose, onSaved }) {
               <option value="consumable">소모품 (CS)</option>
             </select>
           </div>
+          {form.item_type === 'outsourced' && (
+            <div className="form-group">
+              <label>구매유형</label>
+              <select value={form.purchase_type || ''} onChange={e => set('purchase_type', e.target.value)}>
+                <option value="">미분류</option>
+                <option value="외주구매">외주구매 (도면 제작)</option>
+                <option value="자재구매">자재구매 (시중 구매)</option>
+              </select>
+            </div>
+          )}
         </div>
         <div className="grid-2">
           <div className="form-group"><label>표준입고가</label><input type="number" value={form.std_buy_price || ''} onChange={e => set('std_buy_price', e.target.value)} /></div>
@@ -218,6 +228,7 @@ export default function Master() {
   const [locFilter, setLocFilter] = useState('')
   const [supplierFilter, setSupplierFilter] = useState('')
   const [typeFilter, setTypeFilter] = useState('')
+  const [purchaseTypeFilter, setPurchaseTypeFilter] = useState('')
   const [customerFilter, setCustomerFilter] = useState('')
   const [customerParts, setCustomerParts] = useState({}) // {partner_id: [part_no]}
   const [itemPage, setItemPage] = useState(1)
@@ -338,8 +349,11 @@ export default function Master() {
       : supplierFilter === '__none__' ? !i.supplier
       : (i.supplier || '').includes(suppliers.find(s => s.partner_id === supplierFilter)?.name || supplierFilter)
     const matchType = !typeFilter ? true : (TYPE_GROUPS[typeFilter] || [typeFilter]).includes(i.item_type)
+    const matchPurchaseType = !purchaseTypeFilter ? true
+      : purchaseTypeFilter === '__none__' ? (i.item_type === 'outsourced' && !i.purchase_type)
+      : i.purchase_type === purchaseTypeFilter
     const matchCustomer = !customerFilter ? true : (customerParts[customerFilter] || []).includes(i.part_no)
-    return matchQ && matchLoc && matchSupplier && matchType && matchCustomer
+    return matchQ && matchLoc && matchSupplier && matchType && matchPurchaseType && matchCustomer
   })
   const filteredPartners = partners.filter(p =>
     p.partner_id.toLowerCase().includes(q.toLowerCase()) ||
@@ -425,11 +439,26 @@ export default function Master() {
             <div className="erp-value">
               <div className="qdate-bar">
                 {['','완제품','반제품','구매부품','원자재','부자재','소모품'].map(t=>(
-                  <button key={t} className={`qdate-btn${typeFilter===t?' active':''}`} onClick={()=>{setTypeFilter(t);resetItemPage()}}>
+                  <button key={t} className={`qdate-btn${typeFilter===t?' active':''}`} onClick={()=>{setTypeFilter(t);setPurchaseTypeFilter('');resetItemPage()}}>
                     {t||'전체'}{t&&` (${items.filter(i=>(TYPE_GROUPS[t]||[t]).includes(i.item_type)).length})`}
                   </button>
                 ))}
               </div>
+              {typeFilter==='구매부품' && (
+                <div className="qdate-bar" style={{marginTop:4}}>
+                  {[['','전체'],['외주구매','외주구매'],['자재구매','자재구매'],['__none__','미분류']].map(([v,l])=>{
+                    const cnt = v==='' ? items.filter(i=>i.item_type==='outsourced').length
+                      : v==='__none__' ? items.filter(i=>i.item_type==='outsourced'&&!i.purchase_type).length
+                      : items.filter(i=>i.purchase_type===v).length
+                    return (
+                      <button key={v} className={`qdate-btn${purchaseTypeFilter===v?' active':''}`}
+                        style={{fontSize:11}} onClick={()=>{setPurchaseTypeFilter(v);resetItemPage()}}>
+                        {l} ({cnt})
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
             </div>
             <div className="erp-label">고객사</div>
             <div className="erp-value">
@@ -487,10 +516,10 @@ export default function Master() {
         <div className="table-wrap">
           <table>
             <thead>
-              <tr><th>품번</th><th>품명</th><th>규격</th><th>Unit</th><th>품목구분</th><th>외주처</th><th>창고</th><th>표준입고가</th><th>표준판매가</th><th>안전재고</th><th>관리</th></tr>
+              <tr><th>품번</th><th>품명</th><th>규격</th><th>Unit</th><th>품목구분</th><th>구매유형</th><th>외주처</th><th>창고</th><th>표준입고가</th><th>표준판매가</th><th>안전재고</th><th>관리</th></tr>
             </thead>
             <tbody>
-              {pagedItems.length === 0 && <tr><td colSpan={11} className="empty">품목 없음</td></tr>}
+              {pagedItems.length === 0 && <tr><td colSpan={12} className="empty">품목 없음</td></tr>}
               {pagedItems.map(i => (
                 <tr key={i.part_no}>
                   <td><code style={{ background: '#f1f5f9', padding: '2px 6px', borderRadius: 4, fontSize: 11 }}>{i.part_no}</code></td>
@@ -500,6 +529,13 @@ export default function Master() {
                   <td><span className={`badge ${TYPE_BADGE[i.item_type] || 'badge-gray'}`}>
                     {TYPE_LABEL[i.item_type] || i.item_type}
                   </span></td>
+                  <td>
+                    {i.item_type === 'outsourced' ? (
+                      i.purchase_type === '외주구매' ? <span style={{background:'#fef9c3',color:'#854d0e',padding:'2px 7px',borderRadius:4,fontSize:11,fontWeight:600}}>외주구매</span>
+                      : i.purchase_type === '자재구매' ? <span style={{background:'#f0fdf4',color:'#166534',padding:'2px 7px',borderRadius:4,fontSize:11,fontWeight:600}}>자재구매</span>
+                      : <span style={{color:'#cbd5e1',fontSize:11}}>—</span>
+                    ) : <span style={{color:'#e2e8f0',fontSize:11}}>—</span>}
+                  </td>
                   <td style={{ fontSize: 12 }}>
                     {i.supplier
                       ? <span style={{ color: '#0f766e', fontWeight: 600 }}>{i.supplier}</span>
