@@ -824,3 +824,110 @@ def apply_part_mapping(
     db.commit()
 
     return {"dry_run": False, "applied": len(mapping), "deleted_old": del_res.rowcount, "table_updates": table_counts}
+
+
+@router.post("/admin/restore-from-audit")
+def restore_coded_from_audit(
+    dry_run: bool = True,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    """FG/CP 코드 항목의 원래 품번을 audit_log에서 복원.
+    audit_log.record_id = 원래품번, note = 품명으로 매핑."""
+    import re
+    from sqlalchemy import text as T
+
+    # 현재 FG/CP 코드 항목
+    coded_rows = db.execute(T("""
+        SELECT part_no, name, item_type FROM item
+        WHERE part_no ~ '^(FG|CP)-[0-9]+$'
+          AND item_type IN ('finished','outsourced')
+    """)).fetchall()
+
+    if not coded_rows:
+        return {"message": "복원 대상 없음"}
+
+    existing_pnos = {r.part_no for r in db.execute(T("SELECT part_no FROM item")).fetchall()}
+
+    mapping = {}
+    ambiguous = []
+    not_found = []
+
+    for row in coded_rows:
+        # audit_log에서 같은 품명으로 CREATE된 record_id 찾기
+        audit_rows = db.execute(T("""
+            SELECT record_id FROM audit_log
+            WHERE table_name = 'item'
+              AND action = 'CREATE'
+              AND note = :name
+              AND record_id NOT IN (SELECT part_no FROM item)
+        """), {"name": row.name}).fetchall()
+
+        orig_ids = [a.record_id for a in audit_rows]
+
+        if len(orig_ids) == 1:
+            orig = orig_ids[0]
+            if orig not in existing_pnos and orig not in mapping.values():
+                mapping[row.part_no] = orig
+            else:
+                ambiguous.append({"coded": row.part_no, "name": row.name, "conflict": orig})
+        elif len(orig_ids) == 0:
+            not_found.append({"coded": row.part_no, "name": row.name})
+        else:
+            ambiguous.append({"coded": row.part_no, "name": row.name, "candidates": orig_ids})
+
+    if dry_run:
+        return {
+            "dry_run": True,
+            "restorable": len(mapping),
+            "ambiguous": len(ambiguous),
+            "not_found": len(not_found),
+            "sample": dict(list(mapping.items())[:20]),
+            "ambiguous_sample": ambiguous[:5],
+            "not_found_sample": not_found[:5],
+        }
+
+    if not mapping:
+        return {"message": "복원 가능한 항목 없음", "ambiguous": len(ambiguous), "not_found": len(not_found)}
+
+    # 실제 복원 (apply-part-mapping 로직 재사용)
+    db.execute(T("CREATE TEMP TABLE IF NOT EXISTS _rename_map (old_no VARCHAR(100) PRIMARY KEY, new_no VARCHAR(100) NOT NULL)"))
+    db.execute(T("TRUNCATE _rename_map"))
+    db.execute(T("INSERT INTO _rename_map (old_no, new_no) VALUES (:old, :new)"),
+               [{"old": o, "new": n} for o, n in mapping.items()])
+
+    db.execute(T("""
+        INSERT INTO item (part_no, name, spec, supplier, unit, item_type,
+                          std_buy_price, std_sell_price, safety_stock, moq, lead_time_days,
+                          location, weight_g, raw_material, avg_cost,
+                          machine_ct_sec, manual_ct_sec, cavity_count, active, created_at)
+        SELECT m.new_no, i.name, i.spec, i.supplier, i.unit, i.item_type,
+               i.std_buy_price, i.std_sell_price, i.safety_stock, i.moq, i.lead_time_days,
+               i.location, i.weight_g, i.raw_material, i.avg_cost,
+               i.machine_ct_sec, i.manual_ct_sec, i.cavity_count, i.active, i.created_at
+        FROM item i JOIN _rename_map m ON i.part_no = m.old_no
+    """))
+
+    tbl_counts = {}
+    for tbl, col in _CHILD_TABLES:
+        try:
+            sp = db.begin_nested()
+            res = db.execute(T(f"UPDATE {tbl} t SET {col} = m.new_no FROM _rename_map m WHERE t.{col} = m.old_no"))
+            sp.commit()
+            if res.rowcount:
+                tbl_counts[f"{tbl}.{col}"] = res.rowcount
+        except Exception as e:
+            sp.rollback()
+
+    del_res = db.execute(T("DELETE FROM item WHERE part_no IN (SELECT old_no FROM _rename_map)"))
+    db.commit()
+
+    return {
+        "dry_run": False,
+        "restored": len(mapping),
+        "deleted_coded": del_res.rowcount,
+        "ambiguous_skipped": len(ambiguous),
+        "not_found": len(not_found),
+        "table_updates": tbl_counts,
+        "sample": dict(list(mapping.items())[:20]),
+    }
