@@ -1,5 +1,5 @@
 from datetime import date, datetime
-from sqlalchemy import String, Integer, Numeric, Boolean, DateTime, Date, Enum as SAEnum, Float
+from sqlalchemy import String, Integer, Numeric, Boolean, DateTime, Date, Enum as SAEnum, Float, LargeBinary
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database import Base
 import enum
@@ -44,11 +44,26 @@ class Item(Base):
     manual_ct_sec: Mapped[float | None] = mapped_column(Float)    # 공수 C/T (초)
     cavity_count: Mapped[int | None] = mapped_column(Integer)      # 캐비티 수
     purchase_type: Mapped[str | None] = mapped_column(String(20), default=None)  # 외주구매 | 자재구매
+    drawing_no: Mapped[str | None] = mapped_column(String(100), default=None)
+    drawing_rev: Mapped[str | None] = mapped_column(String(20), default=None)
+    drawing_filename: Mapped[str | None] = mapped_column(String(255), default=None)
+    drawing_updated_at: Mapped[datetime | None] = mapped_column(DateTime, default=None)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
 
     purchase_orders: Mapped[list["PurchaseOrder"]] = relationship(back_populates="item")
     receipts: Mapped[list["Receipt"]] = relationship(back_populates="item")
+
+
+class ItemDrawing(Base):
+    """품목 도면 파일 (바이너리 별도 테이블)"""
+    __tablename__ = "item_drawing"
+
+    part_no: Mapped[str] = mapped_column(String(50), primary_key=True)
+    file_data: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    content_type: Mapped[str] = mapped_column(String(100), default="application/pdf")
+    uploaded_by: Mapped[str | None] = mapped_column(String(50), default=None)
+    uploaded_at: Mapped[datetime | None] = mapped_column(DateTime, default=datetime.now)
 
 
 class BomLine(Base):

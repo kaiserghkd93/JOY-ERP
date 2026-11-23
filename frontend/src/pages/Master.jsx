@@ -10,9 +10,44 @@ function ItemModal({ item, onClose, onSaved }) {
   const [form, setForm] = useState(item || {
     part_no: '', name: '', spec: '', supplier: '', unit: 'EA', item_type: 'outsourced',
     purchase_type: '', std_buy_price: '', std_sell_price: '', safety_stock: '', moq: '', lead_time_days: '', location: '',
+    drawing_no: '', drawing_rev: '',
   })
   const [suppliers, setSuppliers] = useState([])
+  const [drawingFile, setDrawingFile] = useState(null)
+  const [uploadingDrawing, setUploadingDrawing] = useState(false)
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
+
+  const uploadDrawing = async () => {
+    if (!drawingFile) return
+    setUploadingDrawing(true)
+    try {
+      const fd = new FormData()
+      fd.append('file', drawingFile)
+      if (form.drawing_no) fd.append('drawing_no', form.drawing_no)
+      if (form.drawing_rev) fd.append('drawing_rev', form.drawing_rev)
+      await api.post(`/master/item-drawings/${form.part_no}`, fd)
+      set('drawing_filename', drawingFile.name)
+      set('drawing_updated_at', new Date().toISOString())
+      setDrawingFile(null)
+      alert('도면 업로드 완료')
+    } catch (e) {
+      alert('업로드 실패: ' + (e.response?.data?.detail || e.message))
+    } finally {
+      setUploadingDrawing(false)
+    }
+  }
+
+  const deleteDrawing = async () => {
+    if (!confirm('도면을 삭제할까요?')) return
+    try {
+      await api.delete(`/master/item-drawings/${form.part_no}`)
+      set('drawing_filename', null)
+      set('drawing_updated_at', null)
+      alert('도면 삭제 완료')
+    } catch (e) {
+      alert('삭제 실패: ' + (e.response?.data?.detail || e.message))
+    }
+  }
 
   useEffect(() => {
     api.get('/master/partners').then(r =>
@@ -150,6 +185,62 @@ function ItemModal({ item, onClose, onSaved }) {
             <option value="1F-2">1F-2</option>
           </select>
         </div>
+        {/* 도면 관리 — 편집 모드에서만 표시 */}
+        {editing && (
+          <div style={{borderTop:'1px solid var(--border,#e2e8f0)', marginTop:14, paddingTop:14}}>
+            <div style={{fontWeight:500, fontSize:13, marginBottom:10, color:'var(--text-secondary,#64748b)', letterSpacing:'.03em', textTransform:'uppercase'}}>도면 (Drawing)</div>
+            <div className="grid-2">
+              <div className="form-group">
+                <label>도면번호</label>
+                <input value={form.drawing_no || ''} onChange={e => set('drawing_no', e.target.value)} placeholder="예) DRW-FG-001" />
+              </div>
+              <div className="form-group">
+                <label>개정번호 (Rev)</label>
+                <input value={form.drawing_rev || ''} onChange={e => set('drawing_rev', e.target.value)} placeholder="예) Rev.A, Rev.1" />
+              </div>
+            </div>
+            {form.drawing_filename ? (
+              <div style={{background:'var(--surface-1,#f8fafc)', border:'1px solid var(--border,#e2e8f0)', borderRadius:6, padding:'8px 12px', marginBottom:10, display:'flex', alignItems:'center', gap:8, fontSize:13}}>
+                <span style={{fontSize:16}}>📄</span>
+                <span style={{flex:1, fontWeight:500}}>{form.drawing_filename}</span>
+                {form.drawing_updated_at && (
+                  <span style={{color:'var(--text-muted,#94a3b8)', fontSize:11}}>
+                    {form.drawing_updated_at.slice(0,10)}
+                  </span>
+                )}
+                <button
+                  type="button" className="btn btn-sm btn-outline"
+                  onClick={() => window.open(`${import.meta.env.VITE_API_URL || ''}/master/item-drawings/${form.part_no}`, '_blank')}
+                >보기</button>
+                <button
+                  type="button" className="btn btn-sm btn-outline"
+                  style={{color:'#ef4444', borderColor:'#fca5a5'}}
+                  onClick={deleteDrawing}
+                >삭제</button>
+              </div>
+            ) : (
+              <div style={{fontSize:12, color:'var(--text-muted,#94a3b8)', marginBottom:8}}>등록된 도면 없음</div>
+            )}
+            <div style={{display:'flex', alignItems:'center', gap:8}}>
+              <label style={{cursor:'pointer', margin:0}}>
+                <span className="btn btn-outline btn-sm" style={{display:'inline-flex', alignItems:'center', gap:4}}>
+                  📂 {drawingFile ? drawingFile.name : 'PDF 선택'}
+                </span>
+                <input
+                  type="file"
+                  accept=".pdf,.dwg,.dxf,.png,.jpg,.jpeg,.tif,.tiff"
+                  style={{display:'none'}}
+                  onChange={e => setDrawingFile(e.target.files?.[0] || null)}
+                />
+              </label>
+              {drawingFile && (
+                <button type="button" className="btn btn-primary btn-sm" onClick={uploadDrawing} disabled={uploadingDrawing}>
+                  {uploadingDrawing ? '업로드 중...' : '업로드'}
+                </button>
+              )}
+            </div>
+          </div>
+        )}
         <div className="modal-footer">
           <button className="btn btn-outline" onClick={onClose}>취소</button>
           <button className="btn btn-primary" onClick={submit}>저장</button>

@@ -1,10 +1,12 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from datetime import datetime
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
+from fastapi.responses import Response
 from sqlalchemy.orm import Session
 from app.database import get_db
-from app.models.master import Item, Partner
+from app.models.master import Item, Partner, ItemDrawing
 from app.schemas.master import ItemCreate, ItemUpdate, ItemOut, PartnerCreate, PartnerUpdate, PartnerOut
 from app.models.auth import User
-from app.routers.auth import require_admin
+from app.routers.auth import require_admin, get_current_user
 from app.services.audit_service import audit_create, audit_update, audit_delete
 import openpyxl, io
 
@@ -108,6 +110,114 @@ def list_items(active_only: bool = True, partner_id: str | None = None, db: Sess
         else:
             return []
     return q.all()
+
+
+@router.post("/item-drawings/{part_no}")
+async def upload_drawing(
+    part_no: str,
+    file: UploadFile = File(...),
+    drawing_no: str = Form(None),
+    drawing_rev: str = Form(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    """도면 파일 업로드 (PDF, DWG, DXF, 이미지)"""
+    item = db.get(Item, part_no)
+    if not item:
+        raise HTTPException(404, "품목 없음")
+
+    allowed = {"application/pdf", "image/png", "image/jpeg", "image/tiff",
+               "application/octet-stream", "application/acad", "application/dxf"}
+    ct = file.content_type or "application/pdf"
+    fname = file.filename or "도면.pdf"
+
+    data = await file.read()
+    if len(data) > 50 * 1024 * 1024:
+        raise HTTPException(400, "파일 크기 50MB 초과")
+
+    # 바이너리 저장
+    existing = db.get(ItemDrawing, part_no)
+    if existing:
+        existing.file_data = data
+        existing.content_type = ct
+        existing.uploaded_by = current_user.username
+        existing.uploaded_at = datetime.now()
+    else:
+        db.add(ItemDrawing(
+            part_no=part_no, file_data=data, content_type=ct,
+            uploaded_by=current_user.username, uploaded_at=datetime.now(),
+        ))
+
+    # 메타데이터 갱신
+    if drawing_no is not None:
+        item.drawing_no = drawing_no
+    if drawing_rev is not None:
+        item.drawing_rev = drawing_rev
+    item.drawing_filename = fname
+    item.drawing_updated_at = datetime.now()
+
+    db.commit()
+    return {"ok": True, "filename": fname, "size": len(data)}
+
+
+@router.patch("/item-drawings/{part_no}/meta")
+def update_drawing_meta(
+    part_no: str,
+    body: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    """도면번호·개정번호만 수정 (파일 재업로드 없이)"""
+    item = db.get(Item, part_no)
+    if not item:
+        raise HTTPException(404, "품목 없음")
+    if "drawing_no" in body:
+        item.drawing_no = body["drawing_no"]
+    if "drawing_rev" in body:
+        item.drawing_rev = body["drawing_rev"]
+    db.commit()
+    return {"ok": True}
+
+
+@router.get("/item-drawings/{part_no}")
+def download_drawing(part_no: str, db: Session = Depends(get_db)):
+    """도면 파일 다운로드 / 브라우저 뷰어"""
+    item = db.get(Item, part_no)
+    if not item or not item.drawing_filename:
+        raise HTTPException(404, "도면 없음")
+    drawing = db.get(ItemDrawing, part_no)
+    if not drawing:
+        raise HTTPException(404, "도면 파일 없음")
+
+    fname_encoded = item.drawing_filename.encode("utf-8").decode("latin-1", errors="replace")
+    return Response(
+        content=drawing.file_data,
+        media_type=drawing.content_type or "application/pdf",
+        headers={
+            "Content-Disposition": f'inline; filename="{fname_encoded}"',
+            "Content-Length": str(len(drawing.file_data)),
+        },
+    )
+
+
+@router.delete("/item-drawings/{part_no}")
+def delete_drawing(
+    part_no: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    item = db.get(Item, part_no)
+    if not item:
+        raise HTTPException(404, "품목 없음")
+    drawing = db.get(ItemDrawing, part_no)
+    if drawing:
+        db.delete(drawing)
+    item.drawing_no = None
+    item.drawing_rev = None
+    item.drawing_filename = None
+    item.drawing_updated_at = None
+    db.commit()
+    return {"ok": True}
 
 
 @router.get("/items/{part_no:path}", response_model=ItemOut)

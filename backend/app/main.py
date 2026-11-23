@@ -232,6 +232,18 @@ with engine.connect() as _conn:
         "ALTER TABLE mold_order ADD COLUMN IF NOT EXISTS pm_cycle_shot INTEGER DEFAULT 500000",
         "ALTER TABLE mold_order ADD COLUMN IF NOT EXISTS last_pm_shot INTEGER DEFAULT 0",
         "ALTER TABLE item ADD COLUMN IF NOT EXISTS purchase_type VARCHAR(20)",
+        # 도면관리
+        "ALTER TABLE item ADD COLUMN IF NOT EXISTS drawing_no VARCHAR(100)",
+        "ALTER TABLE item ADD COLUMN IF NOT EXISTS drawing_rev VARCHAR(20)",
+        "ALTER TABLE item ADD COLUMN IF NOT EXISTS drawing_filename VARCHAR(255)",
+        "ALTER TABLE item ADD COLUMN IF NOT EXISTS drawing_updated_at TIMESTAMP",
+        """CREATE TABLE IF NOT EXISTS item_drawing (
+            part_no VARCHAR(50) PRIMARY KEY,
+            file_data BYTEA NOT NULL,
+            content_type VARCHAR(100) DEFAULT 'application/pdf',
+            uploaded_by VARCHAR(50),
+            uploaded_at TIMESTAMP DEFAULT NOW()
+        )""",
         # 작업지시 상태 — native PostgreSQL enum → VARCHAR 변환 (한국어 값 저장 가능하도록)
         "ALTER TABLE mes_work_order DROP CONSTRAINT IF EXISTS mes_work_order_status_check",
         "ALTER TABLE mes_work_order ALTER COLUMN status TYPE VARCHAR(20) USING status::TEXT",

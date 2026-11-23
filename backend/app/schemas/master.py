@@ -1,3 +1,4 @@
+from datetime import datetime
 from pydantic import BaseModel, ConfigDict
 from app.models.master import ItemType, PartnerType
 
@@ -36,6 +37,8 @@ class ItemUpdate(BaseModel):
     machine_ct_sec: float | None = None
     manual_ct_sec: float | None = None
     cavity_count: int | None = None
+    drawing_no: str | None = None
+    drawing_rev: str | None = None
 
 
 class ItemOut(BaseModel):
@@ -56,6 +59,10 @@ class ItemOut(BaseModel):
     machine_ct_sec: float | None = None
     manual_ct_sec: float | None = None
     cavity_count: int | None = None
+    drawing_no: str | None = None
+    drawing_rev: str | None = None
+    drawing_filename: str | None = None
+    drawing_updated_at: datetime | None = None
 
 
 class PartnerCreate(BaseModel):
