@@ -12,10 +12,21 @@ api.interceptors.request.use((config) => {
   return config
 })
 
-// 백엔드 아직 안 뜬 경우 자동 재시도 (최대 5회, 2초 간격)
+// 백엔드 아직 안 뜬 경우 자동 재시도 (최대 5회, 2초 간격) + 401 시 자동 로그아웃
 api.interceptors.response.use(null, async (error) => {
   const config = error.config
-  if (!config || config.__retryCount >= 5) return Promise.reject(error)
+  if (!config) return Promise.reject(error)
+
+  // 401 토큰 만료 → 로그인 페이지로
+  if (error.response?.status === 401 && !config.__skipAuth) {
+    sessionStorage.removeItem('jwt_token')
+    sessionStorage.removeItem('jwt_role')
+    alert('세션이 만료되었습니다. 다시 로그인해 주세요.')
+    window.location.href = '/login'
+    return Promise.reject(error)
+  }
+
+  if (config.__retryCount >= 5) return Promise.reject(error)
   const isNetworkError = !error.response
   if (!isNetworkError) return Promise.reject(error)
   config.__retryCount = (config.__retryCount || 0) + 1
