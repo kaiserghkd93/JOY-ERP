@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import api from '../api'
 import { downloadProductionReport } from '../utils/reportPptx'
+import { DrawingLookupPanel } from './Quality'
 
 function PordModal({ onClose, onSaved }) {
   const [items, setItems] = useState([])
@@ -1099,6 +1100,7 @@ export default function Production() {
   const [molds, setMolds] = useState([])
   const [moldGroups, setMoldGroups] = useState([])
   const [tab, setTab] = useState('orders')
+  const [allItems, setAllItems] = useState([])
   const [showPord, setShowPord] = useState(false)
   const [showMold, setShowMold] = useState(false)
   const [lendMold, setLendMold] = useState(null)
@@ -1109,6 +1111,10 @@ export default function Production() {
     api.get('/production/orders').then(r => setOrders(r.data)).catch(() => {})
     api.get('/production/molds').then(r => setMolds(r.data)).catch(() => {})
     api.get('/production/molds/by-partner').then(r => setMoldGroups(r.data)).catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    api.get('/master/items').then(r => setAllItems(r.data)).catch(() => {})
   }, [])
 
   const importOutsourced = async () => {
@@ -1127,7 +1133,7 @@ export default function Production() {
       <div className="erp-panel" style={{marginBottom:8}}>
         <div className="erp-actions">
           <div className="qdate-bar">
-            {[['orders','생산오더'],['feasibility','가용성 검사'],['molds','금형 관리'],['upload','실적 업로드'],['cost','원가분석'],['report','보고서']].map(([v,l])=>(
+            {[['orders','생산오더'],['feasibility','가용성 검사'],['molds','금형 관리'],['upload','실적 업로드'],['cost','원가분석'],['drawing','📐 도면조회'],['report','보고서']].map(([v,l])=>(
               <button key={v} className={`qdate-btn${tab===v?' active':''}`} onClick={()=>setTab(v)}>{l}</button>
             ))}
           </div>
@@ -1258,6 +1264,7 @@ export default function Production() {
 
       {tab === 'upload' && <ExcelUpload onDone={load} />}
       {tab === 'cost' && <CostAnalysis />}
+      {tab === 'drawing' && <DrawingLookupPanel items={allItems} />}
       {tab === 'report' && <ProductionReportPanel />}
 
       {showPord && <PordModal onClose={() => setShowPord(false)} onSaved={() => { setShowPord(false); load() }} />}

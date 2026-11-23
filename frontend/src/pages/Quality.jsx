@@ -890,6 +890,112 @@ const APPR_BADGE = {
   '반려': 'badge-red', '승인완료': 'badge-blue', '최종확정': 'badge-green',
 }
 
+export function DrawingLookupPanel({ items }) {
+  const [search, setSearch] = useState('')
+  const [selected, setSelected] = useState(null)
+  const [pdfUrl, setPdfUrl] = useState(null)
+  const [loading, setLoading] = useState(false)
+  const [notFound, setNotFound] = useState(false)
+
+  const filtered = (items || []).filter(i =>
+    !search ||
+    i.part_no.toLowerCase().includes(search.toLowerCase()) ||
+    i.name.toLowerCase().includes(search.toLowerCase())
+  ).slice(0, 50)
+
+  const loadDrawing = async (item) => {
+    setSelected(item)
+    setLoading(true)
+    setNotFound(false)
+    if (pdfUrl) URL.revokeObjectURL(pdfUrl)
+    setPdfUrl(null)
+    try {
+      const resp = await api.get(`/master/item-drawings/${item.part_no}`, { responseType: 'blob' })
+      setPdfUrl(URL.createObjectURL(resp.data))
+    } catch (e) {
+      if (e.response?.status === 404) setNotFound(true)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: '300px 1fr', gap: 14, alignItems: 'start' }}>
+      {/* 좌측 검색 패널 */}
+      <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden' }}>
+        <div style={{ padding: '10px 14px', borderBottom: '1px solid var(--border)', background: '#f8fafc' }}>
+          <span style={{ fontWeight: 700, fontSize: 12 }}>품번 / 품명 검색</span>
+        </div>
+        <div style={{ padding: '8px 10px' }}>
+          <input
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="품번 또는 품명 입력..."
+            style={{ width: '100%', padding: '6px 10px', border: '1px solid var(--border)', borderRadius: 4, fontSize: 12, boxSizing: 'border-box' }}
+            autoFocus
+          />
+        </div>
+        <div style={{ maxHeight: 560, overflowY: 'auto' }}>
+          {filtered.length === 0 && (
+            <div style={{ padding: 24, textAlign: 'center', color: 'var(--text-sm)', fontSize: 12 }}>검색 결과 없음</div>
+          )}
+          {filtered.map(i => (
+            <div
+              key={i.part_no}
+              onClick={() => loadDrawing(i)}
+              style={{
+                padding: '8px 14px', cursor: 'pointer',
+                borderBottom: '1px solid var(--border)',
+                background: selected?.part_no === i.part_no ? '#eff6ff' : 'transparent',
+                borderLeft: selected?.part_no === i.part_no ? '3px solid var(--primary)' : '3px solid transparent',
+                transition: 'background 0.1s',
+              }}
+              onMouseEnter={e => { if (selected?.part_no !== i.part_no) e.currentTarget.style.background = '#f8fafc' }}
+              onMouseLeave={e => { if (selected?.part_no !== i.part_no) e.currentTarget.style.background = 'transparent' }}
+            >
+              <div style={{ fontSize: 12, fontWeight: 600, fontFamily: 'monospace', color: 'var(--primary)' }}>{i.part_no}</div>
+              <div style={{ fontSize: 11, color: 'var(--text-sm)', marginTop: 2 }}>{i.name}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* 우측 PDF 뷰어 */}
+      <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, minHeight: 620 }}>
+        {!selected && (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 620, flexDirection: 'column', gap: 10, color: 'var(--text-sm)' }}>
+            <span style={{ fontSize: 56 }}>📐</span>
+            <span style={{ fontSize: 14 }}>좌측에서 품번을 선택하세요</span>
+          </div>
+        )}
+        {loading && (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 620, color: 'var(--text-sm)', fontSize: 13 }}>
+            도면 로딩 중...
+          </div>
+        )}
+        {notFound && !loading && (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 620, flexDirection: 'column', gap: 10, color: 'var(--text-sm)' }}>
+            <span style={{ fontSize: 56 }}>📭</span>
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ fontSize: 14, fontWeight: 600 }}>{selected?.part_no}</div>
+              <div style={{ fontSize: 12, marginTop: 4 }}>등록된 도면이 없습니다</div>
+            </div>
+          </div>
+        )}
+        {pdfUrl && !loading && (
+          <>
+            <div style={{ padding: '10px 14px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#f8fafc', borderRadius: '8px 8px 0 0' }}>
+              <span style={{ fontWeight: 700, fontSize: 13 }}>📄 {selected?.part_no} — {selected?.name}</span>
+              <a href={pdfUrl} download={`${selected?.part_no}.pdf`} className="btn btn-sm btn-outline" style={{ fontSize: 11 }}>⬇ 다운로드</a>
+            </div>
+            <iframe src={pdfUrl} style={{ width: '100%', height: 700, border: 'none', borderRadius: '0 0 8px 8px' }} title={`${selected?.part_no} 도면`} />
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
 function QualityReportPanel() {
   const now = new Date()
   const [ym, setYm] = useState(`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`)
@@ -1553,7 +1659,7 @@ export default function Quality() {
               ['claims','클레임 목록'], ['rates','외주처별 불량율'], ['loss','공정불량 로스'],
               ['spc','SPC 관리도'], ['cp','관리계획서'], ['pfmea','PFMEA'],
               ['calib','교정관리'], ['audit','내부감사'], ['ppap','PPAP'], ['msa','MSA'],
-              ['procedures','📋 절차서'], ['report','보고서']
+              ['drawing','📐 도면조회'], ['procedures','📋 절차서'], ['report','보고서']
             ].map(([v,l])=>(
               <button key={v} className={`qdate-btn${tab===v?' active':''}`} onClick={()=>setTab(v)}>{l}</button>
             ))}
@@ -2399,6 +2505,7 @@ export default function Quality() {
         </div>
       )}
 
+      {tab === 'drawing' && <DrawingLookupPanel items={itemMaster} />}
       {tab === 'procedures' && <QualityProcedures />}
       {tab === 'report' && <QualityReportPanel />}
 
