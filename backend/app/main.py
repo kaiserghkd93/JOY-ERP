@@ -38,6 +38,8 @@ Base.metadata.create_all(bind=engine, checkfirst=True)
 from sqlalchemy import text as _text
 with engine.connect() as _conn:
     for _sql in [
+        "ALTER TABLE \"user\" ADD COLUMN IF NOT EXISTS phone VARCHAR(30)",
+        "ALTER TABLE purchase_order_group ADD COLUMN IF NOT EXISTS created_by VARCHAR(50)",
         "ALTER TABLE invoice ADD COLUMN IF NOT EXISTS closing_type VARCHAR(10)",
         "ALTER TABLE invoice ADD COLUMN IF NOT EXISTS due_date DATE",
         "ALTER TABLE purchase_order ADD COLUMN IF NOT EXISTS po_type VARCHAR(20) DEFAULT 'outsource'",

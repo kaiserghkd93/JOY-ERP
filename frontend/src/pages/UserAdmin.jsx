@@ -8,7 +8,7 @@ export default function UserAdmin() {
   const [users, setUsers] = useState([])
   const [showForm, setShowForm] = useState(false)
   const [editUser, setEditUser] = useState(null)
-  const [form, setForm] = useState({ username: '', password: '', name: '', role: 'sales', partner_id: '' })
+  const [form, setForm] = useState({ username: '', password: '', name: '', phone: '', role: 'sales', partner_id: '' })
   const [saving, setSaving] = useState(false)
 
   const load = () => {
@@ -27,7 +27,7 @@ export default function UserAdmin() {
 
   const openEdit = (u) => {
     setEditUser(u)
-    setForm({ username: u.username, password: '', name: u.name || '', role: u.role, partner_id: u.partner_id || '' })
+    setForm({ username: u.username, password: '', name: u.name || '', phone: u.phone || '', role: u.role, partner_id: u.partner_id || '' })
     setShowForm(true)
   }
 
@@ -47,14 +47,14 @@ export default function UserAdmin() {
     setSaving(true)
     try {
       if (editUser) {
-        const patch = { name: form.name, role: form.role, partner_id: form.partner_id || null }
+        const patch = { name: form.name, phone: form.phone || null, role: form.role, partner_id: form.partner_id || null }
         if (form.password) patch.password = form.password
         await api.patch(`/auth/users/${editUser.id}`, patch)
       } else {
         await api.post('/auth/users', {
           username: form.username, password: form.password,
-          name: form.name, role: form.role,
-          partner_id: form.partner_id || null,
+          name: form.name, phone: form.phone || null,
+          role: form.role, partner_id: form.partner_id || null,
         })
       }
       setShowForm(false)
@@ -94,7 +94,7 @@ export default function UserAdmin() {
         <table>
           <thead>
             <tr>
-              <th>아이디</th><th>이름</th><th>역할</th><th>외주처 연결</th><th>상태</th><th>수정</th><th>활성</th>
+              <th>아이디</th><th>이름</th><th>연락처</th><th>역할</th><th>외주처 연결</th><th>상태</th><th>수정</th><th>활성</th>
             </tr>
           </thead>
           <tbody>
@@ -103,6 +103,7 @@ export default function UserAdmin() {
               <tr key={u.id} style={{opacity: u.is_active ? 1 : 0.5}}>
                 <td style={{fontFamily:'monospace',fontWeight:600}}>{u.username}</td>
                 <td>{u.name}</td>
+                <td style={{color:'#64748b',fontSize:12}}>{u.phone || '—'}</td>
                 <td>
                   <span style={{
                     background: (ROLE_COLOR[u.role] || '#64748b') + '18',
@@ -159,6 +160,10 @@ export default function UserAdmin() {
               <label>비밀번호 {editUser ? '(변경 시만 입력)' : '*'}</label>
               <input type="password" value={form.password} onChange={e=>set('password',e.target.value)}
                 placeholder={editUser ? '변경하지 않으면 비워두세요' : '초기 비밀번호'} />
+            </div>
+            <div className="form-group">
+              <label>연락처 (발주서 담당자 전화번호)</label>
+              <input value={form.phone} onChange={e=>set('phone',e.target.value)} placeholder="010-0000-0000" />
             </div>
             <div className="grid-2">
               <div className="form-group">

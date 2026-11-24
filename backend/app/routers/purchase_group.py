@@ -19,7 +19,8 @@ router = APIRouter(prefix="/purchase/groups", tags=["발주서"])
 
 
 @router.post("", response_model=POGroupOut)
-def create_group(body: POGroupCreate, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+def create_group(body: POGroupCreate, background_tasks: BackgroundTasks, db: Session = Depends(get_db),
+                 user: User = Depends(get_current_user)):
     if not body.lines:
         raise HTTPException(400, "품목을 1개 이상 추가하세요")
 
@@ -32,6 +33,7 @@ def create_group(body: POGroupCreate, background_tasks: BackgroundTasks, db: Ses
         due_date=body.due_date,
         note=body.note,
         status=POGroupStatus.issued,
+        created_by=user.username,
     )
     db.add(group)
     db.flush()
@@ -218,6 +220,11 @@ def print_group(group_no: str, db: Session = Depends(get_db)):
     partner = db.get(Partner, g.partner_id)
     partner_name = partner.name if partner else g.partner_id
 
+    # 발주 담당자 (등록한 사용자)
+    creator = db.query(User).filter(User.username == g.created_by).first() if g.created_by else None
+    creator_name = (creator.name or g.created_by) if creator else "담당자"
+    creator_phone = creator.phone or "" if creator else ""
+
     # ── 전체 라인 정보 수집 ──
     all_rows = []
     total_amount = 0.0
@@ -305,7 +312,7 @@ def print_group(group_no: str, db: Session = Depends(get_db)):
     <td class="lbl">문서번호</td>
     <td class="val" style="font-family:'Courier New',monospace;font-weight:700;letter-spacing:1px">{g.group_no}</td>
     <td class="lbl">담 당 자</td>
-    <td class="val">황재현 과장 &nbsp;/&nbsp; 010-3887-9043</td>
+    <td class="val">{creator_name}{f" &nbsp;/&nbsp; {creator_phone}" if creator_phone else ""}</td>
     <td class="lbl">발 주 일</td>
     <td class="val">{g.order_date}</td>
   </tr>

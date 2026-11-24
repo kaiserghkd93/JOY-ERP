@@ -35,6 +35,7 @@ class PurchaseOrderGroup(Base):
     due_date: Mapped[date] = mapped_column(Date, nullable=False)
     status: Mapped[POGroupStatus] = mapped_column(SAEnum(POGroupStatus, native_enum=False), default=POGroupStatus.issued)
     note: Mapped[str | None] = mapped_column(Text)
+    created_by: Mapped[str | None] = mapped_column(String(50), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
 
     partner: Mapped["Partner"] = relationship()

@@ -134,6 +134,7 @@ class UserCreateReq(BaseModel):
     username: str
     password: str
     name: str
+    phone: str | None = None
     partner_id: str | None = None
     role: str = UserRole.supplier
 
@@ -156,6 +157,7 @@ class UserCreateReq(BaseModel):
 
 class UserPatchReq(BaseModel):
     name: str | None = None
+    phone: str | None = None
     role: str | None = None
     is_active: bool | None = None
     password: str | None = None
@@ -172,6 +174,7 @@ class UserOut(BaseModel):
     id: int
     username: str
     name: str | None
+    phone: str | None = None
     role: str
     partner_id: str | None
     is_active: bool
@@ -215,7 +218,7 @@ def me(user: User = Depends(get_current_user)):
 
 @router.get("/users", response_model=list[UserOut])
 def list_users(_: User = Depends(require_admin), db: Session = Depends(get_db)):
-    return [UserOut(id=u.id, username=u.username, name=u.name,
+    return [UserOut(id=u.id, username=u.username, name=u.name, phone=u.phone,
                     role=u.role, partner_id=u.partner_id, is_active=u.is_active)
             for u in db.query(User).order_by(User.id).all()]
 
@@ -224,9 +227,9 @@ def create_user(body: UserCreateReq, _: User = Depends(require_admin), db: Sessi
     if db.query(User).filter(User.username == body.username).first():
         raise HTTPException(400, "이미 존재하는 아이디입니다")
     u = User(username=body.username, password_hash=_hash(body.password),
-             name=body.name, role=body.role, partner_id=body.partner_id)
+             name=body.name, phone=body.phone, role=body.role, partner_id=body.partner_id)
     db.add(u); db.commit(); db.refresh(u)
-    return UserOut(id=u.id, username=u.username, name=u.name,
+    return UserOut(id=u.id, username=u.username, name=u.name, phone=u.phone,
                    role=u.role, partner_id=u.partner_id, is_active=u.is_active)
 
 @router.patch("/users/{user_id}")
@@ -242,6 +245,8 @@ def patch_user(user_id: int, body: UserPatchReq, _: User = Depends(require_admin
         u.is_active = body.is_active
     if body.password is not None:
         u.password_hash = _hash(body.password)
+    if body.phone is not None:
+        u.phone = body.phone or None
     if body.partner_id is not None:
         u.partner_id = body.partner_id or None
     db.commit()

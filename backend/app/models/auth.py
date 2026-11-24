@@ -31,5 +31,6 @@ class User(Base):
     role: Mapped[str] = mapped_column(String(20), default=UserRole.supplier)
     partner_id: Mapped[str | None] = mapped_column(String(30), nullable=True)
     name: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    phone: Mapped[str | None] = mapped_column(String(30), nullable=True)
     is_active: Mapped[bool] = mapped_column(default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
