@@ -336,7 +336,8 @@ export default function Invoice() {
 
   const load = useCallback(() => {
     setLoading(true)
-    api.get('/invoices')
+    const year = new Date().getFullYear()
+    api.get('/invoices', { params: { year } })
       .then(r => { setInvoices(r.data); setLoading(false) })
       .catch(e => { console.error('Invoice load error:', e); setLoading(false) })
   }, [])

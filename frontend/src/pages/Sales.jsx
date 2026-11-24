@@ -945,9 +945,9 @@ export default function Sales() {
     return Promise.all([
       api.get('/sales/orders').then(r => setOrders(r.data)).catch(() => {}),
       api.get('/sales/orders/remaining').then(r => setRemaining(r.data)).catch(() => {}),
-      api.get('/sales/shipments').then(r => setShipments(r.data)).catch(() => {}),
+      api.get('/sales/shipments', { params: { year: filterYear } }).then(r => setShipments(r.data)).catch(() => {}),
     ])
-  }, [])
+  }, [filterYear])
 
   useEffect(() => { load() }, [load])
 

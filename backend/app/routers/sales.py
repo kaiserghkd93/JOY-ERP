@@ -67,12 +67,27 @@ def list_so(
         else_=9,
     )
     rows = q.order_by(status_order, SalesOrder.due_date).all()
+    if not rows:
+        return []
+
+    # 배치 조회로 N+1 방지
+    part_nos = list({so.part_no for so in rows})
+    item_map = {i.part_no: i.name for i in db.query(Item.part_no, Item.name).filter(Item.part_no.in_(part_nos)).all()}
+
+    so_nos = [so.so_no for so in rows]
+    shipped_map = dict(
+        db.query(Shipment.so_no, func.coalesce(func.sum(Shipment.qty), 0))
+        .filter(Shipment.so_no.in_(so_nos), Shipment.status == ShipmentStatus.confirmed)
+        .group_by(Shipment.so_no)
+        .all()
+    )
+
     result = []
     for so in rows:
-        item = db.get(Item, so.part_no)
         d = SOOut.model_validate(so).model_dump()
-        d["item_name"] = item.name if item else None
-        d["remaining_qty"] = get_so_remaining(db, so.so_no)
+        d["item_name"] = item_map.get(so.part_no)
+        shipped = int(shipped_map.get(so.so_no, 0))
+        d["remaining_qty"] = max(0, so.qty - shipped)
         result.append(d)
     return result
 
@@ -133,14 +148,29 @@ def all_so_remaining(partner_id: str | None = None, db: Session = Depends(get_db
     )
     if partner_id:
         q = q.filter(SalesOrder.partner_id == partner_id)
+    rows = q.all()
+    if not rows:
+        return []
+
+    part_nos = list({so.part_no for so in rows})
+    item_map = {i.part_no: i.name for i in db.query(Item.part_no, Item.name).filter(Item.part_no.in_(part_nos)).all()}
+
+    so_nos = [so.so_no for so in rows]
+    shipped_map = dict(
+        db.query(Shipment.so_no, func.coalesce(func.sum(Shipment.qty), 0))
+        .filter(Shipment.so_no.in_(so_nos), Shipment.status == ShipmentStatus.confirmed)
+        .group_by(Shipment.so_no)
+        .all()
+    )
+
     result = []
-    for so in q.all():
-        rem = get_so_remaining(db, so.so_no)
-        item = db.get(Item, so.part_no)
+    for so in rows:
+        shipped = int(shipped_map.get(so.so_no, 0))
+        rem = max(0, so.qty - shipped)
         result.append({
             "so_no": so.so_no, "partner_id": so.partner_id,
-            "part_no": so.part_no, "item_name": item.name if item else None,
-            "order_qty": so.qty, "shipped_qty": so.qty - rem, "remaining_qty": rem,
+            "part_no": so.part_no, "item_name": item_map.get(so.part_no),
+            "order_qty": so.qty, "shipped_qty": shipped, "remaining_qty": rem,
             "due_date": so.due_date, "status": so.status,
         })
     return result
@@ -224,24 +254,38 @@ def list_shipments(
     month: int | None = None,
     db: Session = Depends(get_db),
 ):
+    from datetime import date as _date
     q = db.query(Shipment)
-    if partner_id:
-        q = q.join(SalesOrder).filter(SalesOrder.partner_id == partner_id)
-    if year:
-        q = q.filter(func.extract('year', Shipment.ship_date) == year)
+    # 기본: 올해 데이터 (year 미지정 시)
+    _year = year or _date.today().year
+    q = q.filter(func.extract('year', Shipment.ship_date) == _year)
     if month:
         q = q.filter(func.extract('month', Shipment.ship_date) == month)
+    if partner_id:
+        q = q.join(SalesOrder).filter(SalesOrder.partner_id == partner_id)
     shipments = q.order_by(Shipment.ship_date.desc(), Shipment.sh_no).all()
+    if not shipments:
+        return []
+
+    # 배치 조회로 N+1 방지
+    so_nos = list({sh.so_no for sh in shipments})
+    so_map = {so.so_no: so for so in db.query(SalesOrder).filter(SalesOrder.so_no.in_(so_nos)).all()}
+
+    partner_ids = list({so.partner_id for so in so_map.values()})
+    partner_map = {p.partner_id: p.name for p in db.query(Partner.partner_id, Partner.name).filter(Partner.partner_id.in_(partner_ids)).all()}
+
+    part_nos = list({sh.part_no for sh in shipments})
+    item_map = {i.part_no: i.name for i in db.query(Item.part_no, Item.name).filter(Item.part_no.in_(part_nos)).all()}
+
     result = []
     for sh in shipments:
-        so = db.get(SalesOrder, sh.so_no)
-        p = db.get(Partner, so.partner_id) if so else None
+        so = so_map.get(sh.so_no)
+        pid = so.partner_id if so else None
         d = ShipmentOut.model_validate(sh).model_dump()
-        d["partner_id"] = so.partner_id if so else None
-        d["partner_name"] = p.name if p else (so.partner_id if so else None)
+        d["partner_id"] = pid
+        d["partner_name"] = partner_map.get(pid, pid) if pid else None
         d["due_date"] = so.due_date if so else None
-        item = db.get(Item, sh.part_no)
-        d["item_name"] = item.name if item else None
+        d["item_name"] = item_map.get(sh.part_no)
         result.append(d)
     return result
 

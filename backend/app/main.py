@@ -142,6 +142,25 @@ with engine.connect() as _conn:
         "CREATE INDEX IF NOT EXISTS ix_purchase_request_part_no ON purchase_request(part_no)",
         "CREATE INDEX IF NOT EXISTS ix_purchase_request_status ON purchase_request(status)",
         "CREATE INDEX IF NOT EXISTS ix_purchase_request_need_date ON purchase_request(need_date)",
+        # 수주/출하/명세서 — 조회 속도 개선
+        "CREATE INDEX IF NOT EXISTS ix_sales_order_partner ON sales_order(partner_id)",
+        "CREATE INDEX IF NOT EXISTS ix_sales_order_status ON sales_order(status)",
+        "CREATE INDEX IF NOT EXISTS ix_sales_order_due_date ON sales_order(due_date)",
+        "CREATE INDEX IF NOT EXISTS ix_sales_order_part_no ON sales_order(part_no)",
+        "CREATE INDEX IF NOT EXISTS ix_shipment_so_no ON shipment(so_no)",
+        "CREATE INDEX IF NOT EXISTS ix_shipment_part_no ON shipment(part_no)",
+        "CREATE INDEX IF NOT EXISTS ix_invoice_partner ON invoice(partner_id)",
+        "CREATE INDEX IF NOT EXISTS ix_invoice_date ON invoice(issue_date)",
+        "CREATE INDEX IF NOT EXISTS ix_invoice_status ON invoice(status)",
+        "CREATE INDEX IF NOT EXISTS ix_invoice_line_inv_no ON invoice_line(inv_no)",
+        "CREATE INDEX IF NOT EXISTS ix_invoice_line_part_no ON invoice_line(part_no)",
+        "CREATE INDEX IF NOT EXISTS ix_purchase_order_partner ON purchase_order(partner_id)",
+        "CREATE INDEX IF NOT EXISTS ix_purchase_order_status ON purchase_order(status)",
+        "CREATE INDEX IF NOT EXISTS ix_purchase_order_part_no ON purchase_order(part_no)",
+        "CREATE INDEX IF NOT EXISTS ix_payment_partner ON payment(partner_id)",
+        "CREATE INDEX IF NOT EXISTS ix_payment_date ON payment(pay_date)",
+        # stock_ledger 복합 인덱스 (재고 조회 최적화)
+        "CREATE INDEX IF NOT EXISTS ix_stock_ledger_part_date ON stock_ledger(part_no, txn_date)",
         # HR — 소속 법인 컬럼
         "ALTER TABLE hr_employee ADD COLUMN IF NOT EXISTS company VARCHAR(50) DEFAULT '조이산업'",
         # HR — ot_rate NOT NULL 제약 완화 (모델에서 제거된 컬럼이지만 DB에 잔존)

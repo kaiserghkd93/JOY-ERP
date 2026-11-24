@@ -57,16 +57,29 @@ def _enrich(inv: Invoice, db: Session) -> dict:
 
 
 @router.get("", response_model=list[InvoiceOut])
-def list_invoices(db: Session = Depends(get_db)):
-    invs = (
-        db.query(Invoice)
-        .options(
-            joinedload(Invoice.partner),
-            selectinload(Invoice.lines).joinedload(InvoiceLine.item),
-        )
-        .order_by(Invoice.issue_date.desc(), Invoice.inv_no.desc())
-        .all()
+def list_invoices(
+    year: int | None = None,
+    month: int | None = None,
+    partner_id: str | None = None,
+    db: Session = Depends(get_db),
+):
+    from datetime import date as _date
+    q = db.query(Invoice).options(
+        joinedload(Invoice.partner),
+        selectinload(Invoice.lines).joinedload(InvoiceLine.item),
     )
+    # 기본: 올해 데이터만 (연도 미지정 시)
+    _year = year or _date.today().year
+    q = q.filter(Invoice.issue_date >= _date(_year, 1, 1),
+                 Invoice.issue_date <= _date(_year, 12, 31))
+    if month:
+        import calendar
+        last_day = calendar.monthrange(_year, month)[1]
+        q = q.filter(Invoice.issue_date >= _date(_year, month, 1),
+                     Invoice.issue_date <= _date(_year, month, last_day))
+    if partner_id:
+        q = q.filter(Invoice.partner_id == partner_id)
+    invs = q.order_by(Invoice.issue_date.desc(), Invoice.inv_no.desc()).all()
     return [_enrich(inv, db) for inv in invs]
 
 
