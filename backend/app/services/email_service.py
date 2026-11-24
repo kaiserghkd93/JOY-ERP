@@ -42,13 +42,13 @@ def _send(to_email: str, to_name: str, subject: str, html: str) -> bool:
     try:
         resp = httpx.post(RESEND_URL, json=payload, headers=headers, timeout=15)
         if resp.status_code in (200, 201):
-            logger.info(f"[email] 발송 완료: {subject} -> {to_email}")
+            logger.warning(f"[email] 발송 완료: {subject} -> {effective_to}")
             return True
         else:
-            logger.error(f"[email] 발송 실패 ({resp.status_code}): {resp.text[:200]}")
+            logger.warning(f"[email] 발송 실패 ({resp.status_code}): {resp.text[:200]}")
             return False
     except Exception as exc:
-        logger.error(f"[email] 발송 오류: {subject} -> {to_email} | {exc}")
+        logger.warning(f"[email] 발송 오류: {subject} -> {effective_to} | {exc}")
         return False
 
 
