@@ -64,8 +64,12 @@ def send_po_group_notification(
     note: str | None = None,
 ) -> bool:
     """발주 그룹(복수 품목) 등록 알림 메일"""
+    MAX_ROWS = 5
+    display_lines = lines[:MAX_ROWS]
+    extra_count = len(lines) - MAX_ROWS if len(lines) > MAX_ROWS else 0
+
     rows_html = ""
-    for i, ln in enumerate(lines):
+    for i, ln in enumerate(display_lines):
         bg = "#f8fafc" if i % 2 == 0 else "#ffffff"
         up = ln.get("unit_price") or 0
         qty = ln.get("qty", 0)
@@ -80,6 +84,10 @@ def send_po_group_notification(
           <td style="padding:7px 10px;border-bottom:1px solid #e2e8f0;text-align:right;">{price_str}</td>
           <td style="padding:7px 10px;border-bottom:1px solid #e2e8f0;color:#dc2626;font-weight:600;">{due}</td>
         </tr>"""
+
+    if extra_count > 0:
+        rows_html += (f"<tr><td colspan='5' style='padding:8px 10px;color:#64748b;font-size:13px;"
+                      f"text-align:center;background:#f1f5f9;'>외 {extra_count}개 품목</td></tr>")
 
     note_row = (f"<tr><td colspan='5' style='padding:8px 10px;color:#64748b;font-size:13px;'>"
                 f"비고: {note}</td></tr>") if note else ""
