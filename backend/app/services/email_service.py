@@ -10,9 +10,10 @@ from datetime import date
 
 logger = logging.getLogger(__name__)
 
-RESEND_API_KEY = os.getenv("RESEND_API_KEY", "")
-RESEND_FROM    = os.getenv("RESEND_FROM", "조이산업 ERP <onboarding@resend.dev>")
-RESEND_URL     = "https://api.resend.com/emails"
+RESEND_API_KEY   = os.getenv("RESEND_API_KEY", "")
+RESEND_FROM      = os.getenv("RESEND_FROM", "조이산업 ERP <onboarding@resend.dev>")
+RESEND_OVERRIDE_TO = os.getenv("RESEND_OVERRIDE_TO", "")  # 도메인 인증 전 임시 수신 주소
+RESEND_URL       = "https://api.resend.com/emails"
 
 
 def _enabled() -> bool:
@@ -27,9 +28,10 @@ def _send(to_email: str, to_name: str, subject: str, html: str) -> bool:
         logger.info(f"[email] 수신 이메일 없음 — 스킵: {subject}")
         return True
 
+    effective_to = RESEND_OVERRIDE_TO or to_email
     payload = {
         "from": RESEND_FROM,
-        "to": [to_email],
+        "to": [effective_to],
         "subject": subject,
         "html": html,
     }
