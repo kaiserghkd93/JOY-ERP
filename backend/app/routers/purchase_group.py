@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from fastapi.responses import HTMLResponse, StreamingResponse
 from sqlalchemy.orm import Session
 import io
@@ -11,6 +11,7 @@ from app.schemas.purchase_group import POGroupCreate, POGroupOut
 from app.services.doc_no import next_doc_no
 from app.services.purchase_service import create_po
 from app.services.ledger_service import get_stock
+from app.services.email_service import send_po_group_notification
 from app.routers.auth import get_current_user
 from app.models.auth import User
 
@@ -18,7 +19,7 @@ router = APIRouter(prefix="/purchase/groups", tags=["발주서"])
 
 
 @router.post("", response_model=POGroupOut)
-def create_group(body: POGroupCreate, db: Session = Depends(get_db)):
+def create_group(body: POGroupCreate, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
     if not body.lines:
         raise HTTPException(400, "품목을 1개 이상 추가하세요")
 
@@ -35,10 +36,12 @@ def create_group(body: POGroupCreate, db: Session = Depends(get_db)):
     db.add(group)
     db.flush()
 
+    email_lines = []
     for line in body.lines:
         from app.models.purchase import PurchaseOrder, POStatus
         from app.models.master import Item
-        if not db.get(Item, line.part_no):
+        item = db.get(Item, line.part_no)
+        if not item:
             raise HTTPException(404, f"품목 없음: {line.part_no}")
         po_no = next_doc_no(db, "PO", "purchase_order", "po_no")
         po = PurchaseOrder(
@@ -50,9 +53,31 @@ def create_group(body: POGroupCreate, db: Session = Depends(get_db)):
         )
         db.add(po)
         db.flush()
+        email_lines.append({
+            "part_no": line.part_no,
+            "part_name": item.name,
+            "qty": line.qty,
+            "unit_price": float(line.unit_price) if line.unit_price else None,
+            "due_date": line.due_date or body.due_date,
+        })
 
     db.commit()
     db.refresh(group)
+
+    partner = db.get(Partner, body.partner_id)
+    if partner and partner.email:
+        background_tasks.add_task(
+            send_po_group_notification,
+            to_email=partner.email,
+            to_name=partner.name,
+            group_no=group_no,
+            partner_name=partner.name,
+            order_date=body.order_date,
+            due_date=body.due_date,
+            lines=email_lines,
+            note=body.note,
+        )
+
     return group
 
 
