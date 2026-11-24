@@ -13,7 +13,12 @@ from app.database import get_db, engine, Base
 from app.models.master import Item, ItemType
 from app.models import hr as _hr_models  # noqa
 
+import os
+
 router = APIRouter(prefix="/admin", tags=["admin-maintenance"])
+
+# 주간 유지보수 전용 키 (Railway 환경변수 MAINTENANCE_KEY로 설정, 없으면 기본값 사용)
+_MAINTENANCE_KEY = os.getenv("MAINTENANCE_KEY", "")
 
 
 @router.post("/init-hr-tables")
@@ -479,13 +484,16 @@ def delete_hyundai_nov_shipments(confirm: str):
 
 
 @router.post("/weekly-optimize")
-def weekly_optimize(db: Session = Depends(get_db)):
+def weekly_optimize(key: str = "", db: Session = Depends(get_db)):
     """
-    주간 DB 최적화 루틴 (매주 월요일 00:00 UTC 자동 호출).
+    주간 DB 최적화 루틴 (매주 월요일 자동 호출).
+    - key: 유지보수 전용 키 (쿼리파라미터) 또는 관리자 로그인 토큰으로도 접근 가능
     1. VACUUM ANALYZE — 주요 테이블 통계 갱신 + 불필요 블록 회수
     2. audit_log 90일 초과 레코드 삭제
-    3. 주요 테이블 행수 / 인덱스 크기 리포트 반환
+    3. 주요 테이블 행수 리포트 반환
     """
+    if not _MAINTENANCE_KEY or key != _MAINTENANCE_KEY:
+        raise HTTPException(status_code=403, detail="maintenance key 불일치 또는 미설정")
     result: dict = {"started_at": datetime.utcnow().isoformat(), "steps": {}}
 
     # 1. VACUUM ANALYZE (autocommit 필요 — 트랜잭션 밖에서 실행)
