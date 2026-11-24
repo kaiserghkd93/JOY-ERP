@@ -504,13 +504,15 @@ function PayslipModal({ payroll: initialP, onClose, onSaved }) {
     <div className="modal-overlay" onClick={onClose}>
       <style>{`
         @media print {
-          /* 모든 요소 숨기기 (DOM 구조와 무관) */
+          /* html/body 높이를 auto로 제한해 빈 페이지 방지 */
+          html, body { height: auto !important; overflow: hidden !important; }
+          /* 모든 요소 숨기기 */
           body * { visibility: hidden !important; }
           /* 명세서 박스와 그 하위 요소만 표시 */
           .ps-box, .ps-box * { visibility: visible !important; }
-          /* 명세서 박스를 인쇄 영역 최상단에 고정 */
+          /* position: absolute — fixed 는 모든 페이지에 반복됨 */
           .ps-box {
-            position: fixed !important;
+            position: absolute !important;
             top: 0 !important;
             left: 0 !important;
             width: 100% !important;
