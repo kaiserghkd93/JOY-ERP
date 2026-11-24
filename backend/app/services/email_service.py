@@ -97,7 +97,8 @@ def send_po_group_notification(
     <div style="padding:24px 28px;">
       <p style="margin:0 0 16px;color:#334155;">
         안녕하세요, <strong>{partner_name}</strong> 담당자님.<br>
-        아래 내용으로 발주가 등록되었으니 확인 부탁드립니다.
+        아래 내용으로 발주가 등록되었습니다.<br>
+        납기일 및 발주수량 확인 후 납품 요청드립니다. 감사합니다.
       </p>
       <table style="width:100%;border-collapse:collapse;font-size:14px;color:#334155;margin-bottom:16px;">
         <tr><td style="padding:6px 0;color:#64748b;width:100px;">발주번호</td>
