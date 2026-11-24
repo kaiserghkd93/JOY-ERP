@@ -3,11 +3,12 @@
 - 테스트 데이터 삭제 (2026-10 이전)
 - 나라엠텍 BOM 아이템 업로드
 - 임포트 오류 데이터 삭제
+- 주간 DB 최적화 (VACUUM ANALYZE + 오래된 로그 정리)
 """
-from datetime import date
+from datetime import date, datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from sqlalchemy import text
+from sqlalchemy import text, func
 from app.database import get_db, engine, Base
 from app.models.master import Item, ItemType
 from app.models import hr as _hr_models  # noqa
@@ -475,6 +476,69 @@ def delete_hyundai_nov_shipments(confirm: str):
         "errors": errors,
         "note": f"SH-20261109-017 ~ SH-20261109-045 ({len(sh_nos)}건)",
     }
+
+
+@router.post("/weekly-optimize")
+def weekly_optimize(db: Session = Depends(get_db)):
+    """
+    주간 DB 최적화 루틴 (매주 월요일 00:00 UTC 자동 호출).
+    1. VACUUM ANALYZE — 주요 테이블 통계 갱신 + 불필요 블록 회수
+    2. audit_log 90일 초과 레코드 삭제
+    3. 주요 테이블 행수 / 인덱스 크기 리포트 반환
+    """
+    result: dict = {"started_at": datetime.utcnow().isoformat(), "steps": {}}
+
+    # 1. VACUUM ANALYZE (autocommit 필요 — 트랜잭션 밖에서 실행)
+    vacuum_tables = [
+        "stock_ledger", "shipment", "sales_order", "invoice", "invoice_line",
+        "receipt", "purchase_order", "audit_log", "mes_production_log",
+        "inspection", "production_order",
+    ]
+    vacuum_ok = []
+    vacuum_errors = {}
+    with engine.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
+        for tbl in vacuum_tables:
+            try:
+                conn.execute(text(f"VACUUM ANALYZE {tbl}"))
+                vacuum_ok.append(tbl)
+            except Exception as e:
+                vacuum_errors[tbl] = str(e)[:120]
+    result["steps"]["vacuum_analyze"] = {
+        "ok": vacuum_ok,
+        "errors": vacuum_errors,
+    }
+
+    # 2. audit_log 90일 초과 삭제
+    cutoff_audit = datetime.utcnow() - timedelta(days=90)
+    try:
+        r = db.execute(
+            text("DELETE FROM audit_log WHERE changed_at < :c"),
+            {"c": cutoff_audit},
+        )
+        db.commit()
+        result["steps"]["audit_log_cleanup"] = {
+            "deleted_rows": r.rowcount,
+            "cutoff": cutoff_audit.date().isoformat(),
+        }
+    except Exception as e:
+        db.rollback()
+        result["steps"]["audit_log_cleanup"] = {"error": str(e)[:120]}
+
+    # 3. 주요 테이블 행수 조회
+    report_tables = ["stock_ledger", "shipment", "sales_order", "audit_log",
+                     "mes_production_log", "receipt"]
+    table_stats = {}
+    with engine.connect() as conn:
+        for tbl in report_tables:
+            try:
+                cnt = conn.execute(text(f"SELECT COUNT(*) FROM {tbl}")).scalar()
+                table_stats[tbl] = cnt
+            except Exception:
+                table_stats[tbl] = "unknown"
+    result["steps"]["table_row_counts"] = table_stats
+    result["finished_at"] = datetime.utcnow().isoformat()
+    result["ok"] = not any("error" in v for v in result["steps"].values() if isinstance(v, dict))
+    return result
 
 
 @router.post("/fix-naraemtec-item-types")

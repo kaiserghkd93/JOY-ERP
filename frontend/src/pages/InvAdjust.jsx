@@ -53,11 +53,14 @@ export default function InvAdjust() {
     api.get('/inv-adjust/losses').then(r => setLosses(r.data || [])).catch(()=>{})
   }, [])
 
+  const [productItems, setProductItems] = useState([])
+
   useEffect(() => {
     api.get('/master/items').then(r => {
       const all = Array.isArray(r.data) ? r.data : []
       setItems(all)
-      setRawItems(all.filter(i => i.item_type === 'raw' || i.unit === 'kg' || i.unit === 'g'))
+      setRawItems(all.filter(i => i.item_type === 'raw' || i.item_type === 'sub' || i.unit === 'kg' || i.unit === 'g'))
+      setProductItems(all.filter(i => i.item_type === 'finished' || i.item_type === 'semi'))
     }).catch(()=>{})
     loadAdjs()
     loadLosses()
@@ -268,7 +271,7 @@ export default function InvAdjust() {
                 <div className="form-group"><label>원재료 품번</label>
                   <select value={lossForm.raw_part_no} onChange={e=>setLoss('raw_part_no',e.target.value)}>
                     <option value="">선택</option>
-                    {items.map(i=><option key={i.part_no} value={i.part_no}>{i.part_no} — {i.name}</option>)}
+                    {rawItems.map(i=><option key={i.part_no} value={i.part_no}>{i.part_no} — {i.name}</option>)}
                   </select>
                 </div>
                 <div className="form-group"><label>수량 (kg)</label>
@@ -277,7 +280,7 @@ export default function InvAdjust() {
                 <div className="form-group"><label>제품 품번 (선택)</label>
                   <select value={lossForm.part_no} onChange={e=>setLoss('part_no',e.target.value)}>
                     <option value="">선택</option>
-                    {items.map(i=><option key={i.part_no} value={i.part_no}>{i.part_no} — {i.name}</option>)}
+                    {productItems.map(i=><option key={i.part_no} value={i.part_no}>{i.part_no} — {i.name}</option>)}
                   </select>
                 </div>
                 <div className="form-group"><label>사출기 번호</label>
