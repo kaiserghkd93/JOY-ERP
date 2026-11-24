@@ -10,10 +10,11 @@ from datetime import date
 
 logger = logging.getLogger(__name__)
 
-RESEND_API_KEY   = os.getenv("RESEND_API_KEY", "")
-RESEND_FROM      = os.getenv("RESEND_FROM", "조이산업 ERP <onboarding@resend.dev>")
-RESEND_OVERRIDE_TO = os.getenv("RESEND_OVERRIDE_TO", "")  # 도메인 인증 전 임시 수신 주소
-RESEND_URL       = "https://api.resend.com/emails"
+RESEND_API_KEY     = os.getenv("RESEND_API_KEY", "")
+RESEND_FROM        = os.getenv("RESEND_FROM", "조이산업 ERP <onboarding@resend.dev>")
+RESEND_OVERRIDE_TO = os.getenv("RESEND_OVERRIDE_TO", "")
+ERP_API_URL        = os.getenv("ERP_API_URL", "")   # Railway 백엔드 URL (발주서 확인 버튼용)
+RESEND_URL         = "https://api.resend.com/emails"
 
 
 def _enabled() -> bool:
@@ -64,82 +65,89 @@ def send_po_group_notification(
     note: str | None = None,
 ) -> bool:
     """발주 그룹(복수 품목) 등록 알림 메일"""
-    MAX_ROWS = 5
-    display_lines = lines[:MAX_ROWS]
-    extra_count = len(lines) - MAX_ROWS if len(lines) > MAX_ROWS else 0
+    # 발주내용 요약: 첫 품목명 + 외 N건
+    first_name = lines[0].get("part_name", "") if lines else ""
+    extra_count = len(lines) - 1
+    item_summary = f"{first_name} 외 {extra_count}건" if extra_count > 0 else first_name
 
-    rows_html = ""
-    for i, ln in enumerate(display_lines):
-        bg = "#f8fafc" if i % 2 == 0 else "#ffffff"
-        up = ln.get("unit_price") or 0
-        qty = ln.get("qty", 0)
-        total = up * qty if up else 0
-        price_str = f"&#8361;{up:,.0f} / &#8361;{total:,.0f}" if up else "-"
-        due = ln.get("due_date") or due_date
-        rows_html += f"""
-        <tr style="background:{bg};">
-          <td style="padding:7px 10px;border-bottom:1px solid #e2e8f0;">{ln.get('part_no','')}</td>
-          <td style="padding:7px 10px;border-bottom:1px solid #e2e8f0;">{ln.get('part_name','')}</td>
-          <td style="padding:7px 10px;border-bottom:1px solid #e2e8f0;text-align:right;">{qty:,}</td>
-          <td style="padding:7px 10px;border-bottom:1px solid #e2e8f0;text-align:right;">{price_str}</td>
-          <td style="padding:7px 10px;border-bottom:1px solid #e2e8f0;color:#dc2626;font-weight:600;">{due}</td>
-        </tr>"""
+    # 발주서 확인 버튼 URL
+    print_url = f"{ERP_API_URL}/purchase/groups/{group_no}/print" if ERP_API_URL else ""
+    btn_html = (
+        f'<div style="text-align:center;margin-top:28px;">'
+        f'<a href="{print_url}" style="display:inline-block;padding:13px 44px;'
+        f'background:#1a5cb8;color:#fff;text-decoration:none;font-size:14px;'
+        f'font-weight:700;letter-spacing:1px;">구매발주서 확인</a></div>'
+    ) if print_url else ""
 
-    if extra_count > 0:
-        rows_html += (f"<tr><td colspan='5' style='padding:8px 10px;color:#64748b;font-size:13px;"
-                      f"text-align:center;background:#f1f5f9;'>외 {extra_count}개 품목</td></tr>")
-
-    note_row = (f"<tr><td colspan='5' style='padding:8px 10px;color:#64748b;font-size:13px;'>"
-                f"비고: {note}</td></tr>") if note else ""
+    # 전달내용 메시지
+    delivery_msg = (
+        "안녕하세요<br>"
+        f"㈜넥스젬 구매 팀 입니다.<br><br>"
+        "발주서 송부드립니다.<br>"
+        "납기일 및 발주수량 확인 후 납품 요청드립니다.<br><br>"
+        "감사합니다."
+    )
 
     html = f"""<!DOCTYPE html>
 <html>
-<head><meta charset="utf-8"></head>
-<body style="font-family:Arial,sans-serif;background:#f8fafc;margin:0;padding:24px;">
-  <div style="max-width:620px;margin:0 auto;background:#fff;border-radius:8px;
-              border:1px solid #e2e8f0;overflow:hidden;">
-    <div style="background:#1e40af;padding:24px 28px;">
-      <h2 style="margin:0;color:#fff;font-size:18px;">&#128203; 발주서 등록 알림</h2>
-      <p style="margin:4px 0 0;color:#bfdbfe;font-size:13px;">조이산업 ERP에서 발주가 등록되었습니다.</p>
-    </div>
-    <div style="padding:24px 28px;">
-      <p style="margin:0 0 16px;color:#334155;">
-        안녕하세요, <strong>{partner_name}</strong> 담당자님.<br>
-        아래 내용으로 발주가 등록되었습니다.<br>
-        납기일 및 발주수량 확인 후 납품 요청드립니다. 감사합니다.
-      </p>
-      <table style="width:100%;border-collapse:collapse;font-size:14px;color:#334155;margin-bottom:16px;">
-        <tr><td style="padding:6px 0;color:#64748b;width:100px;">발주번호</td>
-            <td style="padding:6px 0;font-weight:700;color:#1e40af;">{group_no}</td></tr>
-        <tr><td style="padding:6px 0;color:#64748b;">발주일자</td>
-            <td style="padding:6px 0;">{order_date}</td></tr>
-      </table>
-      <table style="width:100%;border-collapse:collapse;font-size:13px;color:#334155;">
-        <thead>
-          <tr style="background:#1e40af;color:#fff;">
-            <th style="padding:8px 10px;text-align:left;">품번</th>
-            <th style="padding:8px 10px;text-align:left;">품명</th>
-            <th style="padding:8px 10px;text-align:right;">수량</th>
-            <th style="padding:8px 10px;text-align:right;">단가/금액</th>
-            <th style="padding:8px 10px;text-align:left;">납기일</th>
-          </tr>
-        </thead>
-        <tbody>{rows_html}{note_row}</tbody>
-      </table>
-      <div style="margin-top:20px;padding:12px 16px;background:#eff6ff;border-radius:6px;
-                  font-size:13px;color:#1e40af;">
-        궁금하신 점은 조이산업 구매담당자에게 연락주시기 바랍니다.
-      </div>
-    </div>
-    <div style="padding:12px 28px;background:#f8fafc;font-size:11px;color:#94a3b8;
-                border-top:1px solid #e2e8f0;">
-      본 메일은 조이산업 ERP 시스템에서 자동 발송되었습니다.
-    </div>
+<head><meta charset="utf-8">
+<style>
+  body{{font-family:'맑은 고딕',Arial,sans-serif;background:#f0f2f5;margin:0;padding:20px;}}
+  .wrap{{max-width:600px;margin:0 auto;background:#fff;border:1px solid #d0d5dd;}}
+  .top-bar{{background:#1a5cb8;color:#fff;padding:12px 20px;font-size:13px;display:flex;justify-content:space-between;align-items:center;}}
+  .top-bar .date{{font-size:12px;opacity:.85;white-space:nowrap;margin-left:12px;}}
+  .recipient-box{{border:1px solid #c8d0dc;margin:20px 24px 16px;padding:18px 20px;text-align:center;}}
+  .recipient-box .name{{font-size:16px;font-weight:700;color:#111;margin-bottom:6px;}}
+  .recipient-box .sub{{font-size:12px;color:#555;}}
+  .section-title{{font-size:13px;font-weight:700;color:#111;margin:0 24px 6px;padding-bottom:6px;border-bottom:2px solid #111;}}
+  .info-table{{width:calc(100% - 48px);margin:0 24px 20px;border-collapse:collapse;font-size:12.5px;}}
+  .info-table td{{padding:8px 10px;border:1px solid #d0d5dd;vertical-align:top;}}
+  .info-table .lbl{{background:#f4f6f8;font-weight:600;color:#333;width:72px;text-align:center;white-space:nowrap;}}
+  .msg{{line-height:1.75;color:#333;}}
+  .footer{{padding:10px 24px;background:#f8f9fa;border-top:1px solid #e0e0e0;font-size:10px;color:#999;text-align:center;}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top-bar">
+    <span>㈜넥스젬 으로부터 구매발주서가 발송되었습니다. - {partner_name}</span>
+    <span class="date">{order_date}</span>
   </div>
+  <div class="recipient-box">
+    <div class="name">수신처 : {partner_name}</div>
+    <div class="sub">㈜넥스젬 으로부터 구매발주서가 발송되었습니다.</div>
+  </div>
+  <div class="section-title">발신정보</div>
+  <table class="info-table">
+    <tr>
+      <td class="lbl">업 &nbsp;체 &nbsp;명</td>
+      <td>㈜넥스젬</td>
+      <td class="lbl">발 행 일 자</td>
+      <td>{order_date}</td>
+    </tr>
+    <tr>
+      <td class="lbl">이 &nbsp;메 &nbsp;일</td>
+      <td>jhhwang@nexgem.co.kr</td>
+      <td class="lbl">연 &nbsp;락 &nbsp;처</td>
+      <td>043-212-3351</td>
+    </tr>
+    <tr>
+      <td class="lbl">발 주 내 용</td>
+      <td colspan="3">{item_summary}</td>
+    </tr>
+    <tr>
+      <td class="lbl" style="vertical-align:top;padding-top:10px;">전 달 내 용</td>
+      <td colspan="3" class="msg">{delivery_msg}</td>
+    </tr>
+  </table>
+  {btn_html}
+  <div style="height:24px;"></div>
+  <div class="footer">본 메일은 ㈜넥스젬 ERP 시스템에서 자동 발송되었습니다.</div>
+</div>
 </body>
 </html>"""
 
-    subject = f"[조이산업] 발주서 등록 알림 - {group_no}"
+    subject = f"[㈜넥스젬] 구매발주서가 발송되었습니다. - {partner_name} ({group_no})"
     return _send(to_email, to_name, subject, html)
 
 
