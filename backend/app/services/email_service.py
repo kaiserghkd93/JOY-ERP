@@ -5,7 +5,7 @@ RESEND_FROM: 발신 주소 (도메인 인증 전: onboarding@resend.dev)
 """
 import os
 import logging
-import requests
+import httpx
 from datetime import date
 
 logger = logging.getLogger(__name__)
@@ -38,7 +38,7 @@ def _send(to_email: str, to_name: str, subject: str, html: str) -> bool:
         "Content-Type": "application/json",
     }
     try:
-        resp = requests.post(RESEND_URL, json=payload, headers=headers, timeout=15)
+        resp = httpx.post(RESEND_URL, json=payload, headers=headers, timeout=15)
         if resp.status_code in (200, 201):
             logger.info(f"[email] 발송 완료: {subject} -> {to_email}")
             return True
