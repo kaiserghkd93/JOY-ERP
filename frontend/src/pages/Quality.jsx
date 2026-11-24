@@ -897,11 +897,12 @@ export function DrawingLookupPanel({ items }) {
   const [loading, setLoading] = useState(false)
   const [notFound, setNotFound] = useState(false)
 
-  const filtered = (items || []).filter(i =>
+  const all = (items || []).filter(i =>
     !search ||
     i.part_no.toLowerCase().includes(search.toLowerCase()) ||
     i.name.toLowerCase().includes(search.toLowerCase())
-  ).slice(0, 50)
+  )
+  const filtered = all.slice(0, search ? 500 : 200)
 
   const loadDrawing = async (item) => {
     setSelected(item)
@@ -934,6 +935,11 @@ export function DrawingLookupPanel({ items }) {
             style={{ width: '100%', padding: '6px 10px', border: '1px solid var(--border)', borderRadius: 4, fontSize: 12, boxSizing: 'border-box' }}
             autoFocus
           />
+          <div style={{ fontSize: 10, color: 'var(--text-sm)', marginTop: 4, textAlign: 'right' }}>
+            {all.length !== filtered.length
+              ? `${all.length}건 중 ${filtered.length}건 표시`
+              : `전체 ${all.length}건`}
+          </div>
         </div>
         <div style={{ maxHeight: 560, overflowY: 'auto' }}>
           {filtered.length === 0 && (
