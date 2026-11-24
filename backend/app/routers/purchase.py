@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Query, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, Query, HTTPException
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import func
@@ -17,6 +17,7 @@ from app.services.purchase_service import (
 from app.models.ledger import LedgerType
 from app.services.ledger_service import post_ledger, get_avg_price
 from app.models.master import Partner, Item
+from app.services.email_service import send_po_notification
 
 router = APIRouter(prefix="/purchase", tags=["구매·외주"])
 
@@ -30,8 +31,32 @@ def _is_outsource(partner_name: str | None) -> bool:
 
 
 @router.post("/orders", response_model=POOut)
-def post_order(body: POCreate, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
-    return create_po(db, **body.model_dump())
+def post_order(
+    body: POCreate,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    po = create_po(db, **body.model_dump())
+
+    # 업체 이메일 조회 후 백그라운드로 발주 알림 발송
+    partner = db.get(Partner, po.partner_id)
+    item    = db.get(Item, po.part_no)
+    if partner and partner.email:
+        background_tasks.add_task(
+            send_po_notification,
+            to_email   = partner.email,
+            to_name    = partner.name,
+            po_no      = po.po_no,
+            part_no    = po.part_no,
+            part_name  = item.name if item else po.part_no,
+            qty        = po.qty,
+            unit_price = float(po.unit_price) if po.unit_price else None,
+            order_date = po.order_date,
+            due_date   = po.due_date,
+            note       = po.note,
+        )
+    return po
 
 
 @router.get("/orders", response_model=list[POOut])
