@@ -1443,24 +1443,7 @@ function vdaF020() {
     <th style="width:60px">준수 여부</th>
     <th style="width:90px">조치 계획 / 비고</th>
   </tr>
-  ${[
-    ['Bosch', 'VDA 6.3 공정심사 주기 (12개월 이내)'],
-    ['Bosch', 'PPAP Level 3 제출 의무'],
-    ['Bosch', 'SPC 운영 (Cpk ≥ 1.67 CC 특성)'],
-    ['Bosch', 'CSR 전파 및 공급망 하위 전달'],
-    ['Bosch', '8D 보고서 제출 기한 (D3: 24h, D8: 10 영업일)'],
-    ['고객', '고객 승인 없는 4M 변경 금지'],
-    ['고객', '납품 라벨 규격 준수 (EDI/VDA 4902)'],
-    ['고객', 'OTD (납기준수율) ≥ 98%'],
-    ['고객', 'PPM 목표 (내부 ≤ 50 PPM)'],
-    ['고객', 'ISIR (초도품 검사 보고서) 제출'],
-  ].map(([src, item], i) =>
-    `<tr><td style="text-align:center;color:#bbb">${i + 1}</td>
-     <td style="text-align:center;font-size:8.5pt">${src}</td>
-     <td>${item}</td><td></td>
-     <td style="text-align:center"></td><td></td></tr>`
-  ).join('')}
-  ${rows(5, ['','','','',''])}
+  ${rows(15, ['','','','',''])}
 </table>
 
 <div class="sign sign3">
