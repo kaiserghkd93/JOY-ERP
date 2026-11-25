@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback, useRef, Fragment } from 'react'
 import api from '../api'
 import { downloadPurchaseReport } from '../utils/reportPptx'
 import { isMaster, getRole } from '../auth'
+import SearchableSelect from '../components/SearchableSelect'
 
 const today = () => { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0') }
 
@@ -341,10 +342,12 @@ function SinglePOModal({ onClose, onSaved }) {
         </div>
         <div className="form-group">
           <label>품번</label>
-          <select value={form.part_no} onChange={e => set('part_no', e.target.value)}>
-            <option value="">선택</option>
-            {items.map(i => <option key={i.part_no} value={i.part_no}>{i.part_no} — {i.name}</option>)}
-          </select>
+          <SearchableSelect
+            value={form.part_no}
+            onChange={v => set('part_no', v)}
+            options={items.map(i => ({ value: i.part_no, label: `${i.part_no} — ${i.name}` }))}
+            placeholder="선택"
+          />
         </div>
         <div className="grid-2">
           <div className="form-group"><label>발주수량</label><input type="number" value={form.qty} onChange={e => set('qty', e.target.value)} /></div>

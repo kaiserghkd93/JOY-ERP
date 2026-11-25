@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react'
 import api from '../api'
+import SearchableSelect from '../components/SearchableSelect'
 
 const REFRESH_MS = 5000
 
@@ -355,10 +356,13 @@ function SpcChart() {
   return (
     <div>
       <div style={{ display:'flex', gap:10, marginBottom:16, flexWrap:'wrap', alignItems:'center' }}>
-        <select value={partNo} onChange={e => setPartNo(e.target.value)} style={{ padding:'6px 10px', borderRadius:6, border:'1px solid #d1d5db', fontSize:13, minWidth:160 }}>
-          <option value="">품번 선택</option>
-          {items.map(i => <option key={i.part_no} value={i.part_no}>{i.part_no} {i.name}</option>)}
-        </select>
+        <SearchableSelect
+          value={partNo}
+          onChange={v => setPartNo(v)}
+          options={items.map(i => ({ value: i.part_no, label: `${i.part_no} ${i.name}` }))}
+          placeholder="품번 선택"
+          style={{ minWidth: 200 }}
+        />
         <select value={dim} onChange={e => setDim(e.target.value)} style={{ padding:'6px 10px', borderRadius:6, border:'1px solid #d1d5db', fontSize:13 }}>
           <option value="dim1">치수 1</option>
           <option value="dim2">치수 2</option>

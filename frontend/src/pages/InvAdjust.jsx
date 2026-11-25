@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import api from '../api'
 import { getRole } from '../auth'
+import SearchableSelect from '../components/SearchableSelect'
 
 const LOSS_TYPES = [
   '퍼지·짜내기','시동로스','러너폐기','러너회수',
@@ -165,10 +166,12 @@ export default function InvAdjust() {
                   <input type="date" value={adjForm.adj_date} onChange={e=>setAdj('adj_date',e.target.value)}/>
                 </div>
                 <div className="form-group"><label>품번</label>
-                  <select value={adjForm.part_no} onChange={e=>setAdj('part_no',e.target.value)}>
-                    <option value="">선택</option>
-                    {items.map(i=><option key={i.part_no} value={i.part_no}>{i.part_no} — {i.name}</option>)}
-                  </select>
+                  <SearchableSelect
+                    value={adjForm.part_no}
+                    onChange={v=>setAdj('part_no',v)}
+                    options={items.map(i=>({ value: i.part_no, label: `${i.part_no} — ${i.name}` }))}
+                    placeholder="선택"
+                  />
                 </div>
               </div>
               {bookQty !== null && (
@@ -269,19 +272,23 @@ export default function InvAdjust() {
                   </select>
                 </div>
                 <div className="form-group"><label>원재료 품번</label>
-                  <select value={lossForm.raw_part_no} onChange={e=>setLoss('raw_part_no',e.target.value)}>
-                    <option value="">선택</option>
-                    {rawItems.map(i=><option key={i.part_no} value={i.part_no}>{i.part_no} — {i.name}</option>)}
-                  </select>
+                  <SearchableSelect
+                    value={lossForm.raw_part_no}
+                    onChange={v=>setLoss('raw_part_no',v)}
+                    options={rawItems.map(i=>({ value: i.part_no, label: `${i.part_no} — ${i.name}` }))}
+                    placeholder="선택"
+                  />
                 </div>
                 <div className="form-group"><label>수량 (kg)</label>
                   <input type="number" step="0.001" value={lossForm.qty_kg} onChange={e=>setLoss('qty_kg',e.target.value)} placeholder="0.000"/>
                 </div>
                 <div className="form-group"><label>제품 품번 (선택)</label>
-                  <select value={lossForm.part_no} onChange={e=>setLoss('part_no',e.target.value)}>
-                    <option value="">선택</option>
-                    {productItems.map(i=><option key={i.part_no} value={i.part_no}>{i.part_no} — {i.name}</option>)}
-                  </select>
+                  <SearchableSelect
+                    value={lossForm.part_no}
+                    onChange={v=>setLoss('part_no',v)}
+                    options={productItems.map(i=>({ value: i.part_no, label: `${i.part_no} — ${i.name}` }))}
+                    placeholder="선택"
+                  />
                 </div>
                 <div className="form-group"><label>사출기 번호</label>
                   <input value={lossForm.machine_no} onChange={e=>setLoss('machine_no',e.target.value)} placeholder="예: IMM-01"/>

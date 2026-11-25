@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import QRCode from 'qrcode'
 import api from '../api'
 import { getUser } from '../auth'
+import SearchableSelect from '../components/SearchableSelect'
 
 const BIG = { fontSize: 28, fontWeight: 800 }
 const LABEL = { fontSize: 11, color: '#94a3b8', marginBottom: 2 }
@@ -700,13 +701,13 @@ export default function WorkerScreen() {
 
             <div style={{ marginBottom: 10 }}>
               <div style={{ fontSize: 11, color: '#94a3b8', marginBottom: 4 }}>품번 선택</div>
-              <select value={matReqForm.part_no} onChange={e => setMatReqForm(p => ({ ...p, part_no: e.target.value }))}
-                style={{ width: '100%', padding: '9px 10px', borderRadius: 8, border: '1px solid #334155', background: '#0f172a', color: '#f8fafc', fontSize: 13 }}>
-                <option value="">— 품번 선택 —</option>
-                {items.map(i => (
-                  <option key={i.part_no} value={i.part_no}>{i.part_no} {i.name}</option>
-                ))}
-              </select>
+              <SearchableSelect
+                value={matReqForm.part_no}
+                onChange={v => setMatReqForm(p => ({ ...p, part_no: v }))}
+                options={items.map(i => ({ value: i.part_no, label: `${i.part_no} ${i.name}` }))}
+                placeholder="— 품번 선택 —"
+                style={{ width: '100%' }}
+              />
             </div>
             <div style={{ marginBottom: 10 }}>
               <div style={{ fontSize: 11, color: '#94a3b8', marginBottom: 4 }}>요청 수량</div>

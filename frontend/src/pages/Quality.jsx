@@ -3,6 +3,7 @@ import api from '../api'
 import { downloadQualityReport } from '../utils/reportPptx'
 import { getRole, isMaster } from '../auth'
 import { SpcPanel, ControlPlanPanel, PfmeaPanel, CalibrationPanel, AuditPanel, PpapPanel, MsaPanel } from './QualityAdvanced'
+import SearchableSelect from '../components/SearchableSelect'
 import { printIqcReport, printIpqcReport, printOqcReport, printNcr8D } from './QualityPrint'
 import QualityProcedures from './QualityProcedures'
 import QualityFormsLibrary from './QualityFormsLibrary'
@@ -137,10 +138,12 @@ function NcrCreateModal({ onClose, onSaved }) {
         <div className="grid-2">
           <div className="form-group">
             <label>품번 *</label>
-            <select value={form.part_no} onChange={e=>set('part_no',e.target.value)}>
-              <option value="">선택</option>
-              {allItems.map(i=><option key={i.part_no} value={i.part_no}>{i.part_no} — {i.name}</option>)}
-            </select>
+            <SearchableSelect
+              value={form.part_no}
+              onChange={v=>set('part_no',v)}
+              options={allItems.map(i=>({ value: i.part_no, label: `${i.part_no} — ${i.name}` }))}
+              placeholder="선택"
+            />
           </div>
           <div className="form-group">
             <label>협력업체</label>
@@ -588,10 +591,12 @@ function StandardModal({ editStd, onClose, onSaved }) {
         <div className="grid-2">
           <div className="form-group">
             <label>품번 *</label>
-            <select value={form.part_no} onChange={e => set('part_no', e.target.value)}>
-              <option value="">선택</option>
-              {allItems.map(i => <option key={i.part_no} value={i.part_no}>{i.part_no} — {i.name}</option>)}
-            </select>
+            <SearchableSelect
+              value={form.part_no}
+              onChange={v => set('part_no', v)}
+              options={allItems.map(i => ({ value: i.part_no, label: `${i.part_no} — ${i.name}` }))}
+              placeholder="선택"
+            />
           </div>
           <div className="form-group">
             <label>협력업체 (없으면 전사공통)</label>
@@ -715,10 +720,12 @@ function ClaimModal({ onClose, onSaved }) {
           </div>
           <div className="form-group">
             <label>품번</label>
-            <select value={form.part_no} onChange={e => set('part_no', e.target.value)}>
-              <option value="">선택</option>
-              {items.map(i => <option key={i.part_no} value={i.part_no}>{i.part_no} — {i.name}</option>)}
-            </select>
+            <SearchableSelect
+              value={form.part_no}
+              onChange={v => set('part_no', v)}
+              options={items.map(i => ({ value: i.part_no, label: `${i.part_no} — ${i.name}` }))}
+              placeholder="선택"
+            />
           </div>
         </div>
         <div className="grid-2">

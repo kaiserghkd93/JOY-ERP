@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import api from '../api'
+import SearchableSelect from '../components/SearchableSelect'
 
 const now = new Date()
 const CUR_YEAR  = now.getFullYear()
@@ -184,10 +185,13 @@ function StdCostTab() {
       <p style={{ color: '#64748b', fontSize: 12, marginBottom: 16 }}>노무비 = 표준공수(분) ÷ 60 × 시간당 임률</p>
 
       <div style={{ display: 'flex', gap: 8, marginBottom: 20, flexWrap: 'wrap', alignItems: 'center' }}>
-        <select value={form.part_no} onChange={e => setForm(f => ({...f, part_no: e.target.value}))} style={iStyle(220)}>
-          <option value="">품목 선택</option>
-          {items.map(i => <option key={i.part_no} value={i.part_no}>{i.part_no} — {i.name}</option>)}
-        </select>
+        <SearchableSelect
+          value={form.part_no}
+          onChange={v => setForm(f => ({...f, part_no: v}))}
+          options={items.map(i => ({ value: i.part_no, label: `${i.part_no} — ${i.name}` }))}
+          placeholder="품목 선택"
+          style={iStyle(220)}
+        />
         <select value={form.process_id} onChange={e => setForm(f => ({...f, process_id: e.target.value}))} style={iStyle(160)}>
           <option value="">공정 선택</option>
           {rates.map(r => <option key={r.id} value={r.id}>{r.process_name} ({Number(r.rate_per_hour).toLocaleString()}원/h)</option>)}

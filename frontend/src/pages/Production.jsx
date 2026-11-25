@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react'
 import api from '../api'
 import { downloadProductionReport } from '../utils/reportPptx'
 import { DrawingLookupPanel } from './Quality'
+import SearchableSelect from '../components/SearchableSelect'
 
 function PordModal({ onClose, onSaved }) {
   const [items, setItems] = useState([])
@@ -27,10 +28,12 @@ function PordModal({ onClose, onSaved }) {
         <h3>생산오더 등록</h3>
         <div className="form-group">
           <label>품번</label>
-          <select value={form.part_no} onChange={e => set('part_no', e.target.value)}>
-            <option value="">선택</option>
-            {items.map(i => <option key={i.part_no} value={i.part_no}>{i.part_no} — {i.name}</option>)}
-          </select>
+          <SearchableSelect
+            value={form.part_no}
+            onChange={v => set('part_no', v)}
+            options={items.map(i => ({ value: i.part_no, label: `${i.part_no} — ${i.name}` }))}
+            placeholder="선택"
+          />
         </div>
         <div className="grid-2">
           <div className="form-group"><label>계획수량</label><input type="number" value={form.planned_qty} onChange={e => set('planned_qty', e.target.value)} /></div>
@@ -97,10 +100,12 @@ function MoldModal({ onClose, onSaved }) {
         <div className="form-group"><label>소유자</label><input value={form.owner} onChange={e => set('owner', e.target.value)} /></div>
         <div className="form-group">
           <label>해당 품번</label>
-          <select value={form.part_no} onChange={e => set('part_no', e.target.value)}>
-            <option value="">선택</option>
-            {items.map(i => <option key={i.part_no} value={i.part_no}>{i.part_no} — {i.name}</option>)}
-          </select>
+          <SearchableSelect
+            value={form.part_no}
+            onChange={v => set('part_no', v)}
+            options={items.map(i => ({ value: i.part_no, label: `${i.part_no} — ${i.name}` }))}
+            placeholder="선택"
+          />
         </div>
         <div className="form-group"><label>보관위치</label><input value={form.location} onChange={e => set('location', e.target.value)} /></div>
         <div className="modal-footer">
@@ -232,12 +237,13 @@ function PartMapModal({ onClose, onSaved }) {
           <input placeholder="MES 품번" value={form.mes_part_no}
             onChange={e => setForm(f => ({ ...f, mes_part_no: e.target.value }))}
             style={{ flex: 1, minWidth: 140, padding: '6px 8px', border: '1px solid var(--border)', borderRadius: 4, background: 'var(--bg)', color: 'var(--text)' }} />
-          <select value={form.erp_part_no}
-            onChange={e => setForm(f => ({ ...f, erp_part_no: e.target.value }))}
-            style={{ flex: 2, minWidth: 200, padding: '6px 8px', border: '1px solid var(--border)', borderRadius: 4, background: 'var(--bg)', color: 'var(--text)' }}>
-            <option value="">ERP 품번 선택</option>
-            {items.map(i => <option key={i.part_no} value={i.part_no}>{i.part_no} — {i.name}</option>)}
-          </select>
+          <SearchableSelect
+            value={form.erp_part_no}
+            onChange={v => setForm(f => ({ ...f, erp_part_no: v }))}
+            options={items.map(i => ({ value: i.part_no, label: `${i.part_no} — ${i.name}` }))}
+            placeholder="ERP 품번 선택"
+            style={{ flex: 2, minWidth: 200 }}
+          />
           <input placeholder="비고 (선택)" value={form.note}
             onChange={e => setForm(f => ({ ...f, note: e.target.value }))}
             style={{ flex: 1, minWidth: 100, padding: '6px 8px', border: '1px solid var(--border)', borderRadius: 4, background: 'var(--bg)', color: 'var(--text)' }} />

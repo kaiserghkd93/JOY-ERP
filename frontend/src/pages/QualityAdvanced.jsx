@@ -6,6 +6,7 @@ import { useEffect, useState, useCallback } from 'react'
 import api from '../api'
 import { getRole } from '../auth'
 import { printControlPlan, printPfmea, printCalibrationCert, printAuditReport, printPpap, printMsaReport, printSpcReport } from './QualityPrint'
+import SearchableSelect from '../components/SearchableSelect'
 
 const isManager = () => ['admin', 'quality_manager', 'owner'].includes(getRole())
 const today = () => new Date().toISOString().slice(0, 10)
@@ -349,10 +350,12 @@ export function SpcPanel() {
             <h3>관리도 등록</h3>
             <div className="grid-2">
               <div className="form-group"><label>품번</label>
-                <select value={chartForm.part_no} onChange={e => setCF('part_no', e.target.value)}>
-                  <option value="">선택</option>
-                  {items.map(i => <option key={i.part_no} value={i.part_no}>{i.part_no} — {i.name}</option>)}
-                </select>
+                <SearchableSelect
+                  value={chartForm.part_no}
+                  onChange={v => setCF('part_no', v)}
+                  options={items.map(i => ({ value: i.part_no, label: `${i.part_no} — ${i.name}` }))}
+                  placeholder="선택"
+                />
               </div>
               <div className="form-group"><label>관리특성</label><input value={chartForm.characteristic} onChange={e => setCF('characteristic', e.target.value)} placeholder="외경, 두께, 중량..." /></div>
               <div className="form-group"><label>단위</label><input value={chartForm.unit} onChange={e => setCF('unit', e.target.value)} placeholder="mm, g" /></div>
@@ -648,10 +651,12 @@ export function ControlPlanPanel() {
             <h3>관리계획서 작성</h3>
             <div className="grid-2">
               <div className="form-group"><label>품번 *</label>
-                <select value={form.part_no} onChange={e => setForm(f => ({ ...f, part_no: e.target.value }))}>
-                  <option value="">선택</option>
-                  {items.map(i => <option key={i.part_no} value={i.part_no}>{i.part_no} — {i.name}</option>)}
-                </select>
+                <SearchableSelect
+                  value={form.part_no}
+                  onChange={v => setForm(f => ({ ...f, part_no: v }))}
+                  options={items.map(i => ({ value: i.part_no, label: `${i.part_no} — ${i.name}` }))}
+                  placeholder="선택"
+                />
               </div>
               <div className="form-group"><label>계획 유형</label>
                 <select value={form.plan_type} onChange={e => setForm(f => ({ ...f, plan_type: e.target.value }))}>
@@ -979,10 +984,12 @@ export function PfmeaPanel() {
             <h3>PFMEA 신규 작성</h3>
             <div className="grid-2">
               <div className="form-group"><label>품번 *</label>
-                <select value={form.part_no} onChange={e => setForm(f => ({ ...f, part_no: e.target.value }))}>
-                  <option value="">선택</option>
-                  {items.map(i => <option key={i.part_no} value={i.part_no}>{i.part_no} — {i.name}</option>)}
-                </select>
+                <SearchableSelect
+                  value={form.part_no}
+                  onChange={v => setForm(f => ({ ...f, part_no: v }))}
+                  options={items.map(i => ({ value: i.part_no, label: `${i.part_no} — ${i.name}` }))}
+                  placeholder="선택"
+                />
               </div>
               <div className="form-group"><label>Rev</label><input value={form.revision} onChange={e => setForm(f => ({ ...f, revision: e.target.value }))} /></div>
             </div>
@@ -1534,10 +1541,12 @@ export function PpapPanel() {
             <h3>PPAP 신규 등록</h3>
             <div className="grid-2">
               <div className="form-group"><label>품번 *</label>
-                <select value={form.part_no} onChange={e => setForm(f => ({ ...f, part_no: e.target.value }))}>
-                  <option value="">선택</option>
-                  {items.map(i => <option key={i.part_no} value={i.part_no}>{i.part_no} — {i.name}</option>)}
-                </select>
+                <SearchableSelect
+                  value={form.part_no}
+                  onChange={v => setForm(f => ({ ...f, part_no: v }))}
+                  options={items.map(i => ({ value: i.part_no, label: `${i.part_no} — ${i.name}` }))}
+                  placeholder="선택"
+                />
               </div>
               <div className="form-group"><label>협력업체</label>
                 <select value={form.partner_id} onChange={e => setForm(f => ({ ...f, partner_id: e.target.value }))}>
@@ -1743,10 +1752,12 @@ export function MsaPanel() {
             <h3>MSA 연구 신규 등록</h3>
             <div className="grid-2">
               <div className="form-group"><label>품번</label>
-                <select value={form.part_no} onChange={e => SF('part_no', e.target.value)}>
-                  <option value="">없음</option>
-                  {items.map(i => <option key={i.part_no} value={i.part_no}>{i.part_no} — {i.name}</option>)}
-                </select>
+                <SearchableSelect
+                  value={form.part_no}
+                  onChange={v => SF('part_no', v)}
+                  options={items.map(i => ({ value: i.part_no, label: `${i.part_no} — ${i.name}` }))}
+                  placeholder="없음"
+                />
               </div>
               <div className="form-group"><label>관리특성 *</label><input value={form.characteristic} onChange={e => SF('characteristic', e.target.value)} placeholder="외경, 두께..." /></div>
               <div className="form-group"><label>사용 측정기</label>
