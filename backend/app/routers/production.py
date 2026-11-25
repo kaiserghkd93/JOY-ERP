@@ -303,6 +303,8 @@ class MonthlyPlanOut(BaseModel):
 class DailyActualIn(BaseModel):
     prod_date: date
     actual_qty: int
+    worker: str | None = None
+    machine_no: str | None = None
     note: str | None = None
 
 
@@ -495,6 +497,8 @@ def upsert_daily_actual(plan_id: int, body: DailyActualIn, db: Session = Depends
         # 기존 실적이 있으면 ledger 차이분만 조정
         diff = body.actual_qty - act.actual_qty
         act.actual_qty = body.actual_qty
+        act.worker = body.worker
+        act.machine_no = body.machine_no
         act.note = body.note
         if diff != 0:
             avg = get_avg_price(db, plan.part_no)
@@ -505,7 +509,8 @@ def upsert_daily_actual(plan_id: int, body: DailyActualIn, db: Session = Depends
                         note=f"생산실적수정({body.prod_date})")
     else:
         act = DailyActual(plan_id=plan_id, prod_date=body.prod_date,
-                          actual_qty=body.actual_qty, note=body.note)
+                          actual_qty=body.actual_qty, worker=body.worker,
+                          machine_no=body.machine_no, note=body.note)
         db.add(act)
         avg = get_avg_price(db, plan.part_no)
         ref_no = f"PROD-{plan.year}{plan.month:02d}-{plan.id}-{body.prod_date}"
@@ -623,6 +628,185 @@ def delete_weekly_plan(plan_id: int, db: Session = Depends(get_db)):
 @router.get("/weekly-plans/weeks")
 def get_weeks(year: int, month: int):
     return _month_weeks(year, month)
+
+
+# ── 주단위 실적 (수기 입력) ───────────────────────────────────────
+
+class WeeklyActualIn(BaseModel):
+    part_no: str
+    year: int
+    month: int
+    prod_date: date
+    actual_qty: int
+    worker: str | None = None
+    machine_no: str | None = None
+    note: str | None = None
+
+
+class WeeklyActualPatch(BaseModel):
+    actual_qty: int
+    worker: str | None = None
+    machine_no: str | None = None
+    note: str | None = None
+
+
+@router.get("/weekly-plans/actual")
+def list_weekly_actual(year: int, month: int, part_no: str, week_start: date, week_end: date, db: Session = Depends(get_db)):
+    """주차 내 특정 품번의 DailyActual 목록"""
+    plan = db.query(MonthlyPlan).filter(
+        MonthlyPlan.year == year, MonthlyPlan.month == month,
+        MonthlyPlan.part_no == part_no,
+    ).first()
+    if not plan:
+        return []
+    rows = db.query(DailyActual).filter(
+        DailyActual.plan_id == plan.id,
+        DailyActual.prod_date >= week_start,
+        DailyActual.prod_date <= week_end,
+    ).order_by(DailyActual.prod_date).all()
+    return [
+        {
+            "id": r.id, "prod_date": str(r.prod_date), "actual_qty": r.actual_qty,
+            "worker": r.worker, "machine_no": r.machine_no, "note": r.note,
+        }
+        for r in rows
+    ]
+
+
+@router.post("/weekly-plans/actual")
+def upsert_weekly_actual(body: WeeklyActualIn, db: Session = Depends(get_db)):
+    """주단위 실적 등록/수정 — MonthlyPlan 없으면 자동 생성"""
+    from app.models.ledger import LedgerType
+    from app.services.ledger_service import post_ledger, get_avg_price
+
+    # MonthlyPlan 자동 생성
+    plan = db.query(MonthlyPlan).filter(
+        MonthlyPlan.year == body.year, MonthlyPlan.month == body.month,
+        MonthlyPlan.part_no == body.part_no,
+    ).first()
+    if not plan:
+        plan = MonthlyPlan(year=body.year, month=body.month,
+                           part_no=body.part_no, planned_qty=0)
+        db.add(plan)
+        db.flush()
+
+    act = db.query(DailyActual).filter(
+        DailyActual.plan_id == plan.id,
+        DailyActual.prod_date == body.prod_date,
+    ).first()
+
+    if act:
+        diff = body.actual_qty - act.actual_qty
+        act.actual_qty = body.actual_qty
+        act.worker = body.worker
+        act.machine_no = body.machine_no
+        act.note = body.note
+        if diff != 0:
+            avg = get_avg_price(db, body.part_no)
+            post_ledger(db, body.part_no, body.prod_date,
+                        LedgerType.production, diff, avg,
+                        ref_type="PROD",
+                        ref_no=f"PROD-{body.year}{body.month:02d}-{plan.id}-{body.prod_date}",
+                        note=f"주단위실적수정({body.prod_date})")
+    else:
+        act = DailyActual(plan_id=plan.id, prod_date=body.prod_date,
+                          actual_qty=body.actual_qty, worker=body.worker,
+                          machine_no=body.machine_no, note=body.note)
+        db.add(act)
+        avg = get_avg_price(db, body.part_no)
+        post_ledger(db, body.part_no, body.prod_date,
+                    LedgerType.production, body.actual_qty, avg,
+                    ref_type="PROD",
+                    ref_no=f"PROD-{body.year}{body.month:02d}-{plan.id}-{body.prod_date}",
+                    note=f"주단위실적등록({body.prod_date})")
+
+    db.commit()
+    return {"ok": True, "actual_id": act.id}
+
+
+@router.put("/weekly-plans/actual/{actual_id}")
+def update_weekly_actual(actual_id: int, body: WeeklyActualPatch, db: Session = Depends(get_db)):
+    """기존 DailyActual 수정 (날짜 변경 없이 수량·작업자·설비 수정)"""
+    from app.models.ledger import LedgerType
+    from app.services.ledger_service import post_ledger, get_avg_price
+
+    act = db.get(DailyActual, actual_id)
+    if not act:
+        raise HTTPException(404, "실적 없음")
+
+    plan = db.get(MonthlyPlan, act.plan_id)
+    diff = body.actual_qty - act.actual_qty
+    act.actual_qty = body.actual_qty
+    act.worker = body.worker
+    act.machine_no = body.machine_no
+    act.note = body.note
+
+    if diff != 0 and plan:
+        avg = get_avg_price(db, plan.part_no)
+        post_ledger(db, plan.part_no, act.prod_date,
+                    LedgerType.production, diff, avg,
+                    ref_type="PROD", ref_no=None,
+                    note=f"주단위실적수정({act.prod_date})")
+
+    db.commit()
+    return {"ok": True}
+
+
+@router.get("/weekly-plans/availability")
+def weekly_availability(year: int, month: int, week_no: int, db: Session = Depends(get_db)):
+    """주차 계획 대비 BOM 가용성 검사"""
+    week_plans = db.query(WeeklyPlan).filter(
+        WeeklyPlan.year == year, WeeklyPlan.month == month,
+        WeeklyPlan.week_no == week_no,
+    ).all()
+
+    if not week_plans:
+        return {"week_no": week_no, "items": [], "components": []}
+
+    all_bom = db.query(BomLine).all()
+    bom_map: dict[str, list] = {}
+    for b in all_bom:
+        bom_map.setdefault(b.product_part_no, []).append(b)
+
+    all_items_map = {i.part_no: i for i in db.query(Item).all()}
+
+    # 필요 자재 집계
+    demand: dict[str, float] = {}
+    plan_summary = []
+    for wp in week_plans:
+        item = all_items_map.get(wp.part_no)
+        bom_lines = bom_map.get(wp.part_no, [])
+        plan_summary.append({
+            "part_no": wp.part_no,
+            "part_name": item.name if item else wp.part_no,
+            "planned_qty": wp.planned_qty,
+            "bom_exists": len(bom_lines) > 0,
+        })
+        for bom in bom_lines:
+            demand[bom.component_part_no] = demand.get(bom.component_part_no, 0) + wp.planned_qty * float(bom.qty_per)
+
+    stock_map = get_stock_bulk(db, list(demand.keys())) if demand else {}
+
+    components = []
+    for comp_part, required in sorted(demand.items(), key=lambda x: -x[1]):
+        stock = stock_map.get(comp_part, 0)
+        shortage = max(0.0, required - stock)
+        comp_item = all_items_map.get(comp_part)
+        components.append({
+            "part_no": comp_part,
+            "part_name": comp_item.name if comp_item else comp_part,
+            "required_qty": round(required, 4),
+            "stock_qty": round(stock, 4),
+            "shortage_qty": round(shortage, 4),
+            "ok": shortage == 0,
+        })
+
+    return {
+        "week_no": week_no,
+        "items": plan_summary,
+        "components": components,
+        "has_shortage": any(c["shortage_qty"] > 0 for c in components),
+    }
 
 
 # ── 생산오더 가용성 검사 ──────────────────────────────────────────

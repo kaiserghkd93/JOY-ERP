@@ -283,6 +283,9 @@ with engine.connect() as _conn:
         "UPDATE worker_session SET status = '중단'  WHERE status = 'stopped'",
         # BOM 단위 g → kg 일괄 변환 (qty_per ÷ 1000, unit = 'kg')
         "UPDATE bom_line SET qty_per = ROUND(qty_per / 1000, 4), unit = 'kg' WHERE unit = 'g'",
+        # 주단위 실적 — 작업자/설비 컬럼
+        "ALTER TABLE daily_actual ADD COLUMN IF NOT EXISTS worker VARCHAR(50)",
+        "ALTER TABLE daily_actual ADD COLUMN IF NOT EXISTS machine_no VARCHAR(50)",
     ]:
         try:
             _conn.execute(_text(_sql))

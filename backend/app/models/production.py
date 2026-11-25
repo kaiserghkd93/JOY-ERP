@@ -97,6 +97,8 @@ class DailyActual(Base):
     actual_qty: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     stop_time_min: Mapped[float | None] = mapped_column(Float)     # 비가동시간(분)
     loss_code: Mapped[str | None] = mapped_column(String(2))       # 로스코드 01~09
+    worker: Mapped[str | None] = mapped_column(String(50))
+    machine_no: Mapped[str | None] = mapped_column(String(50))
     note: Mapped[str | None] = mapped_column(String(200))
 
     plan: Mapped["MonthlyPlan"] = relationship(back_populates="actuals")
