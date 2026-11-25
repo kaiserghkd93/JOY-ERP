@@ -164,7 +164,7 @@ export const PROCEDURES = [
         ]
       },
     ],
-    related_docs: ['QMS-P-001 품질경영시스템 절차', 'QMS-P-010 시정조치 절차'],
+    related_docs: ['QMS-P-001 품질경영시스템 절차', 'NCR-P-002 시정조치 및 재발방지 절차'],
     records: ['QMS-F-003 리스크 등록부', 'QMS-F-005 리스크 처리계획서'],
   },
 
