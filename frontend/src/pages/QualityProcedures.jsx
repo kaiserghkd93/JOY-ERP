@@ -3,6 +3,7 @@
  * (주)넥스젬 품질보증팀
  */
 import { useState } from 'react'
+import { printForm, hasFormTemplate } from './QualityForms'
 
 const COMPANY = '(주)넥스젬'
 const TODAY = new Date().toISOString().slice(0, 10)
@@ -1685,7 +1686,25 @@ export default function QualityProcedures() {
             title: '7. 품질 기록 (Quality Records)',
             content: (
               <ul style={{ listStyle: 'none', padding: '4px 0' }}>
-                {p.records.map(r => <li key={r} style={{ padding: '3px 4px', fontSize: 12 }}>□ {r}</li>)}
+                {p.records.map(r => {
+                  const spaceIdx = r.indexOf(' ')
+                  const formNo = spaceIdx > -1 ? r.slice(0, spaceIdx) : r
+                  const formTitle = spaceIdx > -1 ? r.slice(spaceIdx + 1) : r
+                  const hasTemplate = hasFormTemplate(formNo)
+                  return (
+                    <li key={r} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '3px 4px', fontSize: 12 }}>
+                      <span style={{ flex: 1 }}>□ {r}</span>
+                      <button
+                        className="btn btn-xs btn-outline"
+                        style={{ fontSize: 10, padding: '1px 7px', whiteSpace: 'nowrap', color: hasTemplate ? '#1e3a5f' : '#64748b', borderColor: hasTemplate ? '#1e3a5f' : '#cbd5e1' }}
+                        onClick={() => printForm(formNo, formTitle)}
+                        title={hasTemplate ? '전용 양식 출력' : '일반 양식 출력'}
+                      >
+                        🖨 {hasTemplate ? '출력' : '출력(기본)'}
+                      </button>
+                    </li>
+                  )
+                })}
               </ul>
             )
           },
