@@ -285,7 +285,7 @@ function PartnerModal({ partner, onClose, onSaved }) {
             <select value={form.partner_type} onChange={e => set('partner_type', e.target.value)}>
               <option value="외주처">Supplier (외주처)</option>
               <option value="고객">Customer (고객사)</option>
-              <option value="원자재공급처">Material Supplier</option>
+              <option value="원자재공급처">자재매입처 (원자재)</option>
               <option value="공용">Common</option>
             </select>
           </div>
@@ -672,8 +672,8 @@ export default function Master() {
                 <tr key={p.partner_id} style={!p.active ? {opacity:0.5, background:'#fafafa'} : {}}>
                   <td><code style={{ fontSize: 11 }}>{p.partner_id}</code></td>
                   <td>{p.name}{!p.active && <span className="badge badge-gray" style={{marginLeft:6,fontSize:9}}>비활성</span>}</td>
-                  <td><span className={`badge ${p.partner_type === '고객' ? 'badge-green' : p.partner_type === '외주처' ? 'badge-blue' : 'badge-gray'}`}>
-                    {p.partner_type === '고객' ? 'Customer' : p.partner_type === '외주처' ? 'Supplier' : p.partner_type === '공용' ? 'Common' : p.partner_type}
+                  <td><span className={`badge ${p.partner_type === '고객' ? 'badge-green' : p.partner_type === '외주처' ? 'badge-blue' : p.partner_type === '원자재공급처' ? 'badge-amber' : 'badge-gray'}`}>
+                    {p.partner_type === '고객' ? 'Customer' : p.partner_type === '외주처' ? 'Supplier' : p.partner_type === '원자재공급처' ? '자재매입처' : p.partner_type === '공용' ? 'Common' : p.partner_type}
                   </span></td>
                   <td className="text-sm">{p.business_no || '—'}</td>
                   <td className="text-sm" style={{maxWidth:180, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{p.address || '—'}</td>

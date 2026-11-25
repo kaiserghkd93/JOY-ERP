@@ -83,7 +83,7 @@ function GroupModal({ onClose, onSaved }) {
   const [appliedCo, setAppliedCo] = useState({})     // { carryover_id: apply_qty }
 
   useEffect(() => {
-    api.get('/master/partners').then(r => setPartners(r.data.filter(p => p.partner_type === '외주처')))
+    api.get('/master/partners').then(r => setPartners(r.data.filter(p => p.partner_type === '외주처' || p.partner_type === '원자재공급처' || p.partner_type === '공용')))
     api.get('/master/items').then(r => {
       const filtered = r.data.filter(i => i.item_type === 'outsourced' || i.item_type === 'raw' || i.item_type === 'sub' || i.item_type === 'finished' || i.item_type === 'semi')
       setAllItems(filtered)
@@ -314,7 +314,7 @@ function SinglePOModal({ onClose, onSaved }) {
   const [form, setForm] = useState({ partner_id: '', part_no: '', qty: '', order_date: '', due_date: '' })
 
   useEffect(() => {
-    api.get('/master/partners').then(r => setPartners(r.data.filter(p => p.partner_type === '외주처')))
+    api.get('/master/partners').then(r => setPartners(r.data.filter(p => p.partner_type === '외주처' || p.partner_type === '원자재공급처' || p.partner_type === '공용')))
     api.get('/master/items').then(r => setItems(r.data.filter(i => i.item_type === '외주품' || i.item_type === '원자재')))
   }, [])
 
