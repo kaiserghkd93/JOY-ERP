@@ -247,6 +247,58 @@ def cancel_sh(sh_no: str, db: Session = Depends(get_db)):
     return cancel_shipment(db, sh_no)
 
 
+@router.patch("/shipments/{sh_no}")
+def update_shipment(sh_no: str, body: dict, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+    """출하 수량·단가 수정 — 고객사 명세서 오류 정정용"""
+    from app.services.ledger_service import get_avg_price, post_ledger
+    from app.models.ledger import LedgerType
+
+    sh = db.query(Shipment).filter(Shipment.sh_no == sh_no).first()
+    if not sh:
+        raise HTTPException(404, f"출하 없음: {sh_no}")
+    if sh.status == ShipmentStatus.cancelled:
+        raise HTTPException(400, "취소된 출하는 수정할 수 없습니다")
+
+    old_qty = sh.qty
+    new_qty = int(body.get("qty", old_qty))
+    note = (body.get("note") or "").strip()
+
+    if new_qty <= 0:
+        raise HTTPException(400, "수량은 1 이상이어야 합니다")
+
+    if new_qty != old_qty:
+        avg = get_avg_price(db, sh.part_no)
+        post_ledger(db, sh.part_no, sh.ship_date, LedgerType.shipment, old_qty, avg,
+                    ref_type="SH", ref_no=sh_no, note="수량수정(취소)")
+        post_ledger(db, sh.part_no, sh.ship_date, LedgerType.shipment, -new_qty, avg,
+                    ref_type="SH", ref_no=sh_no, note=f"수량수정({note or '고객요청'})")
+        sh.qty = new_qty
+
+    if "unit_price" in body and body["unit_price"] is not None:
+        sh.unit_price = float(body["unit_price"])
+
+    if note:
+        sh.note = ((sh.note or "") + f" [수정:{note}]").strip()
+
+    # SO 상태 재계산
+    so = db.get(SalesOrder, sh.so_no)
+    if so and so.status != SOStatus.cancelled:
+        total_shipped = int(
+            db.query(func.coalesce(func.sum(Shipment.qty), 0))
+            .filter(Shipment.so_no == sh.so_no, Shipment.status == ShipmentStatus.confirmed)
+            .scalar()
+        )
+        if total_shipped <= 0:
+            so.status = SOStatus.open
+        elif total_shipped < so.qty:
+            so.status = SOStatus.partial
+        else:
+            so.status = SOStatus.closed
+
+    db.commit()
+    return {"sh_no": sh_no, "qty": sh.qty, "unit_price": float(sh.unit_price)}
+
+
 @router.get("/shipments", response_model=list[ShipmentOut])
 def list_shipments(
     partner_id: str | None = None,

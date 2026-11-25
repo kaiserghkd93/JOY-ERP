@@ -920,6 +920,21 @@ export default function Sales() {
   const yearOptions = [now.getFullYear()-1, now.getFullYear(), now.getFullYear()+1]
 
   const [editSO, setEditSO] = useState(null) // { so_no, qty, due_date }
+  const [editShip, setEditShip] = useState(null) // { sh_no, qty, unit_price, note }
+
+  const updateShip = async () => {
+    try {
+      await api.patch(`/sales/shipments/${encodeURIComponent(editShip.sh_no)}`, {
+        qty: +editShip.qty,
+        unit_price: +editShip.unit_price,
+        note: editShip.note,
+      })
+      setEditShip(null)
+      load()
+    } catch (e) {
+      alert(e.response?.data?.detail || '수정 실패')
+    }
+  }
 
   const updateSO = async () => {
     try {
@@ -1238,11 +1253,12 @@ export default function Sales() {
                   <th>단가</th>
                   <th>출하일</th>
                   <th>상태</th>
+                  <th>수정</th>
                   <th>취소</th>
                 </tr>
               </thead>
               <tbody>
-                {groupList.length === 0 && <tr><td colSpan={9} className="empty">출하 없음</td></tr>}
+                {groupList.length === 0 && <tr><td colSpan={10} className="empty">출하 없음</td></tr>}
                 {groupList.map(g => {
                   const key = `${g.partner_id}||${g.ship_date}`
                   const collapsed = collapsedGroups.has(key)
@@ -1274,19 +1290,53 @@ export default function Sales() {
                         </td>
                       </tr>
                       {/* 개별 행 — 접히면 숨김 */}
-                      {!collapsed && g.rows.map(s => (
-                        <tr key={s.sh_no} style={{ background: '#fafbfc' }}>
+                      {!collapsed && g.rows.map(s => {
+                        const isEditing = editShip?.sh_no === s.sh_no
+                        return (
+                        <tr key={s.sh_no} style={{ background: isEditing ? '#eff6ff' : '#fafbfc' }}>
                           <td></td>
                           <td style={{ paddingLeft: 12, fontFamily: 'monospace', fontSize: 12 }}>{s.sh_no}</td>
                           <td style={{ fontSize: 12 }}>{s.so_no}</td>
                           <td style={{ fontSize: 12 }}>{s.part_no}</td>
-                          <td>{s.qty?.toLocaleString()}</td>
-                          <td>₩{fmtPrice(s.unit_price)}</td>
+                          <td>
+                            {isEditing
+                              ? <input type="number" value={editShip.qty}
+                                  onChange={e => setEditShip(sh => ({ ...sh, qty: e.target.value }))}
+                                  style={{ width: 70, padding: '2px 4px', border: '1px solid #1d4ed8', borderRadius: 3, fontSize: 12 }} />
+                              : s.qty?.toLocaleString()}
+                          </td>
+                          <td>
+                            {isEditing
+                              ? <input type="number" value={editShip.unit_price}
+                                  onChange={e => setEditShip(sh => ({ ...sh, unit_price: e.target.value }))}
+                                  style={{ width: 90, padding: '2px 4px', border: '1px solid #1d4ed8', borderRadius: 3, fontSize: 12 }} />
+                              : `₩${fmtPrice(s.unit_price)}`}
+                          </td>
                           <td>{s.ship_date}</td>
                           <td><span className={`badge ${s.status === '확정' ? 'badge-green' : s.status === '취소' ? 'badge-red' : 'badge-amber'}`}>{s.status}</span></td>
+                          <td>
+                            {isEditing ? (
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                                <input value={editShip.note} onChange={e => setEditShip(sh => ({ ...sh, note: e.target.value }))}
+                                  placeholder="수정사유" style={{ width: 100, padding: '2px 4px', border: '1px solid #93c5fd', borderRadius: 3, fontSize: 11 }} />
+                                <div style={{ display: 'flex', gap: 3 }}>
+                                  <button className="btn btn-sm btn-primary" onClick={updateShip}>저장</button>
+                                  <button className="btn btn-sm btn-outline" onClick={() => setEditShip(null)}>취소</button>
+                                </div>
+                              </div>
+                            ) : (
+                              s.status !== '취소' && (
+                                <button className="btn btn-sm btn-outline"
+                                  onClick={() => setEditShip({ sh_no: s.sh_no, qty: s.qty, unit_price: s.unit_price, note: '' })}>
+                                  수정
+                                </button>
+                              )
+                            )}
+                          </td>
                           <td>{s.status !== '취소' && <button className="btn btn-sm btn-danger" onClick={() => cancelShip(s.sh_no)}>취소</button>}</td>
                         </tr>
-                      ))}
+                        )
+                      })}
                     </>
                   )
                 })}
