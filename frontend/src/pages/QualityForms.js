@@ -1650,6 +1650,49 @@ const FORM_MAP = {
   'VDA-F-022':  vdaF022,
 }
 
+// ─────────────────────────────────────────────────────────────
+// 양식 카탈로그 (서식 자료실 UI 용)
+// ─────────────────────────────────────────────────────────────
+export const FORMS_LIST = [
+  // 검사 양식
+  { no: 'IQC-F-001',  title: '수입검사 성적서',          category: '검사 (Inspection)' },
+  { no: 'IPQC-F-001', title: '초물검사표',               category: '검사 (Inspection)' },
+  { no: 'IPQC-F-002', title: '공정검사 성적서',           category: '검사 (Inspection)' },
+  { no: 'IPQC-F-003', title: 'SPC 관리도 (X̄-R Chart)',   category: '검사 (Inspection)' },
+  { no: 'OQC-F-001',  title: '출하검사 성적서',           category: '검사 (Inspection)' },
+  // 부적합 / CAPA
+  { no: 'NCR-F-001',  title: '부적합 보고서',             category: '부적합·CAPA' },
+  { no: 'NCR-F-002',  title: '재작업 지시서',             category: '부적합·CAPA' },
+  { no: 'NCR-F-010',  title: '시정조치 요청서 (8D CAR)',  category: '부적합·CAPA' },
+  { no: 'NCR-F-011',  title: '근본원인 분석서 (5-Why)',   category: '부적합·CAPA' },
+  { no: 'NCR-F-012',  title: 'CAPA 추적 대장',           category: '부적합·CAPA' },
+  // 품질 관리
+  { no: 'QMS-F-003',  title: '리스크 등록부',             category: '품질 관리' },
+  { no: 'QMS-F-020',  title: '품질목표 관리표',           category: '품질 관리' },
+  { no: 'QMS-F-030',  title: '역량 매트릭스',             category: '품질 관리' },
+  { no: 'QMS-F-100',  title: '출하 허가증',               category: '품질 관리' },
+  { no: 'QMS-F-101',  title: '특채승인서',                category: '품질 관리' },
+  { no: 'QMS-F-102',  title: 'ISIR 초도품 검사 보고서',  category: '품질 관리' },
+  { no: 'QMS-F-110',  title: '변경 요청서 (4M 변경)',     category: '품질 관리' },
+  // 협력업체 / 심사
+  { no: 'SUP-F-001',  title: '공급업체 평가표',           category: '협력업체·심사' },
+  { no: 'AUD-F-002',  title: '내부심사 체크리스트',       category: '협력업체·심사' },
+  { no: 'AUD-F-003',  title: '심사 지적사항 목록',        category: '협력업체·심사' },
+  // VDA 6.3
+  { no: 'VDA-F-001',  title: 'VDA 6.3 심사 보고서',      category: 'VDA 6.3' },
+  { no: 'VDA-F-002',  title: '개선계획서 (Improvement Plan)', category: 'VDA 6.3' },
+  { no: 'VDA-F-003',  title: '거북이 다이어그램 (Turtle Diagram)', category: 'VDA 6.3' },
+  { no: 'VDA-F-004',  title: '잠재성 분석 체크시트',      category: 'VDA 6.3' },
+  { no: 'VDA-F-005',  title: '공정심사 질문서 (P5~P7)',   category: 'VDA 6.3' },
+  { no: 'VDA-F-010',  title: '설비 PM 계획서',            category: 'VDA 6.3' },
+  { no: 'VDA-F-011',  title: 'Poka-Yoke 점검 대장',       category: 'VDA 6.3' },
+  { no: 'VDA-F-012',  title: '작업자 역량 매트릭스',      category: 'VDA 6.3' },
+  { no: 'VDA-F-014',  title: '5S 점검표',                 category: 'VDA 6.3' },
+  { no: 'VDA-F-020',  title: '고객요구사항 (CSR) 목록',   category: 'VDA 6.3' },
+  { no: 'VDA-F-021',  title: '고객 성과 KPI 보고서',      category: 'VDA 6.3' },
+  { no: 'VDA-F-022',  title: 'PPAP 패키지 체크리스트',    category: 'VDA 6.3' },
+]
+
 export function printForm(no, title) {
   const rev = '01'
   const generator = FORM_MAP[no]

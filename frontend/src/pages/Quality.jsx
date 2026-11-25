@@ -5,6 +5,7 @@ import { getRole, isMaster } from '../auth'
 import { SpcPanel, ControlPlanPanel, PfmeaPanel, CalibrationPanel, AuditPanel, PpapPanel, MsaPanel } from './QualityAdvanced'
 import { printIqcReport, printIpqcReport, printOqcReport, printNcr8D } from './QualityPrint'
 import QualityProcedures from './QualityProcedures'
+import QualityFormsLibrary from './QualityFormsLibrary'
 
 const AQL_OPTIONS = [0.065, 0.1, 0.15, 0.25, 0.4, 0.65, 1.0, 1.5, 2.5, 4.0, 6.5]
 
@@ -1665,7 +1666,7 @@ export default function Quality() {
               ['claims','클레임 목록'], ['rates','외주처별 불량율'], ['loss','공정불량 로스'],
               ['spc','SPC 관리도'], ['cp','관리계획서'], ['pfmea','PFMEA'],
               ['calib','교정관리'], ['audit','내부감사'], ['ppap','PPAP'], ['msa','MSA'],
-              ['drawing','📐 도면조회'], ['procedures','📋 절차서'], ['report','보고서']
+              ['drawing','📐 도면조회'], ['procedures','📋 절차서'], ['forms','📄 서식 자료실'], ['report','보고서']
             ].map(([v,l])=>(
               <button key={v} className={`qdate-btn${tab===v?' active':''}`} onClick={()=>setTab(v)}>{l}</button>
             ))}
@@ -2513,6 +2514,7 @@ export default function Quality() {
 
       {tab === 'drawing' && <DrawingLookupPanel items={itemMaster} />}
       {tab === 'procedures' && <QualityProcedures />}
+      {tab === 'forms' && <QualityFormsLibrary />}
       {tab === 'report' && <QualityReportPanel />}
 
       {showNcrModal && (
