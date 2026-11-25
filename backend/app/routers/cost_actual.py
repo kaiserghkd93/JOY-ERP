@@ -154,12 +154,23 @@ def monthly_cost_summary(
     )
     prod_total = sum(e.qty * float(e.unit_price) for e in prod_inputs)
 
+    # 주단위 실적 직접노무비 집계
+    from app.models.production import DailyActual, MonthlyPlan
+    labor_rows = db.query(func.sum(DailyActual.labor_cost_won)).join(
+        MonthlyPlan, DailyActual.plan_id == MonthlyPlan.id
+    ).filter(
+        MonthlyPlan.year == year, MonthlyPlan.month == month,
+        DailyActual.labor_cost_won > 0,
+    ).scalar()
+    direct_labor_total = float(labor_rows or 0)
+
     return {
         "year": year,
         "month": month,
         "purchase_amount": round(purchase_total, 0),
         "consumption_amount": round(consumption_total, 0),
         "production_amount": round(prod_total, 0),
+        "direct_labor_amount": round(direct_labor_total, 0),
         "receipt_count": len(receipts),
     }
 

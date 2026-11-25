@@ -638,16 +638,39 @@ class WeeklyActualIn(BaseModel):
     month: int
     prod_date: date
     actual_qty: int
-    worker: str | None = None
+    worker_id: str | None = None   # hr_employee.emp_id
     machine_no: str | None = None
     note: str | None = None
 
 
 class WeeklyActualPatch(BaseModel):
     actual_qty: int
-    worker: str | None = None
+    worker_id: str | None = None
     machine_no: str | None = None
     note: str | None = None
+
+
+def _calc_labor_cost(db: Session, worker_id: str | None, prod_date: date, actual_qty: int) -> tuple[str | None, float]:
+    """사원ID + 날짜 → (사원이름, 직접노무비 원)"""
+    if not worker_id or actual_qty <= 0:
+        return None, 0.0
+    from app.models.hr import Employee, Attendance
+    emp = db.get(Employee, worker_id)
+    if not emp:
+        return None, 0.0
+    # 통상시급 계산
+    if emp.emp_type == "hourly":
+        hourly = float(emp.hourly_rate or 0)
+    else:
+        std_hrs = float(emp.std_monthly_hours or 209)
+        hourly = float(emp.base_salary or 0) / std_hrs if std_hrs > 0 else 0.0
+    # 당일 근무시간 (근태 우선, 없으면 8h)
+    att = db.query(Attendance).filter(
+        Attendance.emp_id == worker_id, Attendance.work_date == prod_date
+    ).first()
+    work_hrs = float(att.work_hrs or 8.0) if att else 8.0
+    labor_cost = round(hourly * work_hrs, 2)
+    return emp.name, labor_cost
 
 
 @router.get("/weekly-plans/actual")
@@ -667,7 +690,9 @@ def list_weekly_actual(year: int, month: int, part_no: str, week_start: date, we
     return [
         {
             "id": r.id, "prod_date": str(r.prod_date), "actual_qty": r.actual_qty,
-            "worker": r.worker, "machine_no": r.machine_no, "note": r.note,
+            "worker": r.worker, "worker_id": r.worker_id,
+            "machine_no": r.machine_no, "note": r.note,
+            "labor_cost_won": float(r.labor_cost_won or 0),
         }
         for r in rows
     ]
@@ -695,11 +720,15 @@ def upsert_weekly_actual(body: WeeklyActualIn, db: Session = Depends(get_db)):
         DailyActual.prod_date == body.prod_date,
     ).first()
 
+    worker_name, labor_cost = _calc_labor_cost(db, body.worker_id, body.prod_date, body.actual_qty)
+
     if act:
         diff = body.actual_qty - act.actual_qty
         act.actual_qty = body.actual_qty
-        act.worker = body.worker
+        act.worker_id = body.worker_id
+        act.worker = worker_name
         act.machine_no = body.machine_no
+        act.labor_cost_won = labor_cost
         act.note = body.note
         if diff != 0:
             avg = get_avg_price(db, body.part_no)
@@ -710,8 +739,9 @@ def upsert_weekly_actual(body: WeeklyActualIn, db: Session = Depends(get_db)):
                         note=f"주단위실적수정({body.prod_date})")
     else:
         act = DailyActual(plan_id=plan.id, prod_date=body.prod_date,
-                          actual_qty=body.actual_qty, worker=body.worker,
-                          machine_no=body.machine_no, note=body.note)
+                          actual_qty=body.actual_qty, worker_id=body.worker_id,
+                          worker=worker_name, machine_no=body.machine_no,
+                          labor_cost_won=labor_cost, note=body.note)
         db.add(act)
         avg = get_avg_price(db, body.part_no)
         post_ledger(db, body.part_no, body.prod_date,
@@ -721,7 +751,7 @@ def upsert_weekly_actual(body: WeeklyActualIn, db: Session = Depends(get_db)):
                     note=f"주단위실적등록({body.prod_date})")
 
     db.commit()
-    return {"ok": True, "actual_id": act.id}
+    return {"ok": True, "actual_id": act.id, "worker": worker_name, "labor_cost_won": labor_cost}
 
 
 @router.put("/weekly-plans/actual/{actual_id}")
@@ -735,10 +765,13 @@ def update_weekly_actual(actual_id: int, body: WeeklyActualPatch, db: Session = 
         raise HTTPException(404, "실적 없음")
 
     plan = db.get(MonthlyPlan, act.plan_id)
+    worker_name, labor_cost = _calc_labor_cost(db, body.worker_id, act.prod_date, body.actual_qty)
     diff = body.actual_qty - act.actual_qty
     act.actual_qty = body.actual_qty
-    act.worker = body.worker
+    act.worker_id = body.worker_id
+    act.worker = worker_name
     act.machine_no = body.machine_no
+    act.labor_cost_won = labor_cost
     act.note = body.note
 
     if diff != 0 and plan:
@@ -749,7 +782,7 @@ def update_weekly_actual(actual_id: int, body: WeeklyActualPatch, db: Session = 
                     note=f"주단위실적수정({act.prod_date})")
 
     db.commit()
-    return {"ok": True}
+    return {"ok": True, "worker": worker_name, "labor_cost_won": labor_cost}
 
 
 @router.get("/weekly-plans/availability")

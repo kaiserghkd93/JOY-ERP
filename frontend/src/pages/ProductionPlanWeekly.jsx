@@ -13,6 +13,7 @@ export default function ProductionPlanWeekly() {
   const [weeks, setWeeks] = useState([])
   const [plans, setPlans] = useState([])
   const [items, setItems] = useState([])
+  const [employees, setEmployees] = useState([])
 
   // 계획 추가 모달
   const [showForm, setShowForm] = useState(false)
@@ -22,8 +23,8 @@ export default function ProductionPlanWeekly() {
 
   // 실적 입력 모달
   const [actualModal, setActualModal] = useState(null) // { plan: {...}, actuals: [...] }
-  const [actualForm, setActualForm] = useState({ prod_date: fmtDate(now), actual_qty: '', worker: '', machine_no: '', note: '' })
-  const [editingActual, setEditingActual] = useState(null) // { id, actual_qty, worker, machine_no, note }
+  const [actualForm, setActualForm] = useState({ prod_date: fmtDate(now), actual_qty: '', worker_id: '', machine_no: '', note: '' })
+  const [editingActual, setEditingActual] = useState(null)
   const [actualLoading, setActualLoading] = useState(false)
 
   // 가용성 검사
@@ -46,6 +47,7 @@ export default function ProductionPlanWeekly() {
     loadWeeks()
     loadPlans()
     api.get('/master/items?active_only=true').then(r => setItems(r.data)).catch(() => {})
+    api.get('/hr/employees?active_only=true').then(r => setEmployees(r.data)).catch(() => {})
     setAvail(null)
   }, [loadWeeks, loadPlans])
 
@@ -87,7 +89,7 @@ export default function ProductionPlanWeekly() {
     if (!currentWeek) return
     setActualLoading(true)
     setActualModal({ plan, actuals: [] })
-    setActualForm({ prod_date: currentWeek.start, actual_qty: '', worker: '', machine_no: '', note: '' })
+    setActualForm({ prod_date: currentWeek.start, actual_qty: '', worker_id: '', machine_no: '', note: '' })
     setEditingActual(null)
     try {
       const r = await api.get(`/production/weekly-plans/actual`, {
@@ -118,11 +120,11 @@ export default function ProductionPlanWeekly() {
         part_no: plan.part_no, year, month,
         prod_date: actualForm.prod_date,
         actual_qty: +actualForm.actual_qty,
-        worker: actualForm.worker || null,
+        worker_id: actualForm.worker_id || null,
         machine_no: actualForm.machine_no || null,
         note: actualForm.note || null,
       })
-      setActualForm(f => ({ ...f, actual_qty: '', worker: '', machine_no: '', note: '' }))
+      setActualForm(f => ({ ...f, actual_qty: '', worker_id: '', machine_no: '', note: '' }))
       await refreshActuals(plan)
     } catch (e) {
       alert('등록 실패: ' + (e.response?.data?.detail || e.message))
@@ -135,7 +137,7 @@ export default function ProductionPlanWeekly() {
     try {
       await api.put(`/production/weekly-plans/actual/${editingActual.id}`, {
         actual_qty: +editingActual.actual_qty,
-        worker: editingActual.worker || null,
+        worker_id: editingActual.worker_id || null,
         machine_no: editingActual.machine_no || null,
         note: editingActual.note || null,
       })
@@ -424,7 +426,9 @@ export default function ProductionPlanWeekly() {
                   <thead>
                     <tr>
                       <th>날짜</th><th style={{ textAlign: 'right' }}>수량</th>
-                      <th>작업자</th><th>설비</th><th>비고</th><th></th>
+                      <th>작업자</th><th>설비</th>
+                      <th style={{ textAlign: 'right' }}>노무비</th>
+                      <th>비고</th><th></th>
                     </tr>
                   </thead>
                   <tbody>
@@ -432,22 +436,26 @@ export default function ProductionPlanWeekly() {
                       <tr key={a.id} style={{ background: '#fffbeb' }}>
                         <td style={{ fontSize: 11, color: '#64748b' }}>{a.prod_date}</td>
                         <td>
-                          <input type="number" className="form-control" style={{ width: 80, padding: '2px 6px', fontSize: 12 }}
+                          <input type="number" className="form-control" style={{ width: 72, padding: '2px 6px', fontSize: 12 }}
                             value={editingActual.actual_qty}
                             onChange={e => setEditingActual(x => ({ ...x, actual_qty: e.target.value }))} />
                         </td>
                         <td>
-                          <input className="form-control" style={{ width: 80, padding: '2px 6px', fontSize: 12 }}
-                            value={editingActual.worker || ''}
-                            onChange={e => setEditingActual(x => ({ ...x, worker: e.target.value }))} />
+                          <select className="form-control" style={{ width: 100, padding: '2px 4px', fontSize: 12 }}
+                            value={editingActual.worker_id || ''}
+                            onChange={e => setEditingActual(x => ({ ...x, worker_id: e.target.value }))}>
+                            <option value="">—</option>
+                            {employees.map(e => <option key={e.emp_id} value={e.emp_id}>{e.name}</option>)}
+                          </select>
                         </td>
                         <td>
-                          <input className="form-control" style={{ width: 80, padding: '2px 6px', fontSize: 12 }}
+                          <input className="form-control" style={{ width: 72, padding: '2px 6px', fontSize: 12 }}
                             value={editingActual.machine_no || ''}
                             onChange={e => setEditingActual(x => ({ ...x, machine_no: e.target.value }))} />
                         </td>
+                        <td style={{ color: '#94a3b8', fontSize: 11 }}>저장 후 계산</td>
                         <td>
-                          <input className="form-control" style={{ width: 80, padding: '2px 6px', fontSize: 12 }}
+                          <input className="form-control" style={{ width: 72, padding: '2px 6px', fontSize: 12 }}
                             value={editingActual.note || ''}
                             onChange={e => setEditingActual(x => ({ ...x, note: e.target.value }))} />
                         </td>
@@ -464,11 +472,14 @@ export default function ProductionPlanWeekly() {
                         <td style={{ textAlign: 'right', fontWeight: 700, color: '#1d4ed8' }}>{(+a.actual_qty).toLocaleString()}</td>
                         <td style={{ color: '#374151' }}>{a.worker || <span style={{ color: '#94a3b8' }}>—</span>}</td>
                         <td style={{ color: '#374151' }}>{a.machine_no || <span style={{ color: '#94a3b8' }}>—</span>}</td>
+                        <td style={{ textAlign: 'right', fontSize: 11, color: a.labor_cost_won > 0 ? '#166534' : '#94a3b8' }}>
+                          {a.labor_cost_won > 0 ? `${Math.round(a.labor_cost_won).toLocaleString()}원` : '—'}
+                        </td>
                         <td style={{ color: '#94a3b8', fontSize: 11 }}>{a.note || ''}</td>
                         <td>
                           <div style={{ display: 'flex', gap: 4 }}>
                             <button className="btn btn-sm" style={{ background: '#eff6ff', color: '#1d4ed8', border: 'none', fontSize: 11 }}
-                              onClick={() => setEditingActual({ id: a.id, actual_qty: a.actual_qty, worker: a.worker, machine_no: a.machine_no, note: a.note })}>
+                              onClick={() => setEditingActual({ id: a.id, actual_qty: a.actual_qty, worker_id: a.worker_id, machine_no: a.machine_no, note: a.note })}>
                               수정
                             </button>
                             <button className="btn btn-sm" style={{ background: '#fee2e2', color: '#dc2626', border: 'none', fontSize: 11 }}
@@ -499,10 +510,14 @@ export default function ProductionPlanWeekly() {
                     placeholder="0" />
                 </div>
                 <div className="form-group">
-                  <label style={{ fontSize: 12 }}>작업자</label>
-                  <input className="form-control" value={actualForm.worker}
-                    onChange={e => setActualForm(f => ({ ...f, worker: e.target.value }))}
-                    placeholder="이름" />
+                  <label style={{ fontSize: 12 }}>작업자 <span style={{ color: '#94a3b8', fontWeight: 400 }}>(사원 선택 시 노무비 자동계산)</span></label>
+                  <select className="form-control" value={actualForm.worker_id}
+                    onChange={e => setActualForm(f => ({ ...f, worker_id: e.target.value }))}>
+                    <option value="">— 선택 —</option>
+                    {employees.map(e => (
+                      <option key={e.emp_id} value={e.emp_id}>{e.name} ({e.dept || e.position || e.emp_id})</option>
+                    ))}
+                  </select>
                 </div>
                 <div className="form-group">
                   <label style={{ fontSize: 12 }}>설비번호</label>
@@ -511,6 +526,19 @@ export default function ProductionPlanWeekly() {
                     placeholder="설비 ID" />
                 </div>
               </div>
+              {actualForm.worker_id && (() => {
+                const emp = employees.find(e => e.emp_id === actualForm.worker_id)
+                if (!emp) return null
+                const stdHrs = emp.std_monthly_hours || 209
+                const hourly = emp.emp_type === 'hourly'
+                  ? (emp.hourly_rate || 0)
+                  : Math.round((emp.base_salary || 0) / stdHrs)
+                return (
+                  <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, padding: '8px 12px', marginBottom: 8, fontSize: 12, color: '#166534' }}>
+                    통상시급 <strong>{hourly.toLocaleString()}원</strong> × 근무시간(근태 or 8h) → 노무비 자동 계산됩니다
+                  </div>
+                )
+              })()}
               <div className="form-group">
                 <label style={{ fontSize: 12 }}>비고</label>
                 <input className="form-control" value={actualForm.note}

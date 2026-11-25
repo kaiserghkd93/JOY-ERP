@@ -286,6 +286,9 @@ with engine.connect() as _conn:
         # 주단위 실적 — 작업자/설비 컬럼
         "ALTER TABLE daily_actual ADD COLUMN IF NOT EXISTS worker VARCHAR(50)",
         "ALTER TABLE daily_actual ADD COLUMN IF NOT EXISTS machine_no VARCHAR(50)",
+        # 주단위 실적 — 사원 FK + 노무비
+        "ALTER TABLE daily_actual ADD COLUMN IF NOT EXISTS worker_id VARCHAR(20)",
+        "ALTER TABLE daily_actual ADD COLUMN IF NOT EXISTS labor_cost_won NUMERIC(15,2) DEFAULT 0",
     ]:
         try:
             _conn.execute(_text(_sql))
