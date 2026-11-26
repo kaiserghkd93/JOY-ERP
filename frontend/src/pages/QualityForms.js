@@ -89,345 +89,832 @@ function rows(n, cols) {
 
 function iqcF001() {
   return `
-<table><tr>
-  <td class="lc">GR No.</td><td></td>
-  <td class="lc">검사일자</td><td></td>
-  <td class="lc">공급업체명</td><td></td>
-</tr><tr>
-  <td class="lc">품번</td><td></td>
-  <td class="lc">품명</td><td></td>
-  <td class="lc">발주번호</td><td></td>
-</tr><tr>
-  <td class="lc">입고수량</td><td></td>
-  <td class="lc">샘플수</td><td></td>
-  <td class="lc">AQL 수준</td><td></td>
-</tr></table>
+<!-- ── 기본 정보 ── -->
+<div class="d-info">
+  <table style="border:none"><tr>
+    <td style="border:none" class="lc2">입고번호 (GR No.)</td><td style="border:none;width:130px"></td>
+    <td style="border:none" class="lc2">검사일자</td><td style="border:none;width:110px"></td>
+    <td style="border:none" class="lc2">발주번호 (PO No.)</td><td style="border:none;width:130px"></td>
+  </tr><tr>
+    <td style="border:none" class="lc2">공급업체명</td><td style="border:none"></td>
+    <td style="border:none" class="lc2">공급업체 LOT No.</td><td style="border:none"></td>
+    <td style="border:none" class="lc2">납품서 번호</td><td style="border:none"></td>
+  </tr><tr>
+    <td style="border:none" class="lc2">품번 (Part No.)</td><td style="border:none"></td>
+    <td style="border:none" class="lc2">품명 (Part Name)</td><td style="border:none"></td>
+    <td style="border:none" class="lc2">도면 개정 번호</td><td style="border:none"></td>
+  </tr><tr>
+    <td style="border:none" class="lc2">입고수량</td><td style="border:none"></td>
+    <td style="border:none" class="lc2">샘플 수 (n)</td><td style="border:none"></td>
+    <td style="border:none" class="lc2">AQL / 검사 수준</td><td style="border:none"></td>
+  </tr><tr>
+    <td style="border:none" class="lc2">입고 유형</td>
+    <td colspan="5" style="border:none">
+      <span class="cb"></span>정기 입고 &nbsp;
+      <span class="cb"></span>신규 공급업체 &nbsp;
+      <span class="cb"></span>설계변경 후 초도 &nbsp;
+      <span class="cb"></span>재공급 (클레임 후) &nbsp;
+      <span class="cb"></span>긴급 입고
+    </td>
+  </tr></table>
+</div>
 
-<div class="sec">검사 결과</div>
+<div class="sec">외관 검사 (Visual Inspection)</div>
 <table>
-  <tr><th style="width:30px">No.</th><th>검사항목</th><th>규격 (기준값)</th>
-      <th>측정값 1</th><th>측정값 2</th><th>측정값 3</th><th>측정값 4</th><th>측정값 5</th><th style="width:50px">판정</th></tr>
-  ${rows(12, ['','','','','','','',''])}
+  <tr>
+    <th style="width:28px">No.</th>
+    <th>외관 검사 항목</th>
+    <th style="width:160px">허용 기준</th>
+    <th style="width:70px">결과</th>
+    <th>불량 내용 / 비고</th>
+  </tr>
+  <tr><td style="text-align:center;color:#bbb">1</td><td>표면 흠집·스크래치·이물 혼입</td><td>도면/외관 승인서 기준</td>
+    <td style="text-align:center"><span class="cb"></span>O &nbsp;<span class="cb"></span>×</td><td style="height:30px"></td></tr>
+  <tr><td style="text-align:center;color:#bbb">2</td><td>변형·뒤틀림·수축</td><td>허용 기준 이내</td>
+    <td style="text-align:center"><span class="cb"></span>O &nbsp;<span class="cb"></span>×</td><td></td></tr>
+  <tr><td style="text-align:center;color:#bbb">3</td><td>색상·광택·표면 상태</td><td>색상 기준서 / AAR 기준</td>
+    <td style="text-align:center"><span class="cb"></span>O &nbsp;<span class="cb"></span>×</td><td></td></tr>
+  <tr><td style="text-align:center;color:#bbb">4</td><td>라벨·각인·마킹 정확성</td><td>도면/규격 기준</td>
+    <td style="text-align:center"><span class="cb"></span>O &nbsp;<span class="cb"></span>×</td><td></td></tr>
+  <tr><td style="text-align:center;color:#bbb">5</td><td>포장 상태 및 파손 여부</td><td>포장 사양 기준</td>
+    <td style="text-align:center"><span class="cb"></span>O &nbsp;<span class="cb"></span>×</td><td></td></tr>
 </table>
 
-<div class="sec">검사 판정</div>
+<div class="sec">치수 검사 (Dimensional Inspection) — 도면 기준</div>
+<table>
+  <tr>
+    <th style="width:28px">No.</th>
+    <th>검사항목 (도면 풍선번호)</th>
+    <th style="width:120px">규격 (기준값)</th>
+    <th style="width:65px">측정값 1</th>
+    <th style="width:65px">측정값 2</th>
+    <th style="width:65px">측정값 3</th>
+    <th style="width:65px">측정값 4</th>
+    <th style="width:65px">측정값 5</th>
+    <th style="width:55px">판정</th>
+  </tr>
+  ${Array.from({length:14},(_,i)=>`
+  <tr>
+    <td style="text-align:center;color:#bbb">${i+1}</td>
+    <td style="height:28px"></td><td></td><td></td><td></td><td></td><td></td><td></td>
+    <td style="text-align:center"><span class="cb"></span>O &nbsp;<span class="cb"></span>×</td>
+  </tr>`).join('')}
+</table>
+
+<div class="sec">기능 / 재질 검사 (Functional / Material Inspection)</div>
+<table>
+  <tr>
+    <th style="width:28px">No.</th>
+    <th>검사항목</th>
+    <th style="width:160px">규격 / 기준</th>
+    <th style="width:120px">측정 결과</th>
+    <th style="width:55px">판정</th>
+    <th>비고</th>
+  </tr>
+  ${Array.from({length:5},(_,i)=>`
+  <tr>
+    <td style="text-align:center;color:#bbb">${i+1}</td>
+    <td style="height:30px"></td><td></td><td></td>
+    <td style="text-align:center"><span class="cb"></span>O &nbsp;<span class="cb"></span>×</td><td></td>
+  </tr>`).join('')}
+</table>
+
+<div class="sec">불량 현황 집계</div>
+<table>
+  <tr>
+    <th style="width:28px">No.</th>
+    <th>불량 유형</th>
+    <th style="width:70px">불량 수량</th>
+    <th style="width:90px">불량률 (%)</th>
+    <th>불량 사진 / 증거 번호</th>
+    <th style="width:120px">처리 방향</th>
+  </tr>
+  ${Array.from({length:4},(_,i)=>`
+  <tr><td style="text-align:center;color:#bbb">${i+1}</td><td style="height:28px"></td><td></td><td></td><td></td><td></td></tr>`).join('')}
+  <tr style="font-weight:700;background:#f0f4f8">
+    <td colspan="2" style="text-align:right">합계</td><td></td><td></td><td colspan="2"></td>
+  </tr>
+</table>
+
+<div class="sec">사진 / 증거 자료 첨부</div>
+<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px">
+  ${Array.from({length:3},(_,i)=>`
+  <div style="border:1px solid #aaa;min-height:80px;background:#fafafa;padding:5px">
+    <div style="font-size:7.5pt;color:#888;text-align:center;margin-bottom:4px">사진 ${i+1} (인쇄 후 부착)</div>
+  </div>`).join('')}
+</div>
+
+<div class="sec">최종 판정 (Final Verdict)</div>
 <table><tr>
-  <td class="lc">외관 검사</td><td><span class="cb"></span>합격 &nbsp; <span class="cb"></span>불합격</td>
-  <td class="lc">치수 검사</td><td><span class="cb"></span>합격 &nbsp; <span class="cb"></span>불합격</td>
-  <td class="lc">기능 검사</td><td><span class="cb"></span>합격 &nbsp; <span class="cb"></span>불합격</td>
-</tr><tr>
-  <td class="lc">종합 판정</td>
-  <td colspan="3" style="font-size:11pt;font-weight:900;text-align:center">
-    <span class="cb"></span> 합격 (PASS) &nbsp;&nbsp;&nbsp; <span class="cb"></span> 불합격 (FAIL) &nbsp;&nbsp;&nbsp; <span class="cb"></span> 특채
+  <td style="text-align:center;font-size:13pt;font-weight:900;padding:14px;width:50%">
+    <span class="cb"></span> 합격 (PASS) &nbsp;&nbsp;&nbsp;&nbsp;
+    <span class="cb"></span> 불합격 (FAIL) &nbsp;&nbsp;&nbsp;&nbsp;
+    <span class="cb"></span> 조건부 합격 / 특채
   </td>
-  <td class="lc">처리방법</td>
-  <td><span class="cb"></span>입고 &nbsp; <span class="cb"></span>반품 &nbsp; <span class="cb"></span>특채</td>
+  <td>
+    <table style="border:none;margin:0">
+      <tr><td class="lc" style="border:none">처리 방법</td>
+        <td style="border:none"><span class="cb"></span>입고 &nbsp;<span class="cb"></span>반품 &nbsp;<span class="cb"></span>전수검사 후 선별 입고 &nbsp;<span class="cb"></span>특채</td></tr>
+      <tr><td class="lc" style="border:none">불합격 수량</td><td style="border:none"></td></tr>
+      <tr><td class="lc" style="border:none">처리 완료일</td><td style="border:none"></td></tr>
+    </table>
+  </td>
 </tr></table>
 <table><tr>
-  <td class="lc">불합격 사유</td><td colspan="5" class="blank2"></td>
+  <td class="lc">불합격 / 특채 사유</td><td style="height:48px"></td>
+</tr><tr>
+  <td class="lc">CAPA 연계</td>
+  <td><span class="cb"></span>NCR 발행 필요 (NCR No.: &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;) &nbsp;&nbsp;
+      <span class="cb"></span>공급업체 경고장 발행 &nbsp;&nbsp;
+      <span class="cb"></span>해당 없음</td>
 </tr></table>
 
-<div class="sign sign3">
-  <div class="sbox"><div class="st">검사원 (서명 / 날짜)</div></div>
-  <div class="sbox"><div class="st">품질보증팀장 (검토 / 날짜)</div></div>
-  <div class="sbox"><div class="st">구매팀 확인 (서명 / 날짜)</div></div>
+<div class="sign sign4" style="margin-top:12px">
+  <div class="sbox" style="min-height:55px"><div class="st">수입검사원 (서명 / 날짜)</div></div>
+  <div class="sbox" style="min-height:55px"><div class="st">품질보증팀장 (검토 / 날짜)</div></div>
+  <div class="sbox" style="min-height:55px"><div class="st">구매팀 확인 (서명 / 날짜)</div></div>
+  <div class="sbox" style="min-height:55px"><div class="st">최종 처리 완료 확인</div></div>
 </div>`
 }
 
 function ipqcF001() {
   return `
-<table><tr>
-  <td class="lc">작업지시번호</td><td></td>
-  <td class="lc">작업일자</td><td></td>
-  <td class="lc">품번</td><td></td>
-</tr><tr>
-  <td class="lc">품명</td><td></td>
-  <td class="lc">금형번호</td><td></td>
-  <td class="lc">설비번호</td><td></td>
-</tr><tr>
-  <td class="lc">작업자</td><td></td>
-  <td class="lc">초물채취수량</td><td></td>
-  <td class="lc">검사원</td><td></td>
-</tr></table>
+<!-- ── 기본 정보 ── -->
+<div class="d-info">
+  <table style="border:none"><tr>
+    <td style="border:none" class="lc2">작업지시번호</td><td style="border:none;width:130px"></td>
+    <td style="border:none" class="lc2">작업일자 / 시각</td><td style="border:none;width:130px"></td>
+    <td style="border:none" class="lc2">캐비티 번호</td><td style="border:none;width:110px"></td>
+  </tr><tr>
+    <td style="border:none" class="lc2">품번</td><td style="border:none"></td>
+    <td style="border:none" class="lc2">품명</td><td style="border:none"></td>
+    <td style="border:none" class="lc2">도면 개정 번호</td><td style="border:none"></td>
+  </tr><tr>
+    <td style="border:none" class="lc2">금형 번호</td><td style="border:none"></td>
+    <td style="border:none" class="lc2">설비 번호</td><td style="border:none"></td>
+    <td style="border:none" class="lc2">원자재 LOT</td><td style="border:none"></td>
+  </tr><tr>
+    <td style="border:none" class="lc2">작업자</td><td style="border:none"></td>
+    <td style="border:none" class="lc2">초물 채취 수량</td><td style="border:none"></td>
+    <td style="border:none" class="lc2">수입검사원 (QA)</td><td style="border:none"></td>
+  </tr><tr>
+    <td style="border:none" class="lc2">초물 유형</td>
+    <td colspan="5" style="border:none">
+      <span class="cb"></span>신규 금형 &nbsp;
+      <span class="cb"></span>금형 수리 후 &nbsp;
+      <span class="cb"></span>조건 변경 후 &nbsp;
+      <span class="cb"></span>원자재 LOT 변경 &nbsp;
+      <span class="cb"></span>장기 미가동 후 재가동
+    </td>
+  </tr></table>
+</div>
 
-<div class="sec">초물 검사 결과 (5-SHOT 측정)</div>
+<div class="sec">성형 조건 확인 (Molding Condition Check)</div>
 <table>
-  <tr><th style="width:28px">No.</th><th>검사항목</th><th>규격 (기준값)</th>
-      <th>샘플 1</th><th>샘플 2</th><th>샘플 3</th><th>샘플 4</th><th>샘플 5</th><th style="width:45px">Xbar</th><th style="width:45px">판정</th></tr>
-  ${rows(10, ['','','','','','','','',''])}
+  <tr>
+    <th style="width:120px">조건 항목</th>
+    <th style="width:90px">작업표준 기준</th>
+    <th style="width:90px">실제 설정값</th>
+    <th style="width:70px">적합 여부</th>
+    <th>비고</th>
+  </tr>
+  <tr><td class="lc">수지 건조 온도 / 시간</td><td></td><td></td>
+    <td style="text-align:center"><span class="cb"></span>O &nbsp;<span class="cb"></span>×</td><td></td></tr>
+  <tr><td class="lc">실린더 온도 (°C)</td><td></td><td></td>
+    <td style="text-align:center"><span class="cb"></span>O &nbsp;<span class="cb"></span>×</td><td></td></tr>
+  <tr><td class="lc">금형 온도 (°C)</td><td></td><td></td>
+    <td style="text-align:center"><span class="cb"></span>O &nbsp;<span class="cb"></span>×</td><td></td></tr>
+  <tr><td class="lc">사이클 타임 (sec)</td><td></td><td></td>
+    <td style="text-align:center"><span class="cb"></span>O &nbsp;<span class="cb"></span>×</td><td></td></tr>
+  <tr><td class="lc">사출압 / 보압 (MPa)</td><td></td><td></td>
+    <td style="text-align:center"><span class="cb"></span>O &nbsp;<span class="cb"></span>×</td><td></td></tr>
 </table>
 
-<div class="sec">외관 검사</div>
-<table><tr>
-  <td class="lc">외관 판정</td>
-  <td><span class="cb"></span>합격 &nbsp; <span class="cb"></span>불합격</td>
-  <td class="lc">외관 불량 내용</td><td colspan="3" class="blank"></td>
-</tr></table>
+<div class="sec">치수 검사 — 초물 5-SHOT 측정</div>
+<table>
+  <tr>
+    <th style="width:28px">No.</th>
+    <th>검사항목 (도면 풍선번호)</th>
+    <th style="width:120px">규격 (기준값)</th>
+    <th style="width:65px">Shot 1</th>
+    <th style="width:65px">Shot 2</th>
+    <th style="width:65px">Shot 3</th>
+    <th style="width:65px">Shot 4</th>
+    <th style="width:65px">Shot 5</th>
+    <th style="width:55px">Xbar</th>
+    <th style="width:50px">판정</th>
+  </tr>
+  ${Array.from({length:12},(_,i)=>`
+  <tr>
+    <td style="text-align:center;color:#bbb">${i+1}</td>
+    <td style="height:30px"></td><td></td>
+    <td></td><td></td><td></td><td></td><td></td><td></td>
+    <td style="text-align:center"><span class="cb"></span>O &nbsp;<span class="cb"></span>×</td>
+  </tr>`).join('')}
+</table>
+<div class="note">※ 특수 특성(CC/SC) 항목은 항목명 앞에 ★ 표시 | Xbar: 5회 평균값 기입</div>
 
-<div class="sec">초물 종합 판정</div>
+<div class="sec">외관 검사 (Visual Check)</div>
+<table>
+  <tr>
+    <th style="width:28px">No.</th>
+    <th>외관 불량 유형</th>
+    <th style="width:70px">발생 여부</th>
+    <th style="width:90px">발생 위치</th>
+    <th>조치 내용</th>
+  </tr>
+  ${[
+    'Short Shot (미충전)','Sink Mark (수축흔)','Flash (버)','Weld Line (웰드라인)',
+    'Black Spot (이물질)','Warpage (뒤틀림)','Color Defect (색상 이상)','기타 외관 불량',
+  ].map((item,i)=>`
+  <tr>
+    <td style="text-align:center;color:#bbb">${i+1}</td>
+    <td>${item}</td>
+    <td style="text-align:center"><span class="cb"></span>O &nbsp;<span class="cb"></span>×</td>
+    <td></td><td style="height:28px"></td>
+  </tr>`).join('')}
+</table>
+
+<div class="sec">초물 검사 종합 판정</div>
 <table><tr>
-  <td style="text-align:center;font-size:11pt;font-weight:900;padding:12px">
-    <span class="cb"></span> 합격 → 양산 시작 &nbsp;&nbsp;&nbsp;&nbsp;
-    <span class="cb"></span> 불합격 → 조건 재조정 후 재초물 &nbsp;&nbsp;&nbsp;&nbsp;
-    <span class="cb"></span> 품질보증팀 에스컬레이션
+  <td style="text-align:center;font-size:12pt;font-weight:900;padding:16px;width:65%">
+    <span class="cb"></span> 합격 → 양산 시작 허가 &nbsp;&nbsp;&nbsp;&nbsp;
+    <span class="cb"></span> 조건부 합격 (조건 명시 후 양산) &nbsp;&nbsp;&nbsp;&nbsp;
+    <span class="cb"></span> 불합격 → 조건 재조정 후 재초물
+  </td>
+  <td style="vertical-align:top;padding:6px">
+    <div style="font-size:8pt;font-weight:700;color:#1e3a5f;margin-bottom:4px">조건부 합격 / 재조정 조건</div>
+    <div style="border:1px solid #aaa;min-height:60px;background:#fafafa;padding:5px;font-size:8pt"></div>
   </td>
 </tr></table>
-<table><tr><td class="lc">조건 재조정 내용</td><td class="blank2"></td></tr></table>
+<table><tr>
+  <td class="lc2">양산 시작 허가 시각</td><td></td>
+  <td class="lc2">재초물 예정 시각</td><td></td>
+  <td class="lc2">QA 에스컬레이션</td>
+  <td><span class="cb"></span>필요 &nbsp;<span class="cb"></span>불필요</td>
+</tr></table>
 
-<div class="sign sign3">
-  <div class="sbox"><div class="st">작업자 (서명 / 날짜)</div></div>
-  <div class="sbox"><div class="st">검사원 QA (서명 / 날짜)</div></div>
-  <div class="sbox"><div class="st">생산팀장 (승인 / 날짜)</div></div>
+<div class="sign sign4" style="margin-top:12px">
+  <div class="sbox" style="min-height:55px"><div class="st">작업자 (서명 / 날짜)</div></div>
+  <div class="sbox" style="min-height:55px"><div class="st">검사원 QA (서명 / 날짜)</div></div>
+  <div class="sbox" style="min-height:55px"><div class="st">생산팀장 (양산 허가 / 날짜)</div></div>
+  <div class="sbox" style="min-height:55px"><div class="st">품질보증팀장 (확인)</div></div>
 </div>`
 }
 
 function ipqcF002() {
   return `
-<table><tr>
-  <td class="lc">작업지시번호</td><td></td>
-  <td class="lc">검사일시</td><td></td>
-  <td class="lc">검사 회차</td><td></td>
-</tr><tr>
-  <td class="lc">품번</td><td></td>
-  <td class="lc">품명</td><td></td>
-  <td class="lc">설비/금형</td><td></td>
-</tr><tr>
-  <td class="lc">검사원</td><td></td>
-  <td class="lc">검사 주기</td><td></td>
-  <td class="lc">누계 생산수량</td><td></td>
-</tr></table>
+<!-- ── 기본 정보 ── -->
+<div class="d-info">
+  <table style="border:none"><tr>
+    <td style="border:none" class="lc2">작업지시번호</td><td style="border:none;width:130px"></td>
+    <td style="border:none" class="lc2">검사일시</td><td style="border:none;width:130px"></td>
+    <td style="border:none" class="lc2">검사 회차 / 주기</td><td style="border:none;width:110px"></td>
+  </tr><tr>
+    <td style="border:none" class="lc2">품번</td><td style="border:none"></td>
+    <td style="border:none" class="lc2">품명</td><td style="border:none"></td>
+    <td style="border:none" class="lc2">도면 개정 번호</td><td style="border:none"></td>
+  </tr><tr>
+    <td style="border:none" class="lc2">설비 번호</td><td style="border:none"></td>
+    <td style="border:none" class="lc2">금형 번호</td><td style="border:none"></td>
+    <td style="border:none" class="lc2">캐비티 번호</td><td style="border:none"></td>
+  </tr><tr>
+    <td style="border:none" class="lc2">검사원 (QA)</td><td style="border:none"></td>
+    <td style="border:none" class="lc2">누계 생산수량</td><td style="border:none"></td>
+    <td style="border:none" class="lc2">불량 누계 수량</td><td style="border:none"></td>
+  </tr></table>
+</div>
 
-<div class="sec">치수 검사 (5-SHOT)</div>
+<div class="sec">치수 순회 검사 (5-Shot 측정)</div>
 <table>
-  <tr><th style="width:28px">No.</th><th>검사항목</th><th>규격</th>
-      <th>측정 1</th><th>측정 2</th><th>측정 3</th><th>측정 4</th><th>측정 5</th><th>Xbar</th><th>판정</th></tr>
-  ${rows(8, ['','','','','','','','',''])}
+  <tr>
+    <th style="width:28px">No.</th>
+    <th>검사항목 (도면 풍선번호)</th>
+    <th style="width:120px">규격 (기준값)</th>
+    <th style="width:65px">Shot 1</th>
+    <th style="width:65px">Shot 2</th>
+    <th style="width:65px">Shot 3</th>
+    <th style="width:65px">Shot 4</th>
+    <th style="width:65px">Shot 5</th>
+    <th style="width:55px">Xbar</th>
+    <th style="width:50px">판정</th>
+  </tr>
+  ${Array.from({length:10},(_,i)=>`
+  <tr>
+    <td style="text-align:center;color:#bbb">${i+1}</td>
+    <td style="height:28px"></td><td></td>
+    <td></td><td></td><td></td><td></td><td></td><td></td>
+    <td style="text-align:center"><span class="cb"></span>O &nbsp;<span class="cb"></span>×</td>
+  </tr>`).join('')}
 </table>
+<div class="note">※ 특수 특성(CC/SC) 항목은 항목명 앞에 ★ 표시 | Xbar: 5회 측정값 평균</div>
 
 <div class="sec">외관 순회 검사</div>
 <table>
-  <tr><th style="width:28px">No.</th><th>불량 유형</th><th>불량 수량</th><th>불량률(%)</th><th>조치 내용</th></tr>
-  ${rows(5, ['','','',''])}
+  <tr>
+    <th style="width:28px">No.</th>
+    <th>불량 유형</th>
+    <th style="width:70px">불량 수량</th>
+    <th style="width:80px">불량률 (%)</th>
+    <th style="width:90px">발생 위치</th>
+    <th>조치 내용 / 조치자</th>
+  </tr>
+  ${[
+    'Short Shot (미충전)','Sink Mark (수축흔)','Flash (버)','Weld Line (웰드라인)',
+    'Black Spot (이물질)','Color Defect (색상 이상)','기타 외관 불량',
+  ].map((item,i)=>`
+  <tr>
+    <td style="text-align:center;color:#bbb">${i+1}</td>
+    <td>${item}</td>
+    <td></td><td></td><td></td><td style="height:28px"></td>
+  </tr>`).join('')}
+  <tr style="font-weight:700;background:#f0f4f8">
+    <td colspan="2" style="text-align:right">합계</td>
+    <td></td><td></td><td colspan="2"></td>
+  </tr>
 </table>
 
-<div class="sec">SPC 관리도 타점 (이상 패턴 기록)</div>
+<div class="sec">SPC 관리도 타점 및 이상 패턴 모니터링</div>
+<table>
+  <tr>
+    <td class="lc2" style="width:140px">이상 패턴 발생</td>
+    <td>
+      <span class="cb"></span>없음(정상) &nbsp;
+      <span class="cb"></span>관리한계(UCL/LCL) 초과 &nbsp;
+      <span class="cb"></span>연속 7점 추세 &nbsp;
+      <span class="cb"></span>연속 7점 편향 &nbsp;
+      <span class="cb"></span>기타
+    </td>
+  </tr>
+  <tr>
+    <td class="lc2">이상 패턴 조치</td>
+    <td style="height:40px"></td>
+  </tr>
+  <tr>
+    <td class="lc2">공정불량률</td>
+    <td>
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; % &nbsp;&nbsp;&nbsp;
+      <span class="cb"></span>임계치 미만 → 계속 생산 &nbsp;
+      <span class="cb"></span>임계치 초과 → 라인 중단 후 원인 조사
+    </td>
+  </tr>
+  <tr>
+    <td class="lc2">라인 재가동 승인</td>
+    <td></td>
+  </tr>
+</table>
+
+<div class="sec">순회 검사 종합 판정</div>
 <table><tr>
-  <td class="lc">이상 패턴</td>
-  <td><span class="cb"></span>없음 &nbsp; <span class="cb"></span>관리한계 초과 &nbsp; <span class="cb"></span>연속7점추세 &nbsp; <span class="cb"></span>기타</td>
-</tr><tr>
-  <td class="lc">조치 내용</td><td class="blank2"></td>
+  <td style="text-align:center;font-size:11pt;font-weight:900;padding:12px;width:60%">
+    <span class="cb"></span> 적합 — 계속 생산 허가 &nbsp;&nbsp;&nbsp;
+    <span class="cb"></span> 조건부 적합 — 조치 후 계속 생산 &nbsp;&nbsp;&nbsp;
+    <span class="cb"></span> 부적합 — 라인 중단 / QA 에스컬레이션
+  </td>
+  <td style="vertical-align:top;padding:6px">
+    <div style="font-size:8pt;font-weight:700;color:#1e3a5f;margin-bottom:4px">조치 사항 / 에스컬레이션 내용</div>
+    <div style="border:1px solid #aaa;min-height:55px;background:#fafafa;padding:5px;font-size:8pt"></div>
+  </td>
 </tr></table>
 
-<table><tr>
-  <td class="lc">공정불량률</td><td></td>
-  <td class="lc">임계치 초과</td>
-  <td><span class="cb"></span>미만(계속생산) &nbsp; <span class="cb"></span>초과(라인중단)</td>
-  <td class="lc">라인재가동 승인</td><td></td>
-</tr></table>
-
-<div class="sign sign3">
-  <div class="sbox"><div class="st">검사원 QA (서명 / 날짜)</div></div>
-  <div class="sbox"><div class="st">생산팀장 (확인 / 날짜)</div></div>
-  <div class="sbox"><div class="st">품질보증팀장 (검토)</div></div>
+<div class="sign sign4" style="margin-top:10px">
+  <div class="sbox" style="min-height:50px"><div class="st">검사원 QA (서명 / 날짜)</div></div>
+  <div class="sbox" style="min-height:50px"><div class="st">생산팀장 (확인 / 날짜)</div></div>
+  <div class="sbox" style="min-height:50px"><div class="st">품질보증팀장 (검토)</div></div>
+  <div class="sbox" style="min-height:50px"><div class="st">라인 재가동 승인자</div></div>
 </div>`
 }
 
 function ipqcF003() {
-  const cols = Array.from({ length: 25 }, (_, i) => `<th style="width:28px">${i + 1}</th>`).join('')
-  const xRow = Array.from({ length: 25 }, () => `<td style="height:16px;border:1px solid #ccc"></td>`).join('')
+  const cols25 = Array.from({length:25},(_,i)=>`<th style="width:28px;font-size:7pt">${i+1}</th>`).join('')
+  const dataRow = Array.from({length:25},()=>`<td style="height:18px;padding:2px;border:1px solid #ccc;text-align:center;font-size:7.5pt"></td>`).join('')
   return `
-<table><tr>
-  <td class="lc">품번</td><td></td><td class="lc">품명</td><td></td>
-  <td class="lc">관리 특성</td><td></td><td class="lc">규격</td><td></td>
-</tr><tr>
-  <td class="lc">UCL</td><td></td><td class="lc">CL (Xbar)</td><td></td>
-  <td class="lc">LCL</td><td></td><td class="lc">기간</td><td></td>
-</tr></table>
+<!-- ── 기본 정보 ── -->
+<div class="d-info">
+  <table style="border:none"><tr>
+    <td style="border:none" class="lc2">품번</td><td style="border:none;width:130px"></td>
+    <td style="border:none" class="lc2">품명</td><td style="border:none;width:130px"></td>
+    <td style="border:none" class="lc2">관리 공정</td><td style="border:none;width:110px"></td>
+  </tr><tr>
+    <td style="border:none" class="lc2">관리 특성</td><td style="border:none"></td>
+    <td style="border:none" class="lc2">측정 단위</td><td style="border:none"></td>
+    <td style="border:none" class="lc2">측정 주기</td><td style="border:none"></td>
+  </tr><tr>
+    <td style="border:none" class="lc2">관리 규격</td><td style="border:none"></td>
+    <td style="border:none" class="lc2">관리 기간</td><td style="border:none"></td>
+    <td style="border:none" class="lc2">작성자 (QA)</td><td style="border:none"></td>
+  </tr></table>
+</div>
 
-<div class="sec">Xbar 관리도 (평균값)</div>
+<div class="sec">Xbar 관리도 (평균값 — 샘플 25회)</div>
+<div class="note" style="margin-bottom:3px">※ n=5 (샘플 크기), 각 셀에 측정값 기입 | Xbar = 5개 평균 | UCL/LCL = Xbarbar ± A₂ × Rbar</div>
 <table>
-  <tr><th style="width:60px">측정일시</th>${cols}</tr>
-  <tr><td class="lc" style="font-size:7.5pt">측정값1</td>${xRow}</tr>
-  <tr><td class="lc" style="font-size:7.5pt">측정값2</td>${xRow}</tr>
-  <tr><td class="lc" style="font-size:7.5pt">측정값3</td>${xRow}</tr>
-  <tr><td class="lc" style="font-size:7.5pt">측정값4</td>${xRow}</tr>
-  <tr><td class="lc" style="font-size:7.5pt">측정값5</td>${xRow}</tr>
-  <tr><td class="lc" style="font-size:7.5pt;font-weight:900">Xbar</td>${xRow}</tr>
+  <tr>
+    <td class="lc" style="font-size:7.5pt;width:65px">회차</td>
+    ${cols25}
+  </tr>
+  <tr><td class="lc" style="font-size:7pt">x₁</td>${dataRow}</tr>
+  <tr><td class="lc" style="font-size:7pt">x₂</td>${dataRow}</tr>
+  <tr><td class="lc" style="font-size:7pt">x₃</td>${dataRow}</tr>
+  <tr><td class="lc" style="font-size:7pt">x₄</td>${dataRow}</tr>
+  <tr><td class="lc" style="font-size:7pt">x₅</td>${dataRow}</tr>
+  <tr><td class="lc" style="font-size:7pt;font-weight:900;background:#d0d8e8">Xbar</td>${dataRow}</tr>
 </table>
+<table style="margin-top:3px"><tr>
+  <td class="lc2">UCL (Xbar)</td><td style="width:120px"></td>
+  <td class="lc2">CL (Xbarbar)</td><td style="width:120px"></td>
+  <td class="lc2">LCL (Xbar)</td><td style="width:120px"></td>
+  <td class="lc2">A₂ 계수</td><td></td>
+</tr></table>
 
 <div class="sec">R 관리도 (범위값)</div>
 <table>
-  <tr><th style="width:60px">회차</th>${cols}</tr>
-  <tr><td class="lc" style="font-size:7.5pt;font-weight:900">R값</td>${xRow}</tr>
+  <tr>
+    <td class="lc" style="font-size:7.5pt;width:65px">회차</td>
+    ${cols25}
+  </tr>
+  <tr><td class="lc" style="font-size:7pt;font-weight:900;background:#d0d8e8">R값</td>${dataRow}</tr>
 </table>
-<table><tr>
-  <td class="lc">UCL(R)</td><td></td><td class="lc">CL(R)</td><td></td><td class="lc">LCL(R)</td><td></td>
-  <td class="lc">Cp</td><td></td><td class="lc">Cpk</td><td></td><td class="lc">판정</td><td></td>
+<table style="margin-top:3px"><tr>
+  <td class="lc2">UCL(R)</td><td style="width:110px"></td>
+  <td class="lc2">CL (Rbar)</td><td style="width:110px"></td>
+  <td class="lc2">LCL(R)</td><td style="width:110px"></td>
+  <td class="lc2">D₃ / D₄</td><td></td>
 </tr></table>
 
-<div class="sec">이상 패턴 기록</div>
+<div class="sec">공정능력 분석</div>
+<table><tr>
+  <td class="lc2">규격 상한 (USL)</td><td></td>
+  <td class="lc2">규격 하한 (LSL)</td><td></td>
+  <td class="lc2">규격 중심</td><td></td>
+</tr><tr>
+  <td class="lc2">Xbarbar (전체 평균)</td><td></td>
+  <td class="lc2">σ 추정값 (s̄/d₂)</td><td></td>
+  <td class="lc2">측정 단위</td><td></td>
+</tr><tr>
+  <td class="lc2">Cp</td><td></td>
+  <td class="lc2">Cpk</td><td style="font-weight:700"></td>
+  <td class="lc2">목표 Cpk</td><td>≥ 1.33</td>
+</tr><tr>
+  <td class="lc2">공정능력 판정</td>
+  <td colspan="5">
+    <span class="cb"></span>적합 (Cpk ≥ 1.33) &nbsp;
+    <span class="cb"></span>경계 (1.00 ≤ Cpk &lt; 1.33 — 개선 계획 수립) &nbsp;
+    <span class="cb"></span>부적합 (Cpk &lt; 1.00 — 즉시 조치)
+  </td>
+</tr></table>
+
+<div class="sec">이상 패턴 기록 및 조치</div>
 <table>
-  <tr><th>이상 발생 시점</th><th>이상 유형</th><th>조치 내용</th><th>조치자</th></tr>
-  ${rows(3, ['','',''])}
-</table>`
+  <tr>
+    <th style="width:28px">No.</th>
+    <th style="width:70px">이상 발생 회차</th>
+    <th style="width:120px">이상 유형</th>
+    <th>조치 내용</th>
+    <th style="width:70px">조치자</th>
+    <th style="width:80px">완료 일시</th>
+  </tr>
+  ${Array.from({length:4},(_,i)=>`
+  <tr><td style="text-align:center;color:#bbb">${i+1}</td><td></td><td></td><td style="height:28px"></td><td></td><td></td></tr>`).join('')}
+</table>
+<div class="note">※ 이상 패턴 유형: ①관리한계 초과 ②연속 7점 같은 방향 추세 ③연속 7점 중심선 편향 ④연속 2점 2σ 이상 ⑤기타</div>
+
+<div class="sign sign3">
+  <div class="sbox" style="min-height:50px"><div class="st">작성자 QA (서명 / 날짜)</div></div>
+  <div class="sbox" style="min-height:50px"><div class="st">생산팀장 (검토 / 날짜)</div></div>
+  <div class="sbox" style="min-height:50px"><div class="st">품질보증팀장 (승인)</div></div>
+</div>`
 }
 
 function oqcF001() {
   return `
-<table><tr>
-  <td class="lc">OQC 번호</td><td></td>
-  <td class="lc">검사일자</td><td></td>
-  <td class="lc">납품처</td><td></td>
-</tr><tr>
-  <td class="lc">품번</td><td></td>
-  <td class="lc">품명</td><td></td>
-  <td class="lc">납품수량</td><td></td>
-</tr><tr>
-  <td class="lc">납품일</td><td></td>
-  <td class="lc">AQL 수준</td><td></td>
-  <td class="lc">샘플수</td><td></td>
-</tr></table>
+<!-- ── 기본 정보 ── -->
+<div class="d-info">
+  <table style="border:none"><tr>
+    <td style="border:none" class="lc2">OQC 번호</td><td style="border:none;width:130px"></td>
+    <td style="border:none" class="lc2">검사일자</td><td style="border:none;width:110px"></td>
+    <td style="border:none" class="lc2">출하 지시번호</td><td style="border:none;width:130px"></td>
+  </tr><tr>
+    <td style="border:none" class="lc2">납품처</td><td style="border:none"></td>
+    <td style="border:none" class="lc2">납품 예정일</td><td style="border:none"></td>
+    <td style="border:none" class="lc2">납품 LOT No.</td><td style="border:none"></td>
+  </tr><tr>
+    <td style="border:none" class="lc2">품번</td><td style="border:none"></td>
+    <td style="border:none" class="lc2">품명</td><td style="border:none"></td>
+    <td style="border:none" class="lc2">도면 개정번호</td><td style="border:none"></td>
+  </tr><tr>
+    <td style="border:none" class="lc2">납품 수량</td><td style="border:none"></td>
+    <td style="border:none" class="lc2">샘플 수량 (AQL)</td><td style="border:none"></td>
+    <td style="border:none" class="lc2">AQL 수준</td><td style="border:none"></td>
+  </tr></table>
+</div>
 
-<div class="sec">출하 검사 결과</div>
+<div class="sec">치수 검사 결과</div>
 <table>
-  <tr><th style="width:28px">No.</th><th>검사항목</th><th>규격</th>
-      <th>측정값 1</th><th>측정값 2</th><th>측정값 3</th><th>판정</th></tr>
-  ${rows(10, ['','','','','',''])}
+  <tr>
+    <th style="width:28px">No.</th>
+    <th>검사항목 (도면 풍선번호)</th>
+    <th style="width:120px">규격 (기준값)</th>
+    <th style="width:70px">측정값 1</th>
+    <th style="width:70px">측정값 2</th>
+    <th style="width:70px">측정값 3</th>
+    <th style="width:70px">측정값 4</th>
+    <th style="width:70px">측정값 5</th>
+    <th style="width:55px">판정</th>
+  </tr>
+  ${Array.from({length:12},(_,i)=>`
+  <tr>
+    <td style="text-align:center;color:#bbb">${i+1}</td>
+    <td style="height:28px"></td><td></td>
+    <td></td><td></td><td></td><td></td><td></td>
+    <td style="text-align:center"><span class="cb"></span>O &nbsp;<span class="cb"></span>×</td>
+  </tr>`).join('')}
+</table>
+<div class="note">※ 특수 특성(CC/SC) 항목은 ★ 표시 | 불합격 항목은 적색으로 명기</div>
+
+<div class="sec">외관 검사 결과</div>
+<table>
+  <tr>
+    <th style="width:28px">No.</th>
+    <th>외관 불량 유형</th>
+    <th style="width:70px">발생 여부</th>
+    <th style="width:70px">불량 수량</th>
+    <th style="width:90px">발생 위치</th>
+    <th>판정 / 비고</th>
+  </tr>
+  ${[
+    'Short Shot (미충전)','Sink Mark (수축흔)','Flash (버)','Weld Line (웰드라인)',
+    'Black Spot (이물질)','Scratch / 긁힘','Color Defect (색상 이상)','기타 외관 불량',
+  ].map((item,i)=>`
+  <tr>
+    <td style="text-align:center;color:#bbb">${i+1}</td>
+    <td>${item}</td>
+    <td style="text-align:center"><span class="cb"></span>O &nbsp;<span class="cb"></span>×</td>
+    <td></td><td></td><td style="height:26px"></td>
+  </tr>`).join('')}
 </table>
 
-<div class="sec">포장 검사</div>
-<table><tr>
-  <td class="lc">라벨 표기</td><td><span class="cb"></span>적합 &nbsp; <span class="cb"></span>부적합</td>
-  <td class="lc">수량 확인</td><td><span class="cb"></span>적합 &nbsp; <span class="cb"></span>부적합</td>
-  <td class="lc">포장 상태</td><td><span class="cb"></span>적합 &nbsp; <span class="cb"></span>부적합</td>
-</tr></table>
+<div class="sec">포장 / 라벨 검사</div>
+<table>
+  <tr>
+    <th style="width:160px">확인 항목</th>
+    <th style="width:90px">결과</th>
+    <th>비고</th>
+  </tr>
+  ${[
+    '라벨 품번·품명 표기 정확성',
+    '수량 카운트 일치',
+    '포장 상태 (파손·이물 없음)',
+    '부적합품 혼입 없음 확인',
+    '출하 허가서 (QMS-F-100) 첨부',
+    '고객 요구 특이사항 충족',
+  ].map(item=>`
+  <tr>
+    <td class="lc">${item}</td>
+    <td style="text-align:center"><span class="cb"></span>적합 &nbsp;<span class="cb"></span>부적합</td>
+    <td style="height:24px"></td>
+  </tr>`).join('')}
+</table>
 
-<div class="sec">최종 판정</div>
+<div class="sec">OQC 최종 판정</div>
 <table><tr>
-  <td style="text-align:center;font-size:12pt;font-weight:900;padding:12px">
-    <span class="cb"></span> 합격 (출하 허가) &nbsp;&nbsp;&nbsp;
-    <span class="cb"></span> 불합격 (출하 보류) &nbsp;&nbsp;&nbsp;
-    <span class="cb"></span> 조건부 출하
+  <td style="text-align:center;font-size:13pt;font-weight:900;padding:16px;width:65%">
+    <span class="cb"></span> 합격 → 출하 허가 &nbsp;&nbsp;&nbsp;&nbsp;
+    <span class="cb"></span> 조건부 합격 (조건 명기 후 출하) &nbsp;&nbsp;&nbsp;&nbsp;
+    <span class="cb"></span> 불합격 → 출하 보류
+  </td>
+  <td style="vertical-align:top;padding:6px">
+    <div style="font-size:8pt;font-weight:700;color:#1e3a5f;margin-bottom:4px">불합격 / 조건부 사유</div>
+    <div style="border:1px solid #aaa;min-height:60px;background:#fafafa;padding:5px;font-size:8pt"></div>
   </td>
 </tr></table>
-<table><tr><td class="lc">불합격 사유</td><td class="blank2"></td></tr></table>
+<table><tr>
+  <td class="lc2">불합격 후속 조치</td>
+  <td><span class="cb"></span>전수 재검사 &nbsp;<span class="cb"></span>공급업체 반환 &nbsp;<span class="cb"></span>재작업 &nbsp;<span class="cb"></span>폐기 &nbsp;<span class="cb"></span>NCR 발행</td>
+  <td class="lc2">NCR 번호</td><td></td>
+</tr></table>
 
-<div class="sign sign4">
-  <div class="sbox"><div class="st">검사원 QA (서명)</div></div>
-  <div class="sbox"><div class="st">품질보증팀장 (승인)</div></div>
-  <div class="sbox"><div class="st">물류팀 확인</div></div>
-  <div class="sbox"><div class="st">출하 허가일시</div></div>
+<div class="sign sign4" style="margin-top:12px">
+  <div class="sbox" style="min-height:55px"><div class="st">검사원 QA (서명 / 날짜)</div></div>
+  <div class="sbox" style="min-height:55px"><div class="st">품질보증팀장 (최종 허가)</div></div>
+  <div class="sbox" style="min-height:55px"><div class="st">물류팀 (수령 확인 / 날짜)</div></div>
+  <div class="sbox" style="min-height:55px"><div class="st">출하 허가 일시</div></div>
 </div>`
 }
 
 function ncrF001() {
   return `
-<div class="sec">1. 발생 정보</div>
-<table><tr>
-  <td class="lc">NCR 번호</td><td></td>
-  <td class="lc">발생일시</td><td></td>
-  <td class="lc">발생 장소</td>
-  <td><span class="cb"></span>수입검사 &nbsp;<span class="cb"></span>공정 &nbsp;<span class="cb"></span>출하검사 &nbsp;<span class="cb"></span>고객반품</td>
-</tr><tr>
-  <td class="lc">품번</td><td></td>
-  <td class="lc">품명</td><td></td>
-  <td class="lc">LOT 번호</td><td></td>
-</tr><tr>
-  <td class="lc">부적합 수량</td><td></td>
-  <td class="lc">총 로트 수량</td><td></td>
-  <td class="lc">발견자</td><td></td>
-</tr></table>
+<!-- ── 기본 정보 ── -->
+<div class="d-info">
+  <table style="border:none"><tr>
+    <td style="border:none" class="lc2">NCR 번호</td><td style="border:none;width:140px"></td>
+    <td style="border:none" class="lc2">발생일시</td><td style="border:none;width:130px"></td>
+    <td style="border:none" class="lc2">관련 CAR 번호</td><td style="border:none;width:130px"></td>
+  </tr><tr>
+    <td style="border:none" class="lc2">품번</td><td style="border:none"></td>
+    <td style="border:none" class="lc2">품명</td><td style="border:none"></td>
+    <td style="border:none" class="lc2">도면 개정번호</td><td style="border:none"></td>
+  </tr><tr>
+    <td style="border:none" class="lc2">LOT 번호</td><td style="border:none"></td>
+    <td style="border:none" class="lc2">부적합 수량</td><td style="border:none"></td>
+    <td style="border:none" class="lc2">총 로트 수량</td><td style="border:none"></td>
+  </tr><tr>
+    <td style="border:none" class="lc2">발생 장소</td>
+    <td colspan="5" style="border:none">
+      <span class="cb"></span>수입검사(IQC) &nbsp;
+      <span class="cb"></span>공정 순회(IPQC) &nbsp;
+      <span class="cb"></span>출하검사(OQC) &nbsp;
+      <span class="cb"></span>고객 반품 &nbsp;
+      <span class="cb"></span>내부 심사 &nbsp;
+      <span class="cb"></span>기타
+    </td>
+  </tr><tr>
+    <td style="border:none" class="lc2">발견자 / 부서</td><td style="border:none"></td>
+    <td style="border:none" class="lc2">공급업체 (해당 시)</td><td style="border:none"></td>
+    <td style="border:none" class="lc2">귀책 구분</td>
+    <td style="border:none">
+      <span class="cb"></span>자사 &nbsp;<span class="cb"></span>공급업체 &nbsp;<span class="cb"></span>고객 &nbsp;<span class="cb"></span>불명
+    </td>
+  </tr></table>
+</div>
 
-<div class="sec">2. 불량 내용</div>
-<table><tr>
-  <td class="lc">불량 유형</td>
-  <td><span class="cb"></span>치수불량 &nbsp;<span class="cb"></span>외관불량 &nbsp;<span class="cb"></span>기능불량 &nbsp;<span class="cb"></span>재질불량 &nbsp;<span class="cb"></span>기타</td>
-</tr><tr>
-  <td class="lc">불량 현상</td><td class="blank2"></td>
-</tr><tr>
-  <td class="lc">사진/증거</td><td style="height:60px;font-size:8pt;color:#999">사진 첨부란 (인쇄 후 부착)</td>
-</tr></table>
+<div class="sec">1. 부적합 내용 (Nonconformance Description)</div>
+<table>
+  <tr>
+    <td class="lc2" style="width:140px">불량 유형</td>
+    <td>
+      <span class="cb"></span>치수 불량 &nbsp;
+      <span class="cb"></span>외관 불량 &nbsp;
+      <span class="cb"></span>기능 불량 &nbsp;
+      <span class="cb"></span>재질 불량 &nbsp;
+      <span class="cb"></span>문서/표기 오류 &nbsp;
+      <span class="cb"></span>기타
+    </td>
+  </tr>
+  <tr><td class="lc2">불량 현상 (구체적 기술)</td><td style="min-height:60px" class="blank3"></td></tr>
+  <tr>
+    <td class="lc2">규격 기준</td><td></td>
+  </tr>
+  <tr>
+    <td class="lc2">실측 / 발생값</td><td></td>
+  </tr>
+  <tr>
+    <td class="lc2">사진 / 증거 자료</td>
+    <td style="height:70px;font-size:8pt;color:#999;text-align:center;vertical-align:middle">
+      ▣ 사진 첨부란 (인쇄 후 부착) / 디지털 첨부 시 파일명 기재
+    </td>
+  </tr>
+</table>
 
-<div class="sec">3. 즉각 격리 조치</div>
-<table><tr>
-  <td class="lc">격리 조치</td>
-  <td><span class="cb"></span>완료 &nbsp;<span class="cb"></span>미완료 &nbsp; 격리 위치: &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</td>
-  <td class="lc">격리 완료 시각</td><td></td>
-</tr><tr>
-  <td class="lc">소급 평가</td>
-  <td><span class="cb"></span>필요(동일 LOT/공정 소급) &nbsp;<span class="cb"></span>불필요</td>
-  <td class="lc">소급 범위</td><td></td>
-</tr></table>
+<div class="sec">2. 즉각 봉쇄 조치 (Immediate Containment)</div>
+<table>
+  <tr>
+    <td class="lc2" style="width:140px">격리 조치 완료</td>
+    <td>
+      <span class="cb"></span>완료 &nbsp;<span class="cb"></span>미완료 &nbsp;&nbsp;
+      격리 위치: ___________________________
+    </td>
+    <td class="lc2" style="width:130px">격리 완료 일시</td><td style="width:120px"></td>
+  </tr>
+  <tr>
+    <td class="lc2">소급 범위 평가</td>
+    <td><span class="cb"></span>동일 LOT 전수 &nbsp;<span class="cb"></span>선행 LOT 포함 &nbsp;<span class="cb"></span>공정 소급 &nbsp;<span class="cb"></span>불필요</td>
+    <td class="lc2">소급 평가 완료</td><td></td>
+  </tr>
+  <tr>
+    <td class="lc2">봉쇄 조치 내용</td>
+    <td colspan="3" style="height:50px"></td>
+  </tr>
+</table>
 
-<div class="sec">4. 처리 결정</div>
-<table><tr>
-  <td class="lc">처리 방법</td>
-  <td><span class="cb"></span>반품 &nbsp;<span class="cb"></span>재작업 &nbsp;<span class="cb"></span>특채(조건부사용) &nbsp;<span class="cb"></span>폐기</td>
-  <td class="lc">결정자</td><td></td>
-  <td class="lc">결정일시</td><td></td>
-</tr><tr>
-  <td class="lc">처리 내용</td><td colspan="5" class="blank2"></td>
-</tr></table>
+<div class="sec">3. 처리 결정 (Disposition Decision)</div>
+<table>
+  <tr>
+    <td class="lc2" style="width:140px">처리 방법</td>
+    <td>
+      <span class="cb"></span>공급업체 반품 &nbsp;
+      <span class="cb"></span>재작업 (NCR-F-002 발행) &nbsp;
+      <span class="cb"></span>특채 사용 (QMS-F-101 승인 필요) &nbsp;
+      <span class="cb"></span>폐기
+    </td>
+  </tr>
+  <tr><td class="lc2">처리 세부 내용</td><td class="blank2"></td></tr>
+  <tr>
+    <td class="lc2">CAPA 개시 여부</td>
+    <td>
+      <span class="cb"></span>예 → CAR 발행 (CAR No: _____________) &nbsp;
+      <span class="cb"></span>아니오 (반복 발생 시 필수 개시)
+    </td>
+  </tr>
+  <tr>
+    <td class="lc2">처리 결정자</td><td></td>
+  </tr>
+</table>
 
-<table><tr>
-  <td class="lc">CAPA 개시 필요</td>
-  <td><span class="cb"></span>예 (CAR 발행: &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;) &nbsp;<span class="cb"></span>아니오</td>
-  <td class="lc">귀책</td>
-  <td><span class="cb"></span>자사 &nbsp;<span class="cb"></span>공급업체 &nbsp;<span class="cb"></span>고객 &nbsp;<span class="cb"></span>불명</td>
-</tr></table>
-
-<div class="sign sign4">
-  <div class="sbox"><div class="st">발견자 (서명)</div></div>
-  <div class="sbox"><div class="st">품질보증팀장 (결정)</div></div>
-  <div class="sbox"><div class="st">생산팀장 (확인)</div></div>
-  <div class="sbox"><div class="st">처리 완료 확인 (날짜)</div></div>
+<div class="sign sign4" style="margin-top:12px">
+  <div class="sbox" style="min-height:55px"><div class="st">발견자 (서명 / 날짜)</div></div>
+  <div class="sbox" style="min-height:55px"><div class="st">품질보증팀장 (처리 결정 / 날짜)</div></div>
+  <div class="sbox" style="min-height:55px"><div class="st">생산 / 구매팀장 (확인)</div></div>
+  <div class="sbox" style="min-height:55px"><div class="st">처리 완료 확인 (날짜)</div></div>
 </div>`
 }
 
 function ncrF002() {
   return `
-<table><tr>
-  <td class="lc">재작업 지시번호</td><td></td>
-  <td class="lc">NCR 번호</td><td></td>
-  <td class="lc">발행일</td><td></td>
-</tr><tr>
-  <td class="lc">품번</td><td></td>
-  <td class="lc">품명</td><td></td>
-  <td class="lc">재작업 수량</td><td></td>
-</tr><tr>
-  <td class="lc">재작업 담당자</td><td></td>
-  <td class="lc">완료 기한</td><td></td>
-  <td class="lc">재작업 장소</td><td></td>
-</tr></table>
+<!-- ── 기본 정보 ── -->
+<div class="d-info">
+  <table style="border:none"><tr>
+    <td style="border:none" class="lc2">재작업 지시번호</td><td style="border:none;width:140px"></td>
+    <td style="border:none" class="lc2">NCR 번호</td><td style="border:none;width:130px"></td>
+    <td style="border:none" class="lc2">발행일</td><td style="border:none;width:110px"></td>
+  </tr><tr>
+    <td style="border:none" class="lc2">품번</td><td style="border:none"></td>
+    <td style="border:none" class="lc2">품명</td><td style="border:none"></td>
+    <td style="border:none" class="lc2">도면 개정번호</td><td style="border:none"></td>
+  </tr><tr>
+    <td style="border:none" class="lc2">LOT 번호</td><td style="border:none"></td>
+    <td style="border:none" class="lc2">재작업 지시 수량</td><td style="border:none"></td>
+    <td style="border:none" class="lc2">재작업 완료 기한</td><td style="border:none"></td>
+  </tr><tr>
+    <td style="border:none" class="lc2">재작업 담당자</td><td style="border:none"></td>
+    <td style="border:none" class="lc2">재작업 장소</td><td style="border:none"></td>
+    <td style="border:none" class="lc2">감독자 (QA)</td><td style="border:none"></td>
+  </tr></table>
+</div>
 
-<div class="sec">재작업 내용</div>
+<div class="sec">부적합 내용 확인 (NCR 요약)</div>
 <table>
-  <tr><th style="width:28px">No.</th><th>재작업 항목</th><th>작업 방법</th><th>작업 시간(분)</th><th>완료여부</th></tr>
-  ${rows(6, ['','','',''])}
+  <tr><td class="lc2">불량 내용 (NCR 참조)</td><td class="blank2"></td></tr>
+  <tr>
+    <td class="lc2">재작업 불가능 항목</td>
+    <td>
+      <span class="cb"></span>없음 (전량 재작업 가능) &nbsp;
+      <span class="cb"></span>있음 → 불가능 수량: ________ 개 (폐기 처리)
+    </td>
+  </tr>
 </table>
-<table><tr><td class="lc">주의사항</td><td class="blank2"></td></tr></table>
+
+<div class="sec">재작업 작업 지시</div>
+<table>
+  <tr>
+    <th style="width:28px">No.</th>
+    <th>재작업 항목 (공정/부위)</th>
+    <th>작업 방법 및 기준</th>
+    <th style="width:90px">작업 시간 (분)</th>
+    <th style="width:70px">작업자</th>
+    <th style="width:65px">완료 여부</th>
+  </tr>
+  ${Array.from({length:7},(_,i)=>`
+  <tr>
+    <td style="text-align:center;color:#bbb">${i+1}</td>
+    <td style="height:30px"></td><td></td><td></td><td></td>
+    <td style="text-align:center"><span class="cb"></span>완료 &nbsp;<span class="cb"></span>미완료</td>
+  </tr>`).join('')}
+</table>
+<table><tr>
+  <td class="lc2">재작업 주의사항</td><td class="blank2"></td>
+</tr></table>
 
 <div class="sec">재작업 완료 기록</div>
-<table><tr>
-  <td class="lc">완료일시</td><td></td>
-  <td class="lc">완료 수량</td><td></td>
-  <td class="lc">폐기 수량</td><td></td>
-</tr></table>
+<table>
+  <tr>
+    <td class="lc2">실제 완료일시</td><td></td>
+    <td class="lc2">재작업 완료 수량</td><td></td>
+    <td class="lc2">폐기 수량</td><td></td>
+  </tr>
+  <tr>
+    <td class="lc2">재작업 비용 (공수)</td><td></td>
+    <td class="lc2">귀책 구분</td>
+    <td><span class="cb"></span>자사 &nbsp;<span class="cb"></span>공급업체</td>
+    <td class="lc2">비용 청구 여부</td>
+    <td><span class="cb"></span>청구 &nbsp;<span class="cb"></span>미청구</td>
+  </tr>
+</table>
 
-<div class="sec">재검사 결과</div>
-<table><tr>
-  <td class="lc">재검사 결과</td>
-  <td><span class="cb"></span>합격 (합격 태그 교체) &nbsp;&nbsp;<span class="cb"></span>불합격 (추가 조치 필요)</td>
-  <td class="lc">재검사원</td><td></td>
-  <td class="lc">재검사일</td><td></td>
-</tr><tr>
-  <td class="lc">재검사 의견</td><td colspan="5" class="blank2"></td>
-</tr></table>
+<div class="sec">재검사 결과 (QA 확인)</div>
+<table>
+  <tr>
+    <td class="lc2">재검사 판정</td>
+    <td>
+      <span class="cb"></span>합격 → 합격 태그 교체 후 재고 환입 &nbsp;
+      <span class="cb"></span>불합격 → 추가 재작업 / 폐기 &nbsp;
+      <span class="cb"></span>특채 처리
+    </td>
+  </tr>
+  <tr><td class="lc2">재검사 의견</td><td class="blank2"></td></tr>
+  <tr>
+    <td class="lc2">재검사원 (QA)</td><td></td>
+  </tr>
+  <tr>
+    <td class="lc2">재검사 완료일</td><td></td>
+  </tr>
+</table>
 
-<div class="sign sign3">
-  <div class="sbox"><div class="st">재작업 담당자 (서명)</div></div>
-  <div class="sbox"><div class="st">재검사원 QA (서명)</div></div>
-  <div class="sbox"><div class="st">품질보증팀장 (종결 승인)</div></div>
+<div class="sign sign4" style="margin-top:10px">
+  <div class="sbox" style="min-height:55px"><div class="st">재작업 담당자 (서명 / 날짜)</div></div>
+  <div class="sbox" style="min-height:55px"><div class="st">재검사원 QA (서명 / 날짜)</div></div>
+  <div class="sbox" style="min-height:55px"><div class="st">생산팀장 (확인)</div></div>
+  <div class="sbox" style="min-height:55px"><div class="st">품질보증팀장 (종결 승인)</div></div>
 </div>`
 }
 
@@ -1029,423 +1516,968 @@ function ncrF011() {
 
 function ncrF012() {
   return `
-<div class="sec">CAPA 추적 대장</div>
+<!-- ── 기본 정보 ── -->
+<div class="d-info">
+  <table style="border:none"><tr>
+    <td style="border:none" class="lc2">관리 연도</td><td style="border:none;width:130px"></td>
+    <td style="border:none" class="lc2">관리 부서</td><td style="border:none;width:130px"></td>
+    <td style="border:none" class="lc2">작성자 (QA)</td><td style="border:none;width:130px"></td>
+  </tr></table>
+</div>
+
+<div class="sec">CAPA 추적 대장 (Corrective &amp; Preventive Action Log)</div>
+<div class="note" style="margin-bottom:4px">
+  ※ 발생유형: CC(고객불만) / IQC(수입검사) / IPQC(공정) / OQC(출하) / AUD(심사) / 기타 &nbsp;|&nbsp;
+  상태: O(진행중) / V(효과확인중) / C(종결) / H(보류)
+</div>
 <table>
   <tr>
     <th style="width:28px">No.</th>
-    <th>CAR 번호</th>
-    <th>발생일</th>
-    <th>발생 유형</th>
-    <th>불량 내용</th>
-    <th>담당 부서</th>
-    <th>완료 기한</th>
-    <th>D3 봉쇄<br>완료</th>
-    <th>D5 조치<br>완료</th>
-    <th>D6 검증<br>완료</th>
-    <th>종결<br>일자</th>
-    <th>상태</th>
+    <th style="width:90px">CAR 번호</th>
+    <th style="width:70px">발생일</th>
+    <th style="width:55px">유형</th>
+    <th>불량 내용 (요약)</th>
+    <th style="width:65px">품번</th>
+    <th style="width:65px">담당 부서</th>
+    <th style="width:70px">완료 기한</th>
+    <th style="width:45px">D3<br>봉쇄</th>
+    <th style="width:45px">D5<br>조치</th>
+    <th style="width:45px">D6<br>검증</th>
+    <th style="width:45px">D8<br>종결</th>
+    <th style="width:70px">종결일자</th>
+    <th style="width:45px">상태</th>
   </tr>
-  ${rows(15, ['','','','','','','','','','',''])}
+  ${Array.from({length:15},(_,i)=>`
+  <tr>
+    <td style="text-align:center;color:#bbb;font-size:7.5pt">${i+1}</td>
+    <td style="height:26px"></td><td></td><td></td><td></td><td></td><td></td><td></td>
+    <td style="text-align:center;font-size:8pt"></td>
+    <td style="text-align:center;font-size:8pt"></td>
+    <td style="text-align:center;font-size:8pt"></td>
+    <td style="text-align:center;font-size:8pt"></td>
+    <td></td>
+    <td style="text-align:center;font-weight:700;font-size:8.5pt"></td>
+  </tr>`).join('')}
 </table>
-<div class="note">※ 상태: O(진행중) / V(효과확인) / C(종결) / H(보류)</div>`
+
+<div class="sec">CAPA 현황 요약</div>
+<table>
+  <tr>
+    <td class="lc2" style="width:140px">총 CAPA 건수</td><td></td>
+    <td class="lc2">종결 건수</td><td></td>
+    <td class="lc2">진행중 건수</td><td></td>
+    <td class="lc2">보류 건수</td><td></td>
+  </tr>
+  <tr>
+    <td class="lc2">기한 초과 건수</td><td style="font-weight:700;color:#c00"></td>
+    <td class="lc2">종결률 (%)</td><td></td>
+    <td class="lc2">평균 처리 기간 (일)</td><td></td>
+    <td class="lc2">최종 갱신일</td><td></td>
+  </tr>
+</table>
+
+<div class="sign sign3">
+  <div class="sbox" style="min-height:48px"><div class="st">작성자 QA (서명)</div></div>
+  <div class="sbox" style="min-height:48px"><div class="st">품질보증팀장 (검토 / 날짜)</div></div>
+  <div class="sbox" style="min-height:48px"><div class="st">임원 / 대표이사 (확인)</div></div>
+</div>`
 }
 
 function qmsF003() {
   return `
-<table><tr>
-  <td class="lc">부서</td><td></td>
-  <td class="lc">작성자</td><td></td>
-  <td class="lc">작성일</td><td></td>
-  <td class="lc">검토일</td><td></td>
-</tr></table>
+<!-- ── 기본 정보 ── -->
+<div class="d-info">
+  <table style="border:none"><tr>
+    <td style="border:none" class="lc2">관리 연도</td><td style="border:none;width:130px"></td>
+    <td style="border:none" class="lc2">작성 부서</td><td style="border:none;width:130px"></td>
+    <td style="border:none" class="lc2">작성자</td><td style="border:none;width:130px"></td>
+  </tr><tr>
+    <td style="border:none" class="lc2">작성일</td><td style="border:none"></td>
+    <td style="border:none" class="lc2">최종 검토일</td><td style="border:none"></td>
+    <td style="border:none" class="lc2">차기 검토 예정</td><td style="border:none"></td>
+  </tr></table>
+</div>
+
+<div class="sec">리스크 / 기회 평가표 (ISO 9001 §6.1)</div>
+<div class="note" style="margin-bottom:4px">
+  ※ 가능성(L): 1=매우낮음 / 2=낮음 / 3=보통 / 4=높음 / 5=매우높음 &nbsp;|&nbsp;
+  심각도(S): 1=무시 / 2=경미 / 3=보통 / 4=심각 / 5=치명적 &nbsp;|&nbsp;
+  위험도 = L×S &nbsp;|&nbsp;
+  등급: ≥16 긴급(RED) / 9~15 중요(AMBER) / ≤8 모니터링(GREEN)
+</div>
 <table>
   <tr>
     <th style="width:28px">No.</th>
-    <th>리스크 항목</th>
-    <th>카테고리</th>
-    <th>발생가능성<br>(1~5)</th>
-    <th>심각도<br>(1~5)</th>
-    <th>위험도<br>(P×S)</th>
-    <th>등급</th>
-    <th>처리 방법</th>
-    <th>대응 계획</th>
-    <th>담당자</th>
-    <th>기한</th>
-    <th>재평가<br>위험도</th>
+    <th>리스크 / 기회 항목</th>
+    <th style="width:70px">카테고리</th>
+    <th style="width:50px">가능성<br>L (1~5)</th>
+    <th style="width:50px">심각도<br>S (1~5)</th>
+    <th style="width:50px">위험도<br>L×S</th>
+    <th style="width:45px">등급</th>
+    <th style="width:70px">처리 방법</th>
+    <th>대응 / 완화 계획</th>
+    <th style="width:65px">담당자</th>
+    <th style="width:65px">완료 기한</th>
+    <th style="width:50px">재평가<br>위험도</th>
   </tr>
-  ${rows(12, ['','','','','','','','','','',''])}
+  ${Array.from({length:12},(_,i)=>`
+  <tr>
+    <td style="text-align:center;color:#bbb">${i+1}</td>
+    <td style="height:28px"></td>
+    <td></td>
+    <td style="text-align:center"></td>
+    <td style="text-align:center"></td>
+    <td style="text-align:center;font-weight:700"></td>
+    <td style="text-align:center"></td>
+    <td></td><td></td><td></td><td></td>
+    <td style="text-align:center"></td>
+  </tr>`).join('')}
 </table>
-<div class="note">※ 위험도 등급: ≥16 긴급(빨강) / 9~15 중기(노랑) / ≤8 모니터링(초록) | 카테고리: 품질/생산/공급망/규제/환경</div>
+<div class="note">※ 처리방법: 회피(Avoid) / 경감(Reduce) / 이전(Transfer) / 수용(Accept) / 활용(Exploit, 기회 시)</div>
+
+<div class="sec">리스크 현황 요약</div>
+<table>
+  <tr>
+    <td class="lc2" style="width:140px">식별된 리스크 총수</td><td></td>
+    <td class="lc2">긴급(RED) 건수</td><td style="font-weight:700;color:#c00"></td>
+    <td class="lc2">중요(AMBER) 건수</td><td></td>
+    <td class="lc2">모니터링(GREEN)</td><td></td>
+  </tr>
+</table>
+
 <div class="sign sign3">
-  <div class="sbox"><div class="st">작성자 (서명)</div></div>
-  <div class="sbox"><div class="st">부서장 (검토)</div></div>
-  <div class="sbox"><div class="st">품질보증팀장 (승인)</div></div>
+  <div class="sbox" style="min-height:50px"><div class="st">작성자 (서명)</div></div>
+  <div class="sbox" style="min-height:50px"><div class="st">부서장 (검토)</div></div>
+  <div class="sbox" style="min-height:50px"><div class="st">품질보증팀장 (승인)</div></div>
 </div>`
 }
 
 function qmsF020() {
   return `
-<table><tr>
-  <td class="lc">대상 연도</td><td></td>
-  <td class="lc">수립일</td><td></td>
-  <td class="lc">승인자</td><td></td>
-</tr></table>
+<!-- ── 기본 정보 ── -->
+<div class="d-info">
+  <table style="border:none"><tr>
+    <td style="border:none" class="lc2">대상 연도</td><td style="border:none;width:130px"></td>
+    <td style="border:none" class="lc2">수립일</td><td style="border:none;width:130px"></td>
+    <td style="border:none" class="lc2">최종 검토일</td><td style="border:none;width:130px"></td>
+  </tr><tr>
+    <td style="border:none" class="lc2">작성 부서</td><td style="border:none"></td>
+    <td style="border:none" class="lc2">작성자</td><td style="border:none"></td>
+    <td style="border:none" class="lc2">승인자</td><td style="border:none"></td>
+  </tr></table>
+</div>
+
+<div class="sec">품질 목표 관리표 (ISO 9001 §6.2)</div>
+<div class="note" style="margin-bottom:4px">
+  ※ 달성여부: ○ 달성 / △ 근소미달(90% 이상) / × 미달 (90% 미만) | 색상: 미달 항목은 적색 표기
+</div>
 <table>
   <tr>
     <th style="width:28px">No.</th>
     <th>품질 목표 항목</th>
-    <th>단위</th>
-    <th>전년도 실적</th>
-    <th>당해 목표</th>
-    <th>1Q 실적</th>
-    <th>2Q 실적</th>
-    <th>3Q 실적</th>
-    <th>4Q 실적</th>
-    <th>연간 실적</th>
-    <th>달성여부</th>
-    <th>미달 원인</th>
+    <th style="width:40px">단위</th>
+    <th style="width:70px">전년도 실적</th>
+    <th style="width:70px">당해 목표</th>
+    <th style="width:65px">1Q 실적</th>
+    <th style="width:65px">2Q 실적</th>
+    <th style="width:65px">3Q 실적</th>
+    <th style="width:65px">4Q 실적</th>
+    <th style="width:70px">연간 실적</th>
+    <th style="width:50px">달성</th>
+    <th>미달 원인 / 개선 계획</th>
   </tr>
-  <tr><td class="lc" colspan="2">불량률 (내부)</td><td>%</td>${Array(9).fill('<td></td>').join('')}</tr>
-  <tr><td class="lc" colspan="2">고객 불만 건수</td><td>건</td>${Array(9).fill('<td></td>').join('')}</tr>
-  <tr><td class="lc" colspan="2">납기준수율 (OTD)</td><td>%</td>${Array(9).fill('<td></td>').join('')}</tr>
-  <tr><td class="lc" colspan="2">협력사 품질지수</td><td>점</td>${Array(9).fill('<td></td>').join('')}</tr>
-  <tr><td class="lc" colspan="2">CAPA 완결률</td><td>%</td>${Array(9).fill('<td></td>').join('')}</tr>
-  ${rows(5, ['','','','','','','','','','',''])}
+  <tr>
+    <td style="text-align:center;background:#ffe8b0;font-weight:900;font-size:9pt">1</td>
+    <td style="background:#fffae0">내부 불량률 (IQC+IPQC+OQC)</td>
+    <td style="text-align:center">%</td>
+    ${Array(9).fill('<td></td>').join('')}
+  </tr>
+  <tr>
+    <td style="text-align:center;background:#ffe8b0;font-weight:900;font-size:9pt">2</td>
+    <td style="background:#fffae0">고객 불만 건수</td>
+    <td style="text-align:center">건</td>
+    ${Array(9).fill('<td></td>').join('')}
+  </tr>
+  <tr>
+    <td style="text-align:center;background:#ffe8b0;font-weight:900;font-size:9pt">3</td>
+    <td style="background:#fffae0">납기준수율 (OTD)</td>
+    <td style="text-align:center">%</td>
+    ${Array(9).fill('<td></td>').join('')}
+  </tr>
+  <tr>
+    <td style="text-align:center;background:#ffe8b0;font-weight:900;font-size:9pt">4</td>
+    <td style="background:#fffae0">협력사 품질지수 (평균 점수)</td>
+    <td style="text-align:center">점</td>
+    ${Array(9).fill('<td></td>').join('')}
+  </tr>
+  <tr>
+    <td style="text-align:center;background:#ffe8b0;font-weight:900;font-size:9pt">5</td>
+    <td style="background:#fffae0">CAPA 적기 완결률</td>
+    <td style="text-align:center">%</td>
+    ${Array(9).fill('<td></td>').join('')}
+  </tr>
+  <tr>
+    <td style="text-align:center;background:#ffe8b0;font-weight:900;font-size:9pt">6</td>
+    <td style="background:#fffae0">내부 심사 지적사항 완결률</td>
+    <td style="text-align:center">%</td>
+    ${Array(9).fill('<td></td>').join('')}
+  </tr>
+  ${Array.from({length:4},(_,i)=>`
+  <tr>
+    <td style="text-align:center;color:#bbb">${i+7}</td>
+    <td style="height:28px"></td><td></td>
+    ${Array(9).fill('<td></td>').join('')}
+  </tr>`).join('')}
 </table>
+
+<div class="sec">연간 종합 평가</div>
+<table>
+  <tr>
+    <td class="lc2" style="width:140px">전체 목표 항목 수</td><td></td>
+    <td class="lc2">달성 항목 수</td><td></td>
+    <td class="lc2">미달 항목 수</td><td style="color:#c00;font-weight:700"></td>
+    <td class="lc2">목표 달성률</td><td></td>
+  </tr>
+</table>
+<table><tr><td class="lc2">종합 의견 및 차년도 개선 방향</td><td class="blank2"></td></tr></table>
+
 <div class="sign sign3">
-  <div class="sbox"><div class="st">품질보증팀장 (작성)</div></div>
-  <div class="sbox"><div class="st">임원 (검토)</div></div>
-  <div class="sbox"><div class="st">대표이사 (승인)</div></div>
+  <div class="sbox" style="min-height:50px"><div class="st">품질보증팀장 (작성)</div></div>
+  <div class="sbox" style="min-height:50px"><div class="st">임원 (검토)</div></div>
+  <div class="sbox" style="min-height:50px"><div class="st">대표이사 (승인)</div></div>
 </div>`
 }
 
 function qmsF030() {
   return `
-<table><tr>
-  <td class="lc">부서</td><td></td>
-  <td class="lc">작성자</td><td></td>
-  <td class="lc">작성일</td><td></td>
-  <td class="lc">검토일</td><td></td>
-</tr></table>
-<div class="note">※ 역량 수준: 1=교육필요 / 2=기본수행 / 3=독자수행 / 4=타인지도 | 목표: 주요 직무 Level 3 이상</div>
+<!-- ── 기본 정보 ── -->
+<div class="d-info">
+  <table style="border:none"><tr>
+    <td style="border:none" class="lc2">관리 부서</td><td style="border:none;width:130px"></td>
+    <td style="border:none" class="lc2">작성자</td><td style="border:none;width:130px"></td>
+    <td style="border:none" class="lc2">작성일</td><td style="border:none;width:110px"></td>
+  </tr><tr>
+    <td style="border:none" class="lc2">최종 검토일</td><td style="border:none"></td>
+    <td style="border:none" class="lc2">차기 검토 예정</td><td style="border:none"></td>
+    <td style="border:none" class="lc2">승인자</td><td style="border:none"></td>
+  </tr></table>
+</div>
+
+<div class="note" style="margin-bottom:6px">
+  ※ 역량 수준 기준: &nbsp;
+  <strong>1</strong> = 교육 필요 (Needs Training) &nbsp;|&nbsp;
+  <strong>2</strong> = 기본 수행 가능 (Basic) &nbsp;|&nbsp;
+  <strong>3</strong> = 독자 수행 가능 (Proficient) &nbsp;|&nbsp;
+  <strong>4</strong> = 타인 지도 가능 (Expert) &nbsp;&nbsp;
+  목표: 핵심 직무 Level 3 이상 / CC·SC 직무 Level 4
+</div>
+
+<div class="sec">직무 역량 매트릭스 (Skill Matrix)</div>
 <table>
   <tr>
     <th rowspan="2" style="width:100px">직무 항목</th>
-    <th rowspan="2">직무 설명</th>
-    <th rowspan="2">목표<br>수준</th>
-    <th colspan="8">사원별 현재 수준</th>
-    <th rowspan="2">교육 계획</th>
+    <th rowspan="2">직무 설명 / 평가 기준</th>
+    <th rowspan="2" style="width:50px">목표<br>수준</th>
+    <th colspan="8" style="background:#e8f0ff">사원별 역량 수준</th>
+    <th rowspan="2" style="width:100px">교육 계획</th>
+    <th rowspan="2" style="width:70px">교육 목표일</th>
   </tr>
   <tr>
-    <th style="width:55px">성명</th><th style="width:55px">성명</th><th style="width:55px">성명</th>
-    <th style="width:55px">성명</th><th style="width:55px">성명</th><th style="width:55px">성명</th>
-    <th style="width:55px">성명</th><th style="width:55px">성명</th>
+    <th style="width:48px;background:#e8f0ff">성명</th>
+    <th style="width:48px;background:#e8f0ff">성명</th>
+    <th style="width:48px;background:#e8f0ff">성명</th>
+    <th style="width:48px;background:#e8f0ff">성명</th>
+    <th style="width:48px;background:#e8f0ff">성명</th>
+    <th style="width:48px;background:#e8f0ff">성명</th>
+    <th style="width:48px;background:#e8f0ff">성명</th>
+    <th style="width:48px;background:#e8f0ff">성명</th>
   </tr>
-  ${rows(12, ['','','','','','','','','',''])}
-</table>`
+  ${Array.from({length:14},(_,i)=>`
+  <tr>
+    <td style="height:28px"></td><td></td>
+    <td style="text-align:center;font-weight:700"></td>
+    ${Array(8).fill('<td style="text-align:center"></td>').join('')}
+    <td></td><td></td>
+  </tr>`).join('')}
+</table>
+
+<div class="sec">역량 갭 현황 요약</div>
+<table>
+  <tr>
+    <td class="lc2">목표 수준 미달 직무 수</td><td></td>
+    <td class="lc2">Level 1 사원 수</td><td style="color:#c00;font-weight:700"></td>
+    <td class="lc2">교육 필요 사원 수</td><td></td>
+    <td class="lc2">교육 완료 예정일</td><td></td>
+  </tr>
+</table>
+
+<div class="sign sign3">
+  <div class="sbox" style="min-height:50px"><div class="st">작성자 (서명)</div></div>
+  <div class="sbox" style="min-height:50px"><div class="st">부서장 (검토)</div></div>
+  <div class="sbox" style="min-height:50px"><div class="st">품질보증팀장 (승인)</div></div>
+</div>`
 }
 
 function qmsF100() {
   return `
-<table><tr>
-  <td class="lc">출하허가 번호</td><td></td>
-  <td class="lc">허가 일시</td><td></td>
-  <td class="lc">납품처</td><td></td>
-</tr><tr>
-  <td class="lc">품번</td><td></td>
-  <td class="lc">품명</td><td></td>
-  <td class="lc">출하 수량</td><td></td>
-</tr><tr>
-  <td class="lc">LOT 번호</td><td></td>
-  <td class="lc">OQC 번호</td><td></td>
-  <td class="lc">납품 예정일</td><td></td>
-</tr></table>
-
-<div class="sec">검사 완료 확인</div>
-<table>
-  <tr>
-    <th style="width:160px">확인 항목</th>
-    <th style="width:80px">결과</th>
-    <th>비고</th>
-  </tr>
-  <tr><td class="lc">출하검사 성적서 완비</td><td style="text-align:center"><span class="cb"></span>O &nbsp;<span class="cb"></span>X</td><td></td></tr>
-  <tr><td class="lc">OQC 합격 판정 확인</td><td style="text-align:center"><span class="cb"></span>O &nbsp;<span class="cb"></span>X</td><td></td></tr>
-  <tr><td class="lc">수량 일치 확인</td><td style="text-align:center"><span class="cb"></span>O &nbsp;<span class="cb"></span>X</td><td></td></tr>
-  <tr><td class="lc">라벨/포장 상태 확인</td><td style="text-align:center"><span class="cb"></span>O &nbsp;<span class="cb"></span>X</td><td></td></tr>
-  <tr><td class="lc">부적합·보류품 혼입 없음</td><td style="text-align:center"><span class="cb"></span>O &nbsp;<span class="cb"></span>X</td><td></td></tr>
-</table>
-
-<div style="text-align:center;font-size:14pt;font-weight:900;border:2px solid #000;padding:14px;margin:12px 0">
-  <span class="cb"></span> 출하 허가 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span class="cb"></span> 출하 보류
+<!-- ── 기본 정보 ── -->
+<div class="d-info">
+  <table style="border:none"><tr>
+    <td style="border:none" class="lc2">출하 허가 번호</td><td style="border:none;width:140px"></td>
+    <td style="border:none" class="lc2">OQC 성적서 번호</td><td style="border:none;width:130px"></td>
+    <td style="border:none" class="lc2">출하 지시번호</td><td style="border:none;width:130px"></td>
+  </tr><tr>
+    <td style="border:none" class="lc2">납품처</td><td style="border:none"></td>
+    <td style="border:none" class="lc2">납품 예정일</td><td style="border:none"></td>
+    <td style="border:none" class="lc2">납품 LOT No.</td><td style="border:none"></td>
+  </tr><tr>
+    <td style="border:none" class="lc2">품번</td><td style="border:none"></td>
+    <td style="border:none" class="lc2">품명</td><td style="border:none"></td>
+    <td style="border:none" class="lc2">도면 개정번호</td><td style="border:none"></td>
+  </tr><tr>
+    <td style="border:none" class="lc2">출하 수량</td><td style="border:none"></td>
+    <td style="border:none" class="lc2">차량번호 / 운송사</td><td style="border:none"></td>
+    <td style="border:none" class="lc2">허가 일시</td><td style="border:none"></td>
+  </tr></table>
 </div>
 
-<div class="sign sign4">
-  <div class="sbox"><div class="st">출하검사원 QA</div></div>
-  <div class="sbox"><div class="st">품질보증팀장 (최종 허가)</div></div>
-  <div class="sbox"><div class="st">물류팀 수령 확인</div></div>
-  <div class="sbox"><div class="st">허가 일시</div></div>
+<div class="sec">출하 전 최종 확인 체크리스트</div>
+<table>
+  <tr>
+    <th style="width:220px">확인 항목</th>
+    <th style="width:90px">결과</th>
+    <th>비고 / 확인 근거</th>
+  </tr>
+  ${[
+    'OQC 성적서 — 최신본 완비 및 합격 판정 확인',
+    '출하 수량 — 출하 지시서와 실물 수량 일치',
+    '품번 · 품명 — 라벨 표기 정확성 확인',
+    'LOT 번호 — 성적서와 현물 LOT 일치',
+    '포장 상태 — 외관 파손 / 이물질 없음',
+    '부적합품 / 보류품 혼입 없음 (적색태그 미포함)',
+    '고객 특이 요구사항 충족 (SDS, CoC 등)',
+    '특채 품목 해당 여부 (해당 시 QMS-F-101 첨부)',
+  ].map(item=>`
+  <tr>
+    <td class="lc" style="font-size:8.5pt">${item}</td>
+    <td style="text-align:center"><span class="cb"></span>적합 &nbsp;<span class="cb"></span>부적합 &nbsp;<span class="cb"></span>N/A</td>
+    <td style="height:26px"></td>
+  </tr>`).join('')}
+</table>
+
+<div style="text-align:center;font-size:15pt;font-weight:900;border:2px solid #1e3a5f;padding:16px;margin:12px 0;background:#f0f4f8;color:#1e3a5f">
+  <span class="cb"></span> 출하 허가 (Shipment APPROVED) &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+  <span class="cb"></span> 출하 보류 (Shipment ON HOLD)
+</div>
+<table><tr>
+  <td class="lc2">보류 / 특이사항</td><td class="blank2"></td>
+</tr></table>
+
+<div class="sign sign4" style="margin-top:10px">
+  <div class="sbox" style="min-height:55px"><div class="st">출하검사원 QA (서명 / 날짜)</div></div>
+  <div class="sbox" style="min-height:55px"><div class="st">품질보증팀장 (최종 허가 / 날짜)</div></div>
+  <div class="sbox" style="min-height:55px"><div class="st">물류팀 (수령 확인 / 날짜)</div></div>
+  <div class="sbox" style="min-height:55px"><div class="st">허가 일시</div></div>
 </div>`
 }
 
 function qmsF101() {
   return `
-<table><tr>
-  <td class="lc">특채승인 번호</td><td></td>
-  <td class="lc">NCR 번호</td><td></td>
-  <td class="lc">요청일</td><td></td>
-</tr><tr>
-  <td class="lc">품번</td><td></td>
-  <td class="lc">품명</td><td></td>
-  <td class="lc">특채 수량</td><td></td>
-</tr><tr>
-  <td class="lc">LOT 번호</td><td></td>
-  <td class="lc">공급업체</td><td></td>
-  <td class="lc">사용 공정</td><td></td>
-</tr></table>
+<!-- ── 기본 정보 ── -->
+<div class="d-info">
+  <table style="border:none"><tr>
+    <td style="border:none" class="lc2">특채 승인 번호</td><td style="border:none;width:140px"></td>
+    <td style="border:none" class="lc2">NCR 번호</td><td style="border:none;width:130px"></td>
+    <td style="border:none" class="lc2">요청일</td><td style="border:none;width:110px"></td>
+  </tr><tr>
+    <td style="border:none" class="lc2">품번</td><td style="border:none"></td>
+    <td style="border:none" class="lc2">품명</td><td style="border:none"></td>
+    <td style="border:none" class="lc2">도면 개정번호</td><td style="border:none"></td>
+  </tr><tr>
+    <td style="border:none" class="lc2">LOT 번호</td><td style="border:none"></td>
+    <td style="border:none" class="lc2">특채 수량</td><td style="border:none"></td>
+    <td style="border:none" class="lc2">사용 / 납품 공정</td><td style="border:none"></td>
+  </tr><tr>
+    <td style="border:none" class="lc2">공급업체</td><td style="border:none"></td>
+    <td style="border:none" class="lc2">특채 유효 기간</td><td style="border:none"></td>
+    <td style="border:none" class="lc2">요청 부서</td><td style="border:none"></td>
+  </tr></table>
+</div>
 
-<div class="sec">부적합 내용</div>
+<div class="sec">1. 부적합 내용 상세</div>
 <table>
-  <tr><td class="lc">부적합 항목</td><td class="blank2"></td></tr>
-  <tr><td class="lc">실측값</td><td></td></tr>
-  <tr><td class="lc">규격</td><td></td></tr>
-  <tr><td class="lc">이탈량</td><td></td></tr>
+  <tr>
+    <td class="lc2" style="width:140px">부적합 항목</td>
+    <td class="blank2" colspan="3"></td>
+  </tr>
+  <tr>
+    <td class="lc2">규격 (기준값)</td><td></td>
+    <td class="lc2">실측값 / 발생값</td><td></td>
+  </tr>
+  <tr>
+    <td class="lc2">이탈량 / 이탈률</td><td></td>
+    <td class="lc2">불량 유형</td>
+    <td>
+      <span class="cb"></span>치수 &nbsp;<span class="cb"></span>외관 &nbsp;<span class="cb"></span>기능 &nbsp;
+      <span class="cb"></span>재질 &nbsp;<span class="cb"></span>기타
+    </td>
+  </tr>
 </table>
 
-<div class="sec">특채 사유 및 위험 평가</div>
+<div class="sec">2. 특채 사유 및 위험 평가</div>
 <table>
-  <tr><td class="lc">특채 사유</td><td class="blank2"></td></tr>
-  <tr><td class="lc">기능에 미치는 영향</td>
-    <td><span class="cb"></span>무영향 &nbsp;<span class="cb"></span>경미 &nbsp;<span class="cb"></span>영향있음(고객승인필요)</td></tr>
-  <tr><td class="lc">고객 사전 승인 필요</td>
-    <td><span class="cb"></span>필요 (고객 승인번호: &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;) &nbsp;<span class="cb"></span>불필요</td></tr>
-  <tr><td class="lc">재발방지 대책</td><td class="blank2"></td></tr>
+  <tr><td class="lc2" style="width:140px">특채 사유</td><td colspan="3" class="blank2"></td></tr>
+  <tr>
+    <td class="lc2">기능 / 안전에 미치는 영향</td>
+    <td>
+      <span class="cb"></span>무영향 &nbsp;
+      <span class="cb"></span>경미 (기능 저하 없음) &nbsp;
+      <span class="cb"></span>중간 (기능 경미 영향) &nbsp;
+      <span class="cb"></span>중대 (안전 / 고객 승인 필수)
+    </td>
+    <td class="lc2" style="width:120px">위험도 등급</td>
+    <td style="width:80px">
+      <span class="cb"></span>Low &nbsp;<span class="cb"></span>Med &nbsp;<span class="cb"></span>High
+    </td>
+  </tr>
+  <tr>
+    <td class="lc2">고객 사전 승인</td>
+    <td colspan="3">
+      <span class="cb"></span>필요 → 고객 승인 번호: ___________________________ &nbsp;
+      <span class="cb"></span>불필요
+    </td>
+  </tr>
+  <tr>
+    <td class="lc2">추가 검사 요건</td>
+    <td colspan="3">
+      <span class="cb"></span>전수 검사 &nbsp;
+      <span class="cb"></span>샘플링 강화 &nbsp;
+      <span class="cb"></span>현행 AQL 유지 &nbsp;
+      <span class="cb"></span>없음
+    </td>
+  </tr>
 </table>
 
-<div class="sign sign5">
-  <div class="sbox"><div class="st">요청자 (서명)</div></div>
-  <div class="sbox"><div class="st">엔지니어링 (검토)</div></div>
-  <div class="sbox"><div class="st">품질보증팀장 (승인)</div></div>
-  <div class="sbox"><div class="st">고객 담당자 (필요시)</div></div>
-  <div class="sbox"><div class="st">승인 일자</div></div>
+<div class="sec">3. 재발방지 및 사후 조치</div>
+<table>
+  <tr><td class="lc2" style="width:140px">재발방지 대책</td><td class="blank2"></td></tr>
+  <tr>
+    <td class="lc2">CAPA 연계</td>
+    <td>
+      <span class="cb"></span>CAR 발행 (CAR No: _____________) &nbsp;
+      <span class="cb"></span>모니터링 강화 &nbsp;
+      <span class="cb"></span>해당 없음
+    </td>
+  </tr>
+  <tr>
+    <td class="lc2">처리 완료 기한</td><td></td>
+  </tr>
+</table>
+
+<div class="sign sign5" style="margin-top:10px">
+  <div class="sbox" style="min-height:50px"><div class="st">요청자 (서명)</div></div>
+  <div class="sbox" style="min-height:50px"><div class="st">엔지니어링 (검토)</div></div>
+  <div class="sbox" style="min-height:50px"><div class="st">품질보증팀장 (승인)</div></div>
+  <div class="sbox" style="min-height:50px"><div class="st">고객 담당자 (필요시)</div></div>
+  <div class="sbox" style="min-height:50px"><div class="st">승인 일자</div></div>
 </div>`
 }
 
 function qmsF102() {
   return `
+<!-- ── 기본 정보 ── -->
+<div class="d-info">
+  <table style="border:none"><tr>
+    <td style="border:none" class="lc2">ISIR 번호</td><td style="border:none;width:140px"></td>
+    <td style="border:none" class="lc2">제출일</td><td style="border:none;width:110px"></td>
+    <td style="border:none" class="lc2">납품처</td><td style="border:none;width:130px"></td>
+  </tr><tr>
+    <td style="border:none" class="lc2">품번</td><td style="border:none"></td>
+    <td style="border:none" class="lc2">품명</td><td style="border:none"></td>
+    <td style="border:none" class="lc2">도면 개정번호</td><td style="border:none"></td>
+  </tr><tr>
+    <td style="border:none" class="lc2">초도 로트 수량</td><td style="border:none"></td>
+    <td style="border:none" class="lc2">PPAP Level</td><td style="border:none"></td>
+    <td style="border:none" class="lc2">제출 사유</td>
+    <td style="border:none">
+      <span class="cb"></span>신규 &nbsp;<span class="cb"></span>설계변경 &nbsp;
+      <span class="cb"></span>공정변경 &nbsp;<span class="cb"></span>공급업체 변경 &nbsp;<span class="cb"></span>기타
+    </td>
+  </tr><tr>
+    <td style="border:none" class="lc2">생산일자</td><td style="border:none"></td>
+    <td style="border:none" class="lc2">측정자 (QA)</td><td style="border:none"></td>
+    <td style="border:none" class="lc2">측정장비 번호</td><td style="border:none"></td>
+  </tr></table>
+</div>
+
+<div class="sec">치수 측정 결과 (전항목 측정 — PPAP 필수)</div>
+<div class="note" style="margin-bottom:4px">
+  ※ 특성: CC=핵심특성 / SC=중요특성 | Ppk ≥ 1.67 (신규), Cpk ≥ 1.33 (양산) 이상 목표
+</div>
+<table>
+  <tr>
+    <th style="width:28px">No.</th>
+    <th style="width:55px">도면<br>풍선번호</th>
+    <th>특성 항목</th>
+    <th style="width:45px">특성<br>구분</th>
+    <th style="width:120px">규격 (기준값)</th>
+    <th style="width:65px">측정값 1</th>
+    <th style="width:65px">측정값 2</th>
+    <th style="width:65px">측정값 3</th>
+    <th style="width:55px">평균</th>
+    <th style="width:50px">Ppk</th>
+    <th style="width:50px">판정</th>
+  </tr>
+  ${Array.from({length:15},(_,i)=>`
+  <tr>
+    <td style="text-align:center;color:#bbb">${i+1}</td>
+    <td style="height:28px"></td><td></td><td></td><td></td>
+    <td></td><td></td><td></td><td></td><td></td>
+    <td style="text-align:center"><span class="cb"></span>O &nbsp;<span class="cb"></span>×</td>
+  </tr>`).join('')}
+</table>
+
+<div class="sec">PPAP 제출 항목 체크리스트</div>
+<table>
+  <tr>
+    <th style="width:28px">No.</th>
+    <th>제출 항목 (AIAG PPAP 4th Ed.)</th>
+    <th style="width:80px">적용 여부</th>
+    <th style="width:80px">제출 여부</th>
+    <th>비고 / 문서번호</th>
+  </tr>
+  ${[
+    '설계 기록 (Design Records / 도면)',
+    '설계 FMEA (DFMEA)',
+    '공정흐름도 (PFD — Process Flow Diagram)',
+    '공정 FMEA (PFMEA)',
+    '관리계획서 (Control Plan)',
+    '측정시스템 분석 (MSA — Gage R&R)',
+    '초기 공정능력 연구 (Ppk ≥ 1.67)',
+    '수입검사 / 초도품 성적서 (본 양식)',
+    '외관 승인 보고서 (AAR)',
+    '치수 측정 결과 (전항목)',
+    '재질 성적서 (Mill Sheet / RoHS 포함)',
+    '초도품 현물 샘플',
+  ].map((item,i)=>`
+  <tr>
+    <td style="text-align:center;color:#bbb">${i+1}</td>
+    <td>${item}</td>
+    <td style="text-align:center"><span class="cb"></span>적용 &nbsp;<span class="cb"></span>면제</td>
+    <td style="text-align:center"><span class="cb"></span>제출 &nbsp;<span class="cb"></span>미제출</td>
+    <td style="height:26px"></td>
+  </tr>`).join('')}
+</table>
+
+<div class="sec">ISIR 최종 판정</div>
 <table><tr>
-  <td class="lc">ISIR 번호</td><td></td>
-  <td class="lc">제출일</td><td></td>
-  <td class="lc">납품처</td><td></td>
-</tr><tr>
-  <td class="lc">품번</td><td></td>
-  <td class="lc">품명</td><td></td>
-  <td class="lc">도면 개정번호</td><td></td>
-</tr><tr>
-  <td class="lc">초도 로트 수량</td><td></td>
-  <td class="lc">PPAP Level</td><td></td>
-  <td class="lc">제출 사유</td>
-  <td><span class="cb"></span>신규 &nbsp;<span class="cb"></span>설계변경 &nbsp;<span class="cb"></span>공정변경 &nbsp;<span class="cb"></span>기타</td>
+  <td style="text-align:center;font-size:12pt;font-weight:900;padding:14px">
+    <span class="cb"></span> 승인 (Approved) &nbsp;&nbsp;&nbsp;
+    <span class="cb"></span> 조건부 승인 (Interim Approval) &nbsp;&nbsp;&nbsp;
+    <span class="cb"></span> 거절 (Rejected — 재제출 필요)
+  </td>
 </tr></table>
 
-<div class="sec">치수 측정 결과 (전항목)</div>
-<table>
-  <tr><th style="width:28px">No.</th><th>도면 풍선번호</th><th>특성항목</th>
-      <th>규격</th><th>측정값 1</th><th>측정값 2</th><th>측정값 3</th><th>평균</th><th>Cpk</th><th>판정</th></tr>
-  ${rows(15, ['','','','','','','','',''])}
-</table>
-
-<div class="sec">PPAP 체크리스트</div>
-<table>
-  <tr><th style="width:28px">No.</th><th>제출 항목</th><th style="width:70px">적용여부</th><th style="width:70px">제출여부</th><th>비고</th></tr>
-  ${[
-    '설계 기록 (도면)', '설계 FMEA (DFMEA)', '공정흐름도 (PFD)', '공정 FMEA (PFMEA)',
-    '관리계획서 (Control Plan)', '측정시스템 분석 (MSA)', '초기 공정능력 (Ppk)',
-    '수입검사 성적서', '외관 승인 보고서 (AAR)', '초도품 현물 샘플', '재질 성적서 (Mill Sheet)'
-  ].map((item, i) => `<tr><td style="text-align:center;color:#bbb">${i + 1}</td><td>${item}</td>
-    <td style="text-align:center"><span class="cb"></span>적용 &nbsp;<span class="cb"></span>면제</td>
-    <td style="text-align:center"><span class="cb"></span>O &nbsp;<span class="cb"></span>X</td><td></td></tr>`).join('')}
-</table>
-
-<div class="sign sign3">
-  <div class="sbox"><div class="st">품질보증팀장 (작성)</div></div>
-  <div class="sbox"><div class="st">개발/생산 담당자</div></div>
-  <div class="sbox"><div class="st">고객 승인 (날짜)</div></div>
+<div class="sign sign3" style="margin-top:10px">
+  <div class="sbox" style="min-height:55px"><div class="st">품질보증팀장 (작성 / 날짜)</div></div>
+  <div class="sbox" style="min-height:55px"><div class="st">개발 / 생산팀장 (확인)</div></div>
+  <div class="sbox" style="min-height:55px"><div class="st">고객 승인 (날짜)</div></div>
 </div>`
 }
 
 function qmsF110() {
   return `
-<table><tr>
-  <td class="lc">변경 요청 번호</td><td></td>
-  <td class="lc">요청일</td><td></td>
-  <td class="lc">요청 부서</td><td></td>
-</tr><tr>
-  <td class="lc">변경 유형</td>
-  <td colspan="5"><span class="cb"></span>제품/도면 &nbsp;<span class="cb"></span>공정(4M) &nbsp;<span class="cb"></span>원자재 &nbsp;<span class="cb"></span>공급업체 &nbsp;<span class="cb"></span>설비 &nbsp;<span class="cb"></span>기타</td>
-</tr><tr>
-  <td class="lc">4M 세부</td>
-  <td><span class="cb"></span>Man &nbsp;<span class="cb"></span>Machine &nbsp;<span class="cb"></span>Material &nbsp;<span class="cb"></span>Method</td>
-  <td class="lc">대상 품번</td><td></td>
-  <td class="lc">대상 공정</td><td></td>
-</tr></table>
+<!-- ── 기본 정보 ── -->
+<div class="d-info">
+  <table style="border:none"><tr>
+    <td style="border:none" class="lc2">변경 요청 번호</td><td style="border:none;width:140px"></td>
+    <td style="border:none" class="lc2">요청일</td><td style="border:none;width:110px"></td>
+    <td style="border:none" class="lc2">예상 적용일</td><td style="border:none;width:110px"></td>
+  </tr><tr>
+    <td style="border:none" class="lc2">요청 부서</td><td style="border:none"></td>
+    <td style="border:none" class="lc2">요청자</td><td style="border:none"></td>
+    <td style="border:none" class="lc2">관련 품번</td><td style="border:none"></td>
+  </tr><tr>
+    <td style="border:none" class="lc2">변경 유형</td>
+    <td colspan="5" style="border:none">
+      <span class="cb"></span>제품 / 도면 &nbsp;
+      <span class="cb"></span>공정 (4M) &nbsp;
+      <span class="cb"></span>원자재 / 부품 &nbsp;
+      <span class="cb"></span>공급업체 &nbsp;
+      <span class="cb"></span>설비 / 금형 &nbsp;
+      <span class="cb"></span>품질 시스템 &nbsp;
+      <span class="cb"></span>기타
+    </td>
+  </tr><tr>
+    <td style="border:none" class="lc2">4M 세부 (해당 시)</td>
+    <td style="border:none">
+      <span class="cb"></span>Man (인원) &nbsp;
+      <span class="cb"></span>Machine (설비) &nbsp;
+      <span class="cb"></span>Material (자재) &nbsp;
+      <span class="cb"></span>Method (방법)
+    </td>
+    <td style="border:none" class="lc2">대상 공정</td><td style="border:none" colspan="3"></td>
+  </tr></table>
+</div>
 
-<div class="sec">변경 내용</div>
+<div class="sec">1. 변경 내용 (Change Description)</div>
 <table>
-  <tr><td class="lc">변경 전 (Before)</td><td style="height:55px"></td></tr>
-  <tr><td class="lc">변경 후 (After)</td><td style="height:55px"></td></tr>
-  <tr><td class="lc">변경 사유</td><td style="height:40px"></td></tr>
-  <tr><td class="lc">기대 효과</td><td style="height:40px"></td></tr>
+  <tr>
+    <td class="lc2" style="width:140px">변경 전 현황 (Before)</td>
+    <td style="height:55px;vertical-align:top;padding:6px;background:#fafafa"></td>
+  </tr>
+  <tr>
+    <td class="lc2">변경 후 내용 (After)</td>
+    <td style="height:55px;vertical-align:top;padding:6px;background:#fafafa"></td>
+  </tr>
+  <tr>
+    <td class="lc2">변경 사유 (Why)</td>
+    <td style="height:40px;vertical-align:top;padding:6px"></td>
+  </tr>
+  <tr>
+    <td class="lc2">기대 효과</td>
+    <td style="height:35px;vertical-align:top;padding:6px"></td>
+  </tr>
 </table>
 
-<div class="sec">영향 평가</div>
+<div class="sec">2. 영향 평가 (Impact Assessment)</div>
 <table>
-  <tr><td class="lc">고객 사전 승인</td>
-    <td><span class="cb"></span>필요 (승인 획득 전 적용 불가) &nbsp;<span class="cb"></span>불필요</td>
-    <td class="lc">PPAP 재제출</td>
-    <td><span class="cb"></span>필요 &nbsp;<span class="cb"></span>불필요</td></tr>
-  <tr><td class="lc">관련 문서 개정 필요</td><td colspan="3"></td></tr>
-  <tr><td class="lc">시험 / 검증 필요</td>
-    <td><span class="cb"></span>필요 (검증 계획: &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;) &nbsp;<span class="cb"></span>불필요</td>
-    <td class="lc">예상 적용일</td><td></td></tr>
+  <tr>
+    <td class="lc2" style="width:140px">고객 사전 승인</td>
+    <td>
+      <span class="cb"></span>필요 → 승인 획득 전 적용 불가 (승인번호: _______________) &nbsp;
+      <span class="cb"></span>불필요
+    </td>
+  </tr>
+  <tr>
+    <td class="lc2">PPAP 재제출</td>
+    <td>
+      <span class="cb"></span>Level 1 &nbsp;<span class="cb"></span>Level 2 &nbsp;
+      <span class="cb"></span>Level 3 &nbsp;<span class="cb"></span>Level 4 &nbsp;
+      <span class="cb"></span>불필요
+    </td>
+  </tr>
+  <tr>
+    <td class="lc2">시험 / 검증 필요</td>
+    <td>
+      <span class="cb"></span>초물 검사 &nbsp;<span class="cb"></span>신뢰성 시험 &nbsp;
+      <span class="cb"></span>현장 파일럿 &nbsp;<span class="cb"></span>불필요 &nbsp;
+      검증 계획: ___________________________
+    </td>
+  </tr>
+  <tr>
+    <td class="lc2">개정 필요 문서</td>
+    <td>
+      <span class="cb"></span>도면 &nbsp;<span class="cb"></span>PFMEA &nbsp;
+      <span class="cb"></span>관리계획서 &nbsp;<span class="cb"></span>작업표준서 &nbsp;
+      <span class="cb"></span>ISIR &nbsp;<span class="cb"></span>없음
+    </td>
+  </tr>
+  <tr>
+    <td class="lc2">변경 위험도</td>
+    <td>
+      <span class="cb"></span>Low (경미, 즉시 적용 가능) &nbsp;
+      <span class="cb"></span>Medium (검증 후 적용) &nbsp;
+      <span class="cb"></span>High (고객 승인 + 시험 후 적용)
+    </td>
+  </tr>
 </table>
 
-<div class="sign sign4">
-  <div class="sbox"><div class="st">요청자 (서명)</div></div>
-  <div class="sbox"><div class="st">품질보증팀장 (영향평가)</div></div>
-  <div class="sbox"><div class="st">개발팀장 (기술검토)</div></div>
-  <div class="sbox"><div class="st">대표이사 (최종 승인)</div></div>
+<div class="sec">3. 변경 이력</div>
+<table>
+  <tr>
+    <th style="width:28px">No.</th>
+    <th style="width:70px">변경일</th>
+    <th>변경 내용 요약</th>
+    <th style="width:80px">변경자</th>
+    <th style="width:80px">승인자</th>
+    <th style="width:70px">적용일</th>
+  </tr>
+  ${Array.from({length:4},(_,i)=>`
+  <tr><td style="text-align:center;color:#bbb">${i+1}</td><td style="height:26px"></td><td></td><td></td><td></td><td></td></tr>`).join('')}
+</table>
+
+<div class="sign sign4" style="margin-top:10px">
+  <div class="sbox" style="min-height:55px"><div class="st">요청자 (서명 / 날짜)</div></div>
+  <div class="sbox" style="min-height:55px"><div class="st">품질보증팀장 (영향평가 / 날짜)</div></div>
+  <div class="sbox" style="min-height:55px"><div class="st">개발 / 생산팀장 (기술검토)</div></div>
+  <div class="sbox" style="min-height:55px"><div class="st">대표이사 (최종 승인)</div></div>
 </div>`
 }
 
 function supF001() {
   return `
-<table><tr>
-  <td class="lc">공급업체명</td><td></td>
-  <td class="lc">평가일</td><td></td>
-  <td class="lc">평가자</td><td></td>
-</tr><tr>
-  <td class="lc">대표자</td><td></td>
-  <td class="lc">소재지</td><td colspan="3"></td>
-</tr><tr>
-  <td class="lc">주요 납품 품목</td><td></td>
-  <td class="lc">인증 현황</td><td></td>
-  <td class="lc">평가 목적</td>
-  <td><span class="cb"></span>신규등록 &nbsp;<span class="cb"></span>정기평가 &nbsp;<span class="cb"></span>특별평가</td>
-</tr></table>
+<!-- ── 기본 정보 ── -->
+<div class="d-info">
+  <table style="border:none"><tr>
+    <td style="border:none" class="lc2">공급업체명</td><td style="border:none;width:150px"></td>
+    <td style="border:none" class="lc2">평가일</td><td style="border:none;width:110px"></td>
+    <td style="border:none" class="lc2">평가자 (소속)</td><td style="border:none;width:130px"></td>
+  </tr><tr>
+    <td style="border:none" class="lc2">대표자</td><td style="border:none"></td>
+    <td style="border:none" class="lc2">소재지</td><td style="border:none" colspan="3"></td>
+  </tr><tr>
+    <td style="border:none" class="lc2">주요 납품 품목</td><td style="border:none"></td>
+    <td style="border:none" class="lc2">인증 현황</td>
+    <td style="border:none">
+      <span class="cb"></span>ISO 9001 &nbsp;<span class="cb"></span>IATF 16949 &nbsp;
+      <span class="cb"></span>ISO 14001 &nbsp;<span class="cb"></span>없음
+    </td>
+    <td style="border:none" class="lc2">평가 목적</td>
+    <td style="border:none">
+      <span class="cb"></span>신규 등록 &nbsp;<span class="cb"></span>정기평가 &nbsp;<span class="cb"></span>특별평가
+    </td>
+  </tr><tr>
+    <td style="border:none" class="lc2">직전 평가 등급</td><td style="border:none"></td>
+    <td style="border:none" class="lc2">직전 평가일</td><td style="border:none"></td>
+    <td style="border:none" class="lc2">직전 PPM 실적</td><td style="border:none"></td>
+  </tr></table>
+</div>
 
-<div class="sec">평가 항목 (100점 만점)</div>
+<div class="sec">공급업체 평가 항목 (100점 만점)</div>
 <table>
-  <tr><th style="width:120px">평가 분야</th><th>평가 항목</th><th style="width:60px">배점</th><th style="width:60px">취득점수</th><th>평가 의견</th></tr>
-  <tr><td class="lc" rowspan="4">품질시스템<br>(40점)</td>
-    <td>ISO 9001/IATF 16949 인증 보유</td><td style="text-align:center">10</td><td></td><td></td></tr>
-  <tr><td>품질 조직 및 역할 명확성</td><td style="text-align:center">10</td><td></td><td></td></tr>
-  <tr><td>공정관리 체계(PFMEA/CP) 보유</td><td style="text-align:center">10</td><td></td><td></td></tr>
-  <tr><td>측정장비 교정 관리</td><td style="text-align:center">10</td><td></td><td></td></tr>
-  <tr><td class="lc" rowspan="3">기술능력<br>(30점)</td>
-    <td>주요 설비 보유 현황</td><td style="text-align:center">10</td><td></td><td></td></tr>
-  <tr><td>품질 실적(PPM, 클레임 이력)</td><td style="text-align:center">10</td><td></td><td></td></tr>
-  <tr><td>기술인력 보유 수준</td><td style="text-align:center">10</td><td></td><td></td></tr>
-  <tr><td class="lc">가격경쟁력<br>(15점)</td>
-    <td>견적가 경쟁력 / 원가절감 의지</td><td style="text-align:center">15</td><td></td><td></td></tr>
-  <tr><td class="lc">납기능력<br>(15점)</td>
-    <td>납기준수율 이력 / 생산 CAPA</td><td style="text-align:center">15</td><td></td><td></td></tr>
-  <tr><th style="font-weight:900">합계</th><td></td><td style="text-align:center;font-weight:900">100</td><td style="font-weight:900"></td><td></td></tr>
+  <tr>
+    <th style="width:110px">평가 분야</th>
+    <th>평가 항목</th>
+    <th style="width:55px">배점</th>
+    <th style="width:65px">취득 점수</th>
+    <th>평가 의견 / 근거</th>
+  </tr>
+  <tr>
+    <td class="lc" rowspan="5" style="text-align:center">품질 시스템<br><span style="font-size:8pt;font-weight:400">(40점)</span></td>
+    <td>ISO 9001 / IATF 16949 인증 보유 및 유효성</td>
+    <td style="text-align:center">10</td><td></td><td style="height:26px"></td>
+  </tr>
+  <tr><td>품질 조직 / 역할 / 책임 명확성</td><td style="text-align:center">8</td><td></td><td></td></tr>
+  <tr><td>공정 FMEA / 관리계획서 보유 및 최신화</td><td style="text-align:center">8</td><td></td><td></td></tr>
+  <tr><td>측정장비 교정 및 MSA 체계 운영</td><td style="text-align:center">7</td><td></td><td></td></tr>
+  <tr><td>부적합품 관리 / CAPA 체계 운영</td><td style="text-align:center">7</td><td></td><td></td></tr>
+  <tr>
+    <td class="lc" rowspan="4" style="text-align:center">기술 능력<br><span style="font-size:8pt;font-weight:400">(30점)</span></td>
+    <td>주요 생산 설비 보유 현황 (전용 / 범용)</td>
+    <td style="text-align:center">8</td><td></td><td></td>
+  </tr>
+  <tr><td>품질 실적 — PPM / 클레임 발생 이력</td><td style="text-align:center">8</td><td></td><td></td></tr>
+  <tr><td>기술 인력 보유 수준 (엔지니어 수)</td><td style="text-align:center">7</td><td></td><td></td></tr>
+  <tr><td>신기술 / 개선 의지 (원가절감 제안 등)</td><td style="text-align:center">7</td><td></td><td></td></tr>
+  <tr>
+    <td class="lc" rowspan="2" style="text-align:center">가격 경쟁력<br><span style="font-size:8pt;font-weight:400">(15점)</span></td>
+    <td>견적가 경쟁력 (시장 대비)</td>
+    <td style="text-align:center">8</td><td></td><td></td>
+  </tr>
+  <tr><td>원가절감 의지 / VA/VE 활동 이력</td><td style="text-align:center">7</td><td></td><td></td></tr>
+  <tr>
+    <td class="lc" rowspan="2" style="text-align:center">납기 능력<br><span style="font-size:8pt;font-weight:400">(15점)</span></td>
+    <td>납기준수율 이력 (OTD %)</td>
+    <td style="text-align:center">8</td><td></td><td></td>
+  </tr>
+  <tr><td>생산 CAPA / 비상 생산 대응 역량</td><td style="text-align:center">7</td><td></td><td></td></tr>
+  <tr style="font-weight:900;background:#e8f0ff">
+    <td colspan="2" style="text-align:right">합 계</td>
+    <td style="text-align:center;font-weight:900">100</td>
+    <td style="font-weight:900"></td>
+    <td></td>
+  </tr>
 </table>
 
 <div class="sec">종합 판정</div>
 <table><tr>
-  <td style="text-align:center;font-size:12pt;font-weight:900;padding:12px">
-    <span class="cb"></span> A: 70점 이상 → 등록 승인 &nbsp;&nbsp;&nbsp;
-    <span class="cb"></span> B: 60~69점 → 조건부 등록 &nbsp;&nbsp;&nbsp;
-    <span class="cb"></span> C: 60점 미만 → 등록 불가
+  <td style="text-align:center;font-size:12pt;font-weight:900;padding:14px;width:70%">
+    <span class="cb"></span> A: 80점 이상 → 등록 승인 (우수) &nbsp;&nbsp;&nbsp;
+    <span class="cb"></span> B: 70~79점 → 등록 승인 (보통) &nbsp;&nbsp;&nbsp;
+    <span class="cb"></span> C: 60~69점 → 조건부 등록 &nbsp;&nbsp;&nbsp;
+    <span class="cb"></span> D: 60점 미만 → 등록 불가
+  </td>
+  <td style="vertical-align:top;padding:6px">
+    <div style="font-size:8pt;font-weight:700;color:#1e3a5f;margin-bottom:4px">조건부 등록 조건 / 개선 요구사항</div>
+    <div style="border:1px solid #aaa;min-height:60px;background:#fafafa;padding:5px;font-size:8pt"></div>
   </td>
 </tr></table>
-<table><tr><td class="lc">총점</td><td></td><td class="lc">판정</td><td></td><td class="lc">조건(조건부 시)</td><td></td></tr></table>
+<table><tr>
+  <td class="lc2">총점</td><td></td>
+  <td class="lc2">최종 판정 등급</td><td style="font-weight:700;font-size:11pt"></td>
+  <td class="lc2">다음 정기 평가일</td><td></td>
+</tr></table>
 
-<div class="sign sign3">
-  <div class="sbox"><div class="st">평가자 (서명)</div></div>
-  <div class="sbox"><div class="st">품질보증팀장 (검토)</div></div>
-  <div class="sbox"><div class="st">구매팀장 (승인)</div></div>
+<div class="sign sign3" style="margin-top:10px">
+  <div class="sbox" style="min-height:50px"><div class="st">평가자 (서명 / 날짜)</div></div>
+  <div class="sbox" style="min-height:50px"><div class="st">품질보증팀장 (검토)</div></div>
+  <div class="sbox" style="min-height:50px"><div class="st">구매팀장 (승인)</div></div>
 </div>`
 }
 
 function audF002() {
   return `
-<table><tr>
-  <td class="lc">심사 번호</td><td></td>
-  <td class="lc">심사일</td><td></td>
-  <td class="lc">수감 부서</td><td></td>
-</tr><tr>
-  <td class="lc">심사원</td><td></td>
-  <td class="lc">수감 부서장</td><td></td>
-  <td class="lc">심사 범위</td><td></td>
-</tr></table>
+<!-- ── 기본 정보 ── -->
+<div class="d-info">
+  <table style="border:none"><tr>
+    <td style="border:none" class="lc2">심사 번호</td><td style="border:none;width:140px"></td>
+    <td style="border:none" class="lc2">심사일</td><td style="border:none;width:110px"></td>
+    <td style="border:none" class="lc2">심사 연도 계획</td><td style="border:none;width:110px"></td>
+  </tr><tr>
+    <td style="border:none" class="lc2">수감 부서</td><td style="border:none"></td>
+    <td style="border:none" class="lc2">수감 부서장</td><td style="border:none"></td>
+    <td style="border:none" class="lc2">심사 범위</td><td style="border:none"></td>
+  </tr><tr>
+    <td style="border:none" class="lc2">심사원 (Lead)</td><td style="border:none"></td>
+    <td style="border:none" class="lc2">보조 심사원</td><td style="border:none"></td>
+    <td style="border:none" class="lc2">심사 기준</td>
+    <td style="border:none">
+      <span class="cb"></span>ISO 9001 &nbsp;<span class="cb"></span>IATF 16949 &nbsp;<span class="cb"></span>내부 절차
+    </td>
+  </tr></table>
+</div>
 
-<div class="sec">심사 체크리스트</div>
-<div class="note">※ 판정: O(적합) / × (부적합) / △ (관찰사항) / N/A (해당없음)</div>
+<div class="sec">내부 심사 체크리스트 (ISO 9001:2015)</div>
+<div class="note" style="margin-bottom:4px">
+  ※ 판정: &nbsp;<strong>O</strong> 적합 &nbsp;|&nbsp; <strong>×</strong> 부적합 — 발견사항 보고서 발행 필수 &nbsp;|&nbsp;
+  <strong>△</strong> 관찰사항 — 개선 권고 &nbsp;|&nbsp; <strong>N/A</strong> 해당 없음
+</div>
 <table>
-  <tr><th style="width:60px">조항</th><th>심사 항목</th><th style="width:50px">판정</th><th>증거 / 관찰 내용</th></tr>
+  <tr>
+    <th style="width:55px">조항</th>
+    <th>심사 항목</th>
+    <th style="width:60px">판정<br>O/×/△</th>
+    <th style="width:65px">지적<br>유형</th>
+    <th>증거 자료 / 관찰 내용</th>
+  </tr>
   ${[
-    ['§4.1','조직의 상황 및 이슈 파악'],
-    ['§4.2','이해관계자 요구사항 파악'],
-    ['§5.1','리더십 및 경영 의지'],
-    ['§5.2','품질 방침 수립 및 전달'],
-    ['§6.1','리스크 및 기회 관리'],
-    ['§6.2','품질목표 수립 및 모니터링'],
-    ['§7.1','자원(인원/인프라) 충족'],
-    ['§7.2','인원 역량 및 교육훈련'],
-    ['§7.5','문서화된 정보 관리'],
-    ['§8.1','운영 계획 및 관리'],
-    ['§8.4','외부 공급업체 관리'],
-    ['§8.5','생산·서비스 제공'],
-    ['§8.6','제품·서비스 적합성 확인'],
-    ['§8.7','부적합품 관리'],
-    ['§9.1','성과 모니터링·측정'],
-    ['§9.2','내부심사 실시'],
-    ['§10.2','시정조치 및 재발방지'],
-  ].map(([clause, item]) =>
-    `<tr><td style="text-align:center;font-size:8pt">${clause}</td><td>${item}</td><td style="text-align:center"></td><td class="blank"></td></tr>`
-  ).join('')}
+    ['§4.1','조직의 상황 (내/외부 이슈) 파악 및 문서화'],
+    ['§4.2','이해관계자의 요구사항 파악 및 모니터링'],
+    ['§4.4','QMS 프로세스 수립 및 유지'],
+    ['§5.1','최고경영자의 리더십 및 경영 의지'],
+    ['§5.2','품질 방침 수립 / 전달 / 이해'],
+    ['§5.3','역할 / 책임 / 권한 부여 및 소통'],
+    ['§6.1','리스크 및 기회 식별 / 관리 계획'],
+    ['§6.2','품질 목표 수립, 추진 계획, 모니터링'],
+    ['§7.1','인원 / 인프라 / 프로세스 환경 자원 충족'],
+    ['§7.2','인원 역량 확보 및 교육훈련 체계'],
+    ['§7.4','내/외부 소통 체계 운영'],
+    ['§7.5','문서화된 정보 관리 (작성/최신화/배포)'],
+    ['§8.1','운영 계획 및 관리 프로세스 운영'],
+    ['§8.4','외부 공급자 선정 / 평가 / 모니터링'],
+    ['§8.5','생산·서비스 제공 (식별/추적성/방호)'],
+    ['§8.6','제품/서비스 출하 적합성 확인 (검사)'],
+    ['§8.7','부적합품 식별 / 격리 / 처리 체계'],
+    ['§9.1','성과 모니터링 및 KPI 분석'],
+    ['§9.2','내부심사 계획 및 실시 체계'],
+    ['§9.3','경영검토 실시 및 기록'],
+    ['§10.2','시정조치 (8D/CAPA) 운영 및 종결 관리'],
+    ['§10.3','지속적 개선 활동 증거'],
+  ].map(([clause, item])=>`
+  <tr>
+    <td style="text-align:center;font-size:8pt;font-weight:700">${clause}</td>
+    <td>${item}</td>
+    <td style="text-align:center;font-size:9pt"></td>
+    <td style="text-align:center;font-size:8pt"></td>
+    <td style="height:26px"></td>
+  </tr>`).join('')}
 </table>
 
-<div class="sec">지적사항 요약</div>
+<div class="sec">지적사항 요약 (부적합 / 관찰사항)</div>
 <table>
-  <tr><th style="width:28px">No.</th><th>조항</th><th>지적 유형</th><th>지적 내용</th><th style="width:90px">완료 기한</th></tr>
-  ${rows(5, ['','','',''])}
+  <tr>
+    <th style="width:28px">No.</th>
+    <th style="width:55px">조항</th>
+    <th style="width:70px">지적 유형</th>
+    <th>지적 내용</th>
+    <th style="width:70px">담당자</th>
+    <th style="width:80px">완료 기한</th>
+    <th style="width:70px">종결 여부</th>
+  </tr>
+  ${Array.from({length:6},(_,i)=>`
+  <tr>
+    <td style="text-align:center;color:#bbb">${i+1}</td>
+    <td></td><td></td><td style="height:28px"></td><td></td><td></td>
+    <td style="text-align:center"><span class="cb"></span>O &nbsp;<span class="cb"></span>×</td>
+  </tr>`).join('')}
+</table>
+<div class="note">※ 지적 유형: 중대부적합(MAJ) / 경미부적합(MIN) / 관찰사항(OBS) / 강점(STR)</div>
+
+<div class="sec">심사 결과 종합</div>
+<table>
+  <tr>
+    <td class="lc2">부적합 건수</td><td></td>
+    <td class="lc2">관찰사항 건수</td><td></td>
+    <td class="lc2">강점 건수</td><td></td>
+    <td class="lc2">종합 평가</td>
+    <td><span class="cb"></span>적합 &nbsp;<span class="cb"></span>조건부 적합 &nbsp;<span class="cb"></span>부적합</td>
+  </tr>
 </table>
 
-<div class="sign sign3">
-  <div class="sbox"><div class="st">심사원 (서명)</div></div>
-  <div class="sbox"><div class="st">수감 부서장 (확인)</div></div>
-  <div class="sbox"><div class="st">심사팀장 (승인)</div></div>
+<div class="sign sign3" style="margin-top:10px">
+  <div class="sbox" style="min-height:50px"><div class="st">심사원 Lead (서명 / 날짜)</div></div>
+  <div class="sbox" style="min-height:50px"><div class="st">수감 부서장 (확인 / 날짜)</div></div>
+  <div class="sbox" style="min-height:50px"><div class="st">품질보증팀장 (승인)</div></div>
 </div>`
 }
 
 function audF003() {
   return `
-<table><tr>
-  <td class="lc">심사 번호</td><td></td>
-  <td class="lc">심사일</td><td></td>
-  <td class="lc">심사원</td><td></td>
-</tr></table>
+<!-- ── 기본 정보 ── -->
+<div class="d-info">
+  <table style="border:none"><tr>
+    <td style="border:none" class="lc2">심사 번호</td><td style="border:none;width:140px"></td>
+    <td style="border:none" class="lc2">심사일</td><td style="border:none;width:110px"></td>
+    <td style="border:none" class="lc2">수감 부서</td><td style="border:none;width:130px"></td>
+  </tr><tr>
+    <td style="border:none" class="lc2">심사원 (Lead)</td><td style="border:none"></td>
+    <td style="border:none" class="lc2">보조 심사원</td><td style="border:none"></td>
+    <td style="border:none" class="lc2">발행일</td><td style="border:none"></td>
+  </tr></table>
+</div>
+
+<div class="sec">심사 발견사항 보고서 (Audit Finding Report)</div>
+<div class="note" style="margin-bottom:4px">
+  ※ 유형: &nbsp;<strong>MAJ</strong> 중대부적합 — 즉각 시정조치 &nbsp;|&nbsp;
+  <strong>MIN</strong> 경미부적합 — 30일 내 시정 &nbsp;|&nbsp;
+  <strong>OBS</strong> 관찰사항 — 60일 내 개선 권고 &nbsp;|&nbsp;
+  <strong>STR</strong> 강점 — 모범 사례 공유
+</div>
 <table>
   <tr>
     <th style="width:28px">No.</th>
-    <th style="width:60px">조항</th>
-    <th style="width:70px">유형</th>
-    <th>지적 내용</th>
-    <th style="width:120px">증거 (기록/관찰)</th>
-    <th style="width:90px">시정조치 기한</th>
-    <th style="width:70px">종결여부</th>
+    <th style="width:55px">조항</th>
+    <th style="width:65px">유형</th>
+    <th>지적 내용 (구체적 기술)</th>
+    <th style="width:150px">증거 (기록 / 관찰 / 인터뷰)</th>
+    <th style="width:70px">담당 부서</th>
+    <th style="width:75px">시정조치<br>기한</th>
+    <th style="width:65px">종결 여부</th>
   </tr>
-  ${rows(10, ['','','','','',''])}
+  ${Array.from({length:10},(_,i)=>`
+  <tr>
+    <td style="text-align:center;color:#bbb">${i+1}</td>
+    <td></td>
+    <td style="text-align:center;font-weight:700;font-size:9pt"></td>
+    <td style="height:36px;vertical-align:top;padding:4px"></td>
+    <td style="vertical-align:top;padding:4px"></td>
+    <td></td><td></td>
+    <td style="text-align:center"><span class="cb"></span>O &nbsp;<span class="cb"></span>×</td>
+  </tr>`).join('')}
 </table>
-<div class="note">※ 유형: 중대부적합(MAJ) / 경미부적합(MIN) / 관찰사항(OBS) / 강점(STR)</div>
 
-<div class="sign sign3">
-  <div class="sbox"><div class="st">심사원 (서명)</div></div>
-  <div class="sbox"><div class="st">수감 부서장 (확인)</div></div>
-  <div class="sbox"><div class="st">심사팀장 (승인)</div></div>
+<div class="sec">시정조치 완료 확인</div>
+<table>
+  <tr>
+    <td class="lc2">중대부적합(MAJ) 건수</td><td style="color:#c00;font-weight:700"></td>
+    <td class="lc2">경미부적합(MIN) 건수</td><td></td>
+    <td class="lc2">관찰사항(OBS) 건수</td><td></td>
+    <td class="lc2">강점(STR) 건수</td><td></td>
+  </tr>
+  <tr>
+    <td class="lc2">최종 종결일</td><td></td>
+    <td class="lc2">종결 확인자</td><td></td>
+    <td class="lc2">후속 심사 필요</td>
+    <td><span class="cb"></span>필요 &nbsp;<span class="cb"></span>불필요</td>
+    <td class="lc2">후속 심사 예정일</td><td></td>
+  </tr>
+</table>
+
+<div class="sign sign3" style="margin-top:10px">
+  <div class="sbox" style="min-height:50px"><div class="st">심사원 Lead (서명 / 날짜)</div></div>
+  <div class="sbox" style="min-height:50px"><div class="st">수감 부서장 (확인 / 날짜)</div></div>
+  <div class="sbox" style="min-height:50px"><div class="st">품질보증팀장 (승인)</div></div>
 </div>`
 }
 
@@ -1564,29 +2596,47 @@ function vdaF014() {
 function genericForm(no, title) {
   const today = new Date().toLocaleDateString('ko-KR')
   return `
-<table><tr>
-  <td class="lc">부서</td><td></td>
-  <td class="lc">작성자</td><td></td>
-  <td class="lc">작성일</td><td>${today}</td>
-</tr><tr>
-  <td class="lc">검토자</td><td></td>
-  <td class="lc">검토일</td><td></td>
-  <td class="lc">승인자</td><td></td>
-</tr></table>
+<div class="d-info">
+  <table style="border:none"><tr>
+    <td style="border:none" class="lc2">작성 부서</td><td style="border:none;width:140px"></td>
+    <td style="border:none" class="lc2">작성자</td><td style="border:none;width:130px"></td>
+    <td style="border:none" class="lc2">작성일</td><td style="border:none;width:110px">${today}</td>
+  </tr><tr>
+    <td style="border:none" class="lc2">검토자</td><td style="border:none"></td>
+    <td style="border:none" class="lc2">검토일</td><td style="border:none"></td>
+    <td style="border:none" class="lc2">승인자</td><td style="border:none"></td>
+  </tr><tr>
+    <td style="border:none" class="lc2">관련 품번</td><td style="border:none"></td>
+    <td style="border:none" class="lc2">관련 LOT No.</td><td style="border:none"></td>
+    <td style="border:none" class="lc2">관련 문서 No.</td><td style="border:none"></td>
+  </tr></table>
+</div>
 
-<div class="sec">내용</div>
+<div class="sec">주요 내용</div>
 <table>
-  ${rows(18, ['','','','',''])}
+  <tr>
+    <th style="width:28px">No.</th>
+    <th>항목</th>
+    <th>내용 / 세부 사항</th>
+    <th style="width:70px">담당자</th>
+    <th style="width:70px">기한</th>
+    <th style="width:70px">완료 여부</th>
+  </tr>
+  ${Array.from({length:14},(_,i)=>`
+  <tr>
+    <td style="text-align:center;color:#bbb">${i+1}</td>
+    <td style="height:28px"></td><td></td><td></td><td></td>
+    <td style="text-align:center"><span class="cb"></span>O &nbsp;<span class="cb"></span>×</td>
+  </tr>`).join('')}
 </table>
-<table>
-  <tr><th style="width:28px">No.</th><th>항목</th><th>내용</th><th style="width:100px">비고</th></tr>
-  ${rows(8, ['','',''])}
-</table>
+
+<div class="sec">자유 기술란</div>
+<div class="write-area-xl" style="min-height:100px"></div>
 
 <div class="sign sign3">
-  <div class="sbox"><div class="st">작성자 (서명 / 날짜)</div></div>
-  <div class="sbox"><div class="st">검토자 (서명 / 날짜)</div></div>
-  <div class="sbox"><div class="st">승인자 (서명 / 날짜)</div></div>
+  <div class="sbox" style="min-height:50px"><div class="st">작성자 (서명 / 날짜)</div></div>
+  <div class="sbox" style="min-height:50px"><div class="st">검토자 (서명 / 날짜)</div></div>
+  <div class="sbox" style="min-height:50px"><div class="st">승인자 (서명 / 날짜)</div></div>
 </div>`
 }
 
