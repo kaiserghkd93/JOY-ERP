@@ -21,10 +21,11 @@ const CSS = `
   td { font-size: 8.5pt; padding: 4px 6px; border: 1px solid #000; vertical-align: middle; }
   .lc { background: #efefef; font-weight: 700; text-align: center; white-space: nowrap; width: 100px; }
   .lc2 { background: #efefef; font-weight: 700; text-align: center; white-space: nowrap; width: 140px; }
-  .sec { background: #1e3a5f; color: #fff; font-weight: 700; font-size: 9pt;
-         padding: 4px 10px; margin: 8px 0 0; letter-spacing: 1px; }
-  .blank { height: 22px; }
+  .sec { background: #1e3a5f; color: #fff; font-weight: 700; font-size: 9.5pt;
+         padding: 5px 12px; margin: 10px 0 4px; letter-spacing: 1px; }
+  .blank  { height: 22px; }
   .blank2 { height: 44px; }
+  .blank3 { height: 66px; }
   .sign { display: grid; gap: 6px; margin-top: 10px; }
   .sign3 { grid-template-columns: repeat(3,1fr); }
   .sign4 { grid-template-columns: repeat(4,1fr); }
@@ -39,6 +40,21 @@ const CSS = `
   .g2 { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
   .g3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; }
   .box { border: 1px solid #000; padding: 6px 8px; min-height: 50px; }
+  /* ── Multi-page support ── */
+  .page-break { page-break-before: always; break-before: page; padding-top: 8px; }
+  .page-ref { display: flex; justify-content: space-between; align-items: center;
+              padding: 3px 10px; background: #f0f4f8; border: 1px solid #c0cfe0;
+              margin-bottom: 10px; font-size: 7.5pt; color: #555; }
+  /* ── 8D Discipline header ── */
+  .d-cover { background: #1e3a5f; color: #fff; padding: 14px 20px; margin-bottom: 12px;
+             display: flex; align-items: center; gap: 20px; }
+  .d-num  { font-size: 34pt; font-weight: 900; color: #fff; min-width: 55px; line-height: 1; }
+  .d-name { font-size: 12pt; font-weight: 700; letter-spacing: 0.5px; }
+  .d-subname { font-size: 8.5pt; color: #aaccff; margin-top: 3px; }
+  .d-info { background: #f0f4f8; border: 1px solid #b0c4de; padding: 8px 12px; margin-bottom: 10px; }
+  .write-area    { border: 1px solid #aaa; min-height: 60px;  padding: 8px; margin-bottom: 6px; background: #fafafa; }
+  .write-area-lg { border: 1px solid #aaa; min-height: 100px; padding: 8px; margin-bottom: 6px; background: #fafafa; }
+  .write-area-xl { border: 1px solid #aaa; min-height: 160px; padding: 8px; margin-bottom: 6px; background: #fafafa; }
   @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
 `
 
@@ -417,118 +433,597 @@ function ncrF002() {
 
 function ncrF010() {
   return `
-<table><tr>
-  <td class="lc">CAR 번호</td><td></td>
-  <td class="lc">발행일</td><td></td>
-  <td class="lc">완료 기한</td><td></td>
-</tr><tr>
-  <td class="lc">발생 유형</td>
-  <td colspan="5"><span class="cb"></span>고객불만 &nbsp;<span class="cb"></span>내부부적합 &nbsp;<span class="cb"></span>공급업체 &nbsp;<span class="cb"></span>내부심사 &nbsp;<span class="cb"></span>반복발생</td>
-</tr></table>
+<!-- ── PAGE 1: Cover + D0 긴급대응 + D1 팀 구성 ── -->
+<div class="d-info">
+  <table style="border:none"><tr>
+    <td style="border:none" class="lc2">CAR 번호</td><td style="border:none;width:140px"></td>
+    <td style="border:none" class="lc2">발행일</td><td style="border:none;width:110px"></td>
+    <td style="border:none" class="lc2">완료 기한</td><td style="border:none;width:110px"></td>
+  </tr><tr>
+    <td style="border:none" class="lc2">고객사 / 발생 부서</td><td style="border:none"></td>
+    <td style="border:none" class="lc2">품번</td><td style="border:none"></td>
+    <td style="border:none" class="lc2">품명</td><td style="border:none"></td>
+  </tr><tr>
+    <td style="border:none" class="lc2">발생 유형</td>
+    <td colspan="5" style="border:none">
+      <span class="cb"></span>고객 불만 &nbsp;
+      <span class="cb"></span>내부 부적합 &nbsp;
+      <span class="cb"></span>공급업체 불량 &nbsp;
+      <span class="cb"></span>내부 심사 지적 &nbsp;
+      <span class="cb"></span>반복 발생 &nbsp;
+      <span class="cb"></span>기타
+    </td>
+  </tr></table>
+</div>
 
-<div class="sec">D1 — 팀 구성 (Team Formation)</div>
-<table><tr>
-  <td class="lc">팀 리더</td><td></td>
-  <td class="lc">팀원</td><td colspan="3"></td>
-</tr></table>
-
-<div class="sec">D2 — 문제 기술 (Problem Description)</div>
-<table><tr><td style="height:60px"></td></tr></table>
-
-<div class="sec">D3 — 긴급 봉쇄 조치 (Containment Action) — 24시간 이내</div>
-<table><tr>
-  <td class="lc">봉쇄 조치 내용</td><td style="height:50px"></td>
-</tr><tr>
-  <td class="lc">봉쇄 완료 일시</td><td></td>
-</tr></table>
-
-<div class="sec">D4 — 근본원인 분석 (Root Cause Analysis)</div>
+<div class="d-cover">
+  <div class="d-num">D1</div>
+  <div>
+    <div class="d-name">팀 구성 (Team Formation)</div>
+    <div class="d-subname">문제 해결을 위한 담당 팀과 역할을 정의한다</div>
+  </div>
+</div>
 <table>
-  <tr><th style="width:80px">Why</th><th>발생 원인</th><th style="width:200px">증거 / 근거</th></tr>
-  <tr><td class="lc">1st Why</td><td class="blank2"></td><td class="blank2"></td></tr>
-  <tr><td class="lc">2nd Why</td><td class="blank2"></td><td class="blank2"></td></tr>
-  <tr><td class="lc">3rd Why</td><td class="blank2"></td><td class="blank2"></td></tr>
-  <tr><td class="lc">4th Why</td><td class="blank2"></td><td class="blank2"></td></tr>
-  <tr><td class="lc">5th Why (근본원인)</td><td style="font-weight:700" class="blank2"></td><td class="blank2"></td></tr>
+  <tr>
+    <th style="width:28px">No.</th>
+    <th>성 명</th>
+    <th>부서 / 직책</th>
+    <th>역 할</th>
+    <th style="width:120px">연락처</th>
+    <th style="width:70px">서 명</th>
+  </tr>
+  <tr>
+    <td style="text-align:center;background:#ffe8b0;font-weight:900;font-size:10pt">L</td>
+    <td style="background:#fffae0;height:34px"></td>
+    <td style="background:#fffae0"></td>
+    <td style="background:#fffae0;font-size:8pt">팀 리더 (Team Leader)</td>
+    <td style="background:#fffae0"></td>
+    <td style="background:#fffae0"></td>
+  </tr>
+  ${Array.from({length:7},(_,i)=>`
+  <tr>
+    <td style="text-align:center;color:#bbb">${i+1}</td>
+    <td class="blank2"></td><td class="blank2"></td><td class="blank2"></td>
+    <td class="blank2"></td><td class="blank2"></td>
+  </tr>`).join('')}
 </table>
-<table><tr><th style="width:80px">Why</th><th>유출 원인 (왜 검출 못했나)</th><th>증거 / 근거</th></tr>
-  <tr><td class="lc">유출 원인</td><td class="blank2"></td><td class="blank2"></td></tr>
-</table>
-
-<div class="sec">D5 — 시정조치 계획 (Corrective Action Plan)</div>
-<table>
-  <tr><th>조치 항목</th><th style="width:120px">담당자</th><th style="width:90px">완료 기한</th><th style="width:60px">완료여부</th></tr>
-  ${rows(4, ['','',''])}
-</table>
-
-<div class="sec">D6 — 조치 이행 확인 (Verification)</div>
 <table><tr>
-  <td class="lc">효과 검증 방법</td><td></td>
-  <td class="lc">검증 기간</td><td></td>
-  <td class="lc">검증 결과</td>
-  <td><span class="cb"></span>효과확인 &nbsp;<span class="cb"></span>효과미흡</td>
+  <td class="lc2">팀 구성 일자</td><td></td>
+  <td class="lc2">D1 완료 확인자</td><td></td>
+  <td class="lc2">D1 완료 일자</td><td></td>
 </tr></table>
 
-<div class="sec">D7 — 수평 전개 / 재발방지 (D7)</div>
-<table><tr><td class="lc">수평 전개 대상</td><td></td><td class="lc">문서 개정</td><td class="blank"></td></tr></table>
+<!-- ═══════════════════════════ D2 PAGE ═══════════════════════════ -->
+<div class="page-break">
+<div class="page-ref"><span>NCR-F-010 — 시정조치 요청서 (8D CAR)</span><span>D2 — 문제 기술 (Problem Description)</span></div>
+<div class="d-cover">
+  <div class="d-num">D2</div>
+  <div>
+    <div class="d-name">문제 기술 (Problem Description)</div>
+    <div class="d-subname">문제를 구체적이고 정량적으로 기술하고 Is / Is Not 으로 경계를 설정한다</div>
+  </div>
+</div>
 
-<div class="sec">D8 — 완료 및 종결 (Closure)</div>
-<div class="sign sign4">
-  <div class="sbox"><div class="st">작성자 (서명)</div></div>
-  <div class="sbox"><div class="st">부서장 확인</div></div>
-  <div class="sbox"><div class="st">품질보증팀장 (종결 승인)</div></div>
-  <div class="sbox"><div class="st">종결 일자</div></div>
-</div>`
+<div class="sec">문제 현상 기술 (Symptom Description)</div>
+<div class="write-area-xl" style="min-height:90px"></div>
+
+<div class="sec">Is / Is Not 분석 — 문제 경계 정의</div>
+<table>
+  <tr>
+    <th style="width:120px">관점</th>
+    <th>IS — 해당 (문제가 있는 것)</th>
+    <th>IS NOT — 비해당 (문제가 없는 것)</th>
+    <th style="width:150px">차이점 (Distinction)</th>
+  </tr>
+  <tr><td class="lc">무엇 (What)</td><td style="height:55px"></td><td></td><td></td></tr>
+  <tr><td class="lc">어디서 (Where)</td><td style="height:55px"></td><td></td><td></td></tr>
+  <tr><td class="lc">언제 (When)</td><td style="height:55px"></td><td></td><td></td></tr>
+  <tr><td class="lc">얼마나 (How Much)</td><td style="height:55px"></td><td></td><td></td></tr>
+</table>
+
+<div class="sec">영향 범위 및 증거 자료</div>
+<table><tr>
+  <td class="lc2">영향 수량 (불량 / 전체)</td><td></td>
+  <td class="lc2">영향 공정 / 라인</td><td></td>
+  <td class="lc2">최초 발생일</td><td></td>
+</tr><tr>
+  <td class="lc2">증거 자료 목록</td>
+  <td colspan="5">
+    <span class="cb"></span>사진 &nbsp;
+    <span class="cb"></span>샘플 현물 &nbsp;
+    <span class="cb"></span>측정 데이터 &nbsp;
+    <span class="cb"></span>생산 기록 &nbsp;
+    <span class="cb"></span>기타: _______________
+  </td>
+</tr></table>
+<table><tr>
+  <td class="lc2">D2 작성자</td><td></td>
+  <td class="lc2">D2 완료 일자</td><td></td>
+  <td class="lc2">부서장 확인</td><td></td>
+</tr></table>
+</div>
+
+<!-- ═══════════════════════════ D3 PAGE ═══════════════════════════ -->
+<div class="page-break">
+<div class="page-ref"><span>NCR-F-010 — 시정조치 요청서 (8D CAR)</span><span>D3 — 긴급 봉쇄 조치 (Containment)</span></div>
+<div class="d-cover">
+  <div class="d-num">D3</div>
+  <div>
+    <div class="d-name">긴급 봉쇄 조치 (Immediate Containment Action)</div>
+    <div class="d-subname">고객 보호를 위한 즉각적 조치 — 발생 후 24시간 이내 완료</div>
+  </div>
+</div>
+
+<div class="sec">봉쇄 조치 계획 (Containment Actions)</div>
+<table>
+  <tr>
+    <th style="width:28px">No.</th>
+    <th>봉쇄 조치 내용</th>
+    <th style="width:70px">적용 범위</th>
+    <th style="width:70px">담당자</th>
+    <th style="width:80px">완료 기한</th>
+    <th style="width:80px">실제 완료일</th>
+    <th style="width:55px">확인</th>
+  </tr>
+  ${Array.from({length:6},(_,i)=>`
+  <tr>
+    <td style="text-align:center;color:#bbb">${i+1}</td>
+    <td style="height:40px"></td><td></td><td></td><td></td><td></td>
+    <td style="text-align:center"><span class="cb"></span></td>
+  </tr>`).join('')}
+</table>
+
+<div class="sec">고객 재고 봉쇄 (Customer Stock Containment)</div>
+<table><tr>
+  <td class="lc2">고객사 재고 수량</td><td></td>
+  <td class="lc2">봉쇄 방법</td>
+  <td>
+    <span class="cb"></span>전수검사 &nbsp;
+    <span class="cb"></span>전량 반품 &nbsp;
+    <span class="cb"></span>대체 공급 &nbsp;
+    <span class="cb"></span>해당 없음
+  </td>
+</tr><tr>
+  <td class="lc2">고객 통보 일시</td><td></td>
+  <td class="lc2">고객 담당자</td><td></td>
+</tr></table>
+
+<div class="sec">자사 재고 봉쇄 및 출하 중단</div>
+<table><tr>
+  <td class="lc2">자사 재고 수량</td><td></td>
+  <td class="lc2">봉쇄 조치</td>
+  <td>
+    <span class="cb"></span>격리 보관 &nbsp;
+    <span class="cb"></span>전수검사 &nbsp;
+    <span class="cb"></span>폐기 &nbsp;
+    <span class="cb"></span>해당 없음
+  </td>
+</tr><tr>
+  <td class="lc2">출하 중단 여부</td>
+  <td>
+    <span class="cb"></span>중단 &nbsp;
+    <span class="cb"></span>조건부 출하 &nbsp;
+    <span class="cb"></span>해당 없음
+  </td>
+  <td class="lc2">봉쇄 완료 일자</td><td></td>
+</tr></table>
+
+<div class="sec">D3 봉쇄 효과 확인 메모</div>
+<div class="write-area-lg"></div>
+<table><tr>
+  <td class="lc2">봉쇄 효과 판정</td>
+  <td>
+    <span class="cb"></span>효과적 (고객 보호 완료) &nbsp;&nbsp;
+    <span class="cb"></span>추가 조치 필요
+  </td>
+  <td class="lc2">D3 완료 일자</td><td></td>
+  <td class="lc2">D3 확인자</td><td></td>
+</tr></table>
+</div>
+
+<!-- ═══════════════════════════ D4 PAGE ═══════════════════════════ -->
+<div class="page-break">
+<div class="page-ref"><span>NCR-F-010 — 시정조치 요청서 (8D CAR)</span><span>D4 — 근본원인 분석 (Root Cause Analysis)</span></div>
+<div class="d-cover">
+  <div class="d-num">D4</div>
+  <div>
+    <div class="d-name">근본원인 분석 (Root Cause Analysis)</div>
+    <div class="d-subname">발생 원인과 유출 원인을 5-Why 및 특성요인도(Ishikawa)로 도출한다</div>
+  </div>
+</div>
+
+<div class="sec">발생 원인 (Occurrence Root Cause) — 5-Why 분석</div>
+<table>
+  <tr>
+    <th style="width:120px">단계</th>
+    <th>질문 (왜 이 불량이 발생했는가?)</th>
+    <th style="width:220px">원인 / 근거 / 증거</th>
+    <th style="width:70px">검증 방법</th>
+  </tr>
+  <tr><td class="lc">1st Why</td><td style="height:48px"></td><td></td><td></td></tr>
+  <tr><td class="lc">2nd Why</td><td style="height:48px"></td><td></td><td></td></tr>
+  <tr><td class="lc">3rd Why</td><td style="height:48px"></td><td></td><td></td></tr>
+  <tr><td class="lc">4th Why</td><td style="height:48px"></td><td></td><td></td></tr>
+  <tr>
+    <td class="lc" style="background:#ffd700;color:#1e3a5f;font-weight:900">5th Why<br>(발생 근본원인)</td>
+    <td style="height:55px;background:#fffae0;font-weight:700"></td>
+    <td style="background:#fffae0"></td>
+    <td style="background:#fffae0"></td>
+  </tr>
+</table>
+
+<div class="sec">유출 원인 (Escape Root Cause) — 왜 검출하지 못했는가</div>
+<table>
+  <tr>
+    <th style="width:120px">단계</th>
+    <th>질문 (왜 검출 / 차단하지 못했는가?)</th>
+    <th style="width:220px">원인 / 근거 / 증거</th>
+    <th style="width:70px">검증 방법</th>
+  </tr>
+  <tr><td class="lc">1st Why</td><td style="height:40px"></td><td></td><td></td></tr>
+  <tr><td class="lc">2nd Why</td><td style="height:40px"></td><td></td><td></td></tr>
+  <tr>
+    <td class="lc" style="background:#ffd700;color:#1e3a5f;font-weight:900">유출<br>근본원인</td>
+    <td style="height:48px;background:#fffae0;font-weight:700"></td>
+    <td style="background:#fffae0"></td>
+    <td style="background:#fffae0"></td>
+  </tr>
+</table>
+
+<div class="sec">특성요인도 (Ishikawa / 6M Cause &amp; Effect)</div>
+<table>
+  <tr>
+    <th style="width:150px">분류 (6M)</th>
+    <th>잠재 원인 목록 (Potential Causes)</th>
+    <th style="width:55px">채택</th>
+  </tr>
+  ${[
+    'Man (작업자 / 교육)',
+    'Machine (설비 / 치공구)',
+    'Material (원재료 / 부품)',
+    'Method (작업표준 / 절차)',
+    'Measurement (측정 / 검사)',
+    'Environment (환경 / 5S)',
+  ].map(label=>`
+  <tr>
+    <td class="lc" style="font-size:8.5pt">${label}</td>
+    <td style="height:42px"></td>
+    <td style="text-align:center"><span class="cb"></span></td>
+  </tr>`).join('')}
+</table>
+<table><tr>
+  <td class="lc2">D4 작성자</td><td></td>
+  <td class="lc2">D4 완료 일자</td><td></td>
+  <td class="lc2">품질보증팀장 확인</td><td></td>
+</tr></table>
+</div>
+
+<!-- ═══════════════════════════ D5 PAGE ═══════════════════════════ -->
+<div class="page-break">
+<div class="page-ref"><span>NCR-F-010 — 시정조치 요청서 (8D CAR)</span><span>D5 — 시정조치 계획 (Corrective Action Plan)</span></div>
+<div class="d-cover">
+  <div class="d-num">D5</div>
+  <div>
+    <div class="d-name">시정조치 계획 (Corrective Action Plan)</div>
+    <div class="d-subname">D4에서 도출된 근본원인에 대한 영구적 시정조치를 계획한다</div>
+  </div>
+</div>
+
+<div class="sec">발생 원인 대응 조치 (Occurrence Corrective Actions)</div>
+<table>
+  <tr>
+    <th style="width:28px">No.</th>
+    <th>시정조치 내용</th>
+    <th style="width:70px">관련<br>근본원인</th>
+    <th style="width:70px">담당 부서</th>
+    <th style="width:60px">담당자</th>
+    <th style="width:80px">완료 기한</th>
+    <th style="width:80px">실제 완료일</th>
+    <th style="width:55px">완료</th>
+  </tr>
+  ${Array.from({length:7},(_,i)=>`
+  <tr>
+    <td style="text-align:center;color:#bbb">${i+1}</td>
+    <td style="height:46px"></td><td></td><td></td><td></td><td></td><td></td>
+    <td style="text-align:center"><span class="cb"></span>O &nbsp;<span class="cb"></span>×</td>
+  </tr>`).join('')}
+</table>
+
+<div class="sec">유출 원인 대응 조치 — 검출력 개선 (Detection Improvement Actions)</div>
+<table>
+  <tr>
+    <th style="width:28px">No.</th>
+    <th>검출 개선 조치 내용</th>
+    <th style="width:70px">관련<br>근본원인</th>
+    <th style="width:70px">담당 부서</th>
+    <th style="width:60px">담당자</th>
+    <th style="width:80px">완료 기한</th>
+    <th style="width:80px">실제 완료일</th>
+    <th style="width:55px">완료</th>
+  </tr>
+  ${Array.from({length:4},(_,i)=>`
+  <tr>
+    <td style="text-align:center;color:#bbb">${i+1}</td>
+    <td style="height:40px"></td><td></td><td></td><td></td><td></td><td></td>
+    <td style="text-align:center"><span class="cb"></span>O &nbsp;<span class="cb"></span>×</td>
+  </tr>`).join('')}
+</table>
+
+<div class="sec">D3 봉쇄 조치 해제 계획</div>
+<table><tr>
+  <td class="lc2">봉쇄 해제 조건</td><td colspan="3" style="height:36px"></td>
+</tr><tr>
+  <td class="lc2">예상 해제 일자</td><td></td>
+  <td class="lc2">D5 승인자</td><td></td>
+</tr></table>
+</div>
+
+<!-- ═══════════════════════════ D6 + D7 PAGE ═══════════════════════════ -->
+<div class="page-break">
+<div class="page-ref"><span>NCR-F-010 — 시정조치 요청서 (8D CAR)</span><span>D6 / D7 — 조치 검증 &amp; 재발방지</span></div>
+<div class="d-cover">
+  <div class="d-num">D6</div>
+  <div>
+    <div class="d-name">조치 이행 확인 (Implementation &amp; Verification)</div>
+    <div class="d-subname">D5 시정조치가 실제로 이행되었고 근본원인이 제거되었음을 검증한다</div>
+  </div>
+</div>
+
+<div class="sec">시정조치 이행 현황</div>
+<table>
+  <tr>
+    <th style="width:28px">No.</th>
+    <th>D5 시정조치 항목 (요약)</th>
+    <th style="width:80px">이행 완료일</th>
+    <th style="width:120px">이행 증거 / 문서</th>
+    <th style="width:65px">이행 여부</th>
+  </tr>
+  ${Array.from({length:6},(_,i)=>`
+  <tr>
+    <td style="text-align:center;color:#bbb">${i+1}</td>
+    <td style="height:38px"></td><td></td><td></td>
+    <td style="text-align:center"><span class="cb"></span>O &nbsp;<span class="cb"></span>×</td>
+  </tr>`).join('')}
+</table>
+
+<div class="sec">효과 검증 (Effectiveness Verification)</div>
+<table><tr>
+  <td class="lc2">검증 방법</td>
+  <td>
+    <span class="cb"></span>생산 모니터링 &nbsp;
+    <span class="cb"></span>공정능력 분석 &nbsp;
+    <span class="cb"></span>고객 현장 확인 &nbsp;
+    <span class="cb"></span>내부 심사 &nbsp;
+    <span class="cb"></span>기타
+  </td>
+</tr><tr>
+  <td class="lc2">검증 기간</td><td></td>
+</tr></table>
+<div class="write-area-lg"></div>
+<table><tr>
+  <td class="lc2">검증 판정</td>
+  <td style="font-size:10pt;font-weight:700">
+    <span class="cb"></span> 효과 확인 완료 (D3 봉쇄 해제 가능) &nbsp;&nbsp;
+    <span class="cb"></span> 효과 미흡 → D4~D5 재검토 필요
+  </td>
+</tr></table>
+
+<div class="d-cover" style="margin-top:16px">
+  <div class="d-num">D7</div>
+  <div>
+    <div class="d-name">수평 전개 / 재발방지 (Systemic Prevention)</div>
+    <div class="d-subname">유사 공정 / 제품에 동일 문제가 재발하지 않도록 시스템을 개선한다</div>
+  </div>
+</div>
+
+<div class="sec">수평 전개 (Horizontal Deployment)</div>
+<table>
+  <tr>
+    <th style="width:28px">No.</th>
+    <th>전개 대상 공정 / 제품</th>
+    <th>적용 조치 내용</th>
+    <th style="width:70px">담당자</th>
+    <th style="width:80px">완료 기한</th>
+    <th style="width:55px">완료</th>
+  </tr>
+  ${Array.from({length:4},(_,i)=>`
+  <tr>
+    <td style="text-align:center;color:#bbb">${i+1}</td>
+    <td style="height:36px"></td><td></td><td></td><td></td>
+    <td style="text-align:center"><span class="cb"></span></td>
+  </tr>`).join('')}
+</table>
+
+<div class="sec">문서 개정 현황 (Document Updates)</div>
+<table>
+  <tr>
+    <th style="width:28px">No.</th>
+    <th>개정 문서명</th>
+    <th style="width:90px">문서 번호</th>
+    <th style="width:60px">개정 번호</th>
+    <th style="width:80px">개정 완료일</th>
+    <th style="width:70px">담당자</th>
+  </tr>
+  ${Array.from({length:4},(_,i)=>`
+  <tr>
+    <td style="text-align:center;color:#bbb">${i+1}</td>
+    <td style="height:34px"></td><td></td><td></td><td></td><td></td>
+  </tr>`).join('')}
+</table>
+<div class="note">※ 개정 대상: 관리계획서(CP), PFMEA, 작업표준서, 검사기준서, 협력업체 통보 등</div>
+</div>
+
+<!-- ═══════════════════════════ D8 PAGE ═══════════════════════════ -->
+<div class="page-break">
+<div class="page-ref"><span>NCR-F-010 — 시정조치 요청서 (8D CAR)</span><span>D8 — 완료 종결 (Closure)</span></div>
+<div class="d-cover">
+  <div class="d-num">D8</div>
+  <div>
+    <div class="d-name">완료 및 종결 (Team Recognition &amp; Closure)</div>
+    <div class="d-subname">D1~D7 완료를 확인하고 팀 성과를 공식 종결한다</div>
+  </div>
+</div>
+
+<div class="sec">D1~D7 완료 확인 체크리스트</div>
+<table>
+  <tr><th style="width:40px">D</th><th>항목</th><th style="width:80px">완료</th><th>특이사항 / 비고</th></tr>
+  ${[
+    ['D1','팀 구성 완료 및 팀원 서명'],
+    ['D2','문제 기술 — Is / Is Not 분석 완료'],
+    ['D3','긴급 봉쇄 조치 완료 및 효과 확인'],
+    ['D4','근본원인 분석 (5-Why + Ishikawa) 완료'],
+    ['D5','시정조치 계획 수립 및 승인'],
+    ['D6','시정조치 이행 완료 및 효과 검증'],
+    ['D7','수평전개 완료 및 관련 문서 개정 완료'],
+  ].map(([d,item])=>`
+  <tr>
+    <td style="text-align:center;font-weight:900;font-size:11pt;color:#1e3a5f">${d}</td>
+    <td>${item}</td>
+    <td style="text-align:center"><span class="cb"></span>완료 &nbsp;<span class="cb"></span>해당없음</td>
+    <td style="height:36px"></td>
+  </tr>`).join('')}
+</table>
+
+<div class="sec">고객 만족도 확인</div>
+<table><tr>
+  <td class="lc2">고객 확인 방법</td>
+  <td>
+    <span class="cb"></span>서면 확인 &nbsp;
+    <span class="cb"></span>현장 확인 &nbsp;
+    <span class="cb"></span>전화 / 이메일 &nbsp;
+    <span class="cb"></span>해당 없음
+  </td>
+</tr><tr>
+  <td class="lc2">고객 만족 여부</td>
+  <td>
+    <span class="cb"></span>만족 &nbsp;&nbsp;
+    <span class="cb"></span>조건부 만족 &nbsp;&nbsp;
+    <span class="cb"></span>불만족 (재검토 필요)
+  </td>
+</tr><tr>
+  <td class="lc2">고객 담당자 / 확인일</td><td></td>
+</tr></table>
+
+<div class="sec">팀 성과 공유 — Lessons Learned</div>
+<div class="write-area-xl" style="min-height:100px"></div>
+
+<div class="sec">최종 종결 서명 (Final Sign-off)</div>
+<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;margin-top:8px">
+  ${[
+    ['8D 작성자','(서명 / 날짜)'],
+    ['팀 리더','(서명 / 날짜)'],
+    ['품질보증팀장','(종결 승인 / 날짜)'],
+    ['고객 대표','(확인 / 날짜)'],
+  ].map(([role,sub])=>`
+  <div style="border:1px solid #000;padding:8px;min-height:68px">
+    <div style="font-size:7.5pt;color:#555;border-bottom:1px solid #ddd;padding-bottom:3px;margin-bottom:4px">${role}</div>
+    <div style="font-size:7.5pt;color:#aaa">${sub}</div>
+  </div>`).join('')}
+</div>
+<table style="margin-top:8px"><tr>
+  <td class="lc2" style="background:#1e3a5f;color:#fff;font-size:10pt;font-weight:900;text-align:center">종결 일자</td>
+  <td style="font-size:12pt;font-weight:700;text-align:center;height:40px"></td>
+  <td class="lc2" style="background:#1e3a5f;color:#fff;font-size:10pt;font-weight:900;text-align:center">CAR 상태</td>
+  <td style="font-size:11pt;font-weight:700;text-align:center">
+    <span class="cb"></span> CLOSED &nbsp;&nbsp;&nbsp;
+    <span class="cb"></span> IN PROGRESS
+  </td>
+</tr></table>
+</div>
+`
 }
 
 function ncrF011() {
   return `
 <table><tr>
   <td class="lc">분석서 번호</td><td></td>
-  <td class="lc">NCR/CAR 번호</td><td></td>
+  <td class="lc">NCR / CAR 번호</td><td></td>
   <td class="lc">분석일</td><td></td>
+</tr><tr>
+  <td class="lc">품번 / 품명</td><td colspan="3"></td>
+  <td class="lc">분석 담당자</td><td></td>
 </tr></table>
 
-<div class="sec">현상 기술 (Is / Is Not 분석)</div>
+<div class="sec">문제 현상 (Problem Statement)</div>
+<div class="write-area-lg"></div>
+
+<div class="sec">Is / Is Not 분석 — 문제 경계 정의</div>
 <table>
-  <tr><th style="width:120px">구분</th><th>IS (해당하는 것)</th><th>IS NOT (해당하지 않는 것)</th></tr>
-  <tr><td class="lc">무엇(What)</td><td class="blank2"></td><td class="blank2"></td></tr>
-  <tr><td class="lc">어디서(Where)</td><td class="blank2"></td><td class="blank2"></td></tr>
-  <tr><td class="lc">언제(When)</td><td class="blank2"></td><td class="blank2"></td></tr>
-  <tr><td class="lc">규모(How Much)</td><td class="blank2"></td><td class="blank2"></td></tr>
+  <tr>
+    <th style="width:120px">관점</th>
+    <th>IS — 해당 (문제가 있는 것)</th>
+    <th>IS NOT — 비해당 (문제가 없는 것)</th>
+    <th style="width:140px">차이점 (Distinction)</th>
+  </tr>
+  <tr><td class="lc">무엇 (What)</td><td style="height:52px"></td><td></td><td></td></tr>
+  <tr><td class="lc">어디서 (Where)</td><td style="height:52px"></td><td></td><td></td></tr>
+  <tr><td class="lc">언제 (When)</td><td style="height:52px"></td><td></td><td></td></tr>
+  <tr><td class="lc">얼마나 (How Much)</td><td style="height:52px"></td><td></td><td></td></tr>
 </table>
 
-<div class="sec">특성요인도 (이시카와 다이어그램) — 잠재 원인 나열</div>
+<div class="sec">특성요인도 (Ishikawa / 6M) — 잠재 원인 목록</div>
 <table>
-  <tr><th style="width:120px">분류</th><th>잠재 원인 목록</th></tr>
-  <tr><td class="lc">Man (사람)</td><td style="height:40px"></td></tr>
-  <tr><td class="lc">Machine (설비)</td><td style="height:40px"></td></tr>
-  <tr><td class="lc">Material (재료)</td><td style="height:40px"></td></tr>
-  <tr><td class="lc">Method (방법)</td><td style="height:40px"></td></tr>
-  <tr><td class="lc">Measurement</td><td style="height:40px"></td></tr>
-  <tr><td class="lc">Environment</td><td style="height:40px"></td></tr>
+  <tr>
+    <th style="width:150px">분류 (6M)</th>
+    <th>잠재 원인 목록</th>
+    <th style="width:55px">채택</th>
+  </tr>
+  ${[
+    'Man (작업자 / 교육)',
+    'Machine (설비 / 치공구)',
+    'Material (원재료 / 부품)',
+    'Method (작업표준 / 절차)',
+    'Measurement (측정 / 검사)',
+    'Environment (환경 / 5S)',
+  ].map(label=>`
+  <tr>
+    <td class="lc" style="font-size:8.5pt">${label}</td>
+    <td style="height:42px"></td>
+    <td style="text-align:center"><span class="cb"></span></td>
+  </tr>`).join('')}
 </table>
 
-<div class="sec">5-Why 분석 — 발생 원인</div>
+<div class="sec">5-Why 분석 — 발생 원인 (Occurrence)</div>
 <table>
-  <tr><th style="width:90px">단계</th><th>질문 (왜?)</th><th>답변 (원인)</th></tr>
-  <tr><td class="lc">1st Why</td><td class="blank2"></td><td class="blank2"></td></tr>
-  <tr><td class="lc">2nd Why</td><td class="blank2"></td><td class="blank2"></td></tr>
-  <tr><td class="lc">3rd Why</td><td class="blank2"></td><td class="blank2"></td></tr>
-  <tr><td class="lc">4th Why</td><td class="blank2"></td><td class="blank2"></td></tr>
-  <tr><td class="lc" style="background:#ffd">5th Why (근본원인)</td><td style="font-weight:700" class="blank2"></td><td style="font-weight:700" class="blank2"></td></tr>
+  <tr>
+    <th style="width:120px">단계</th>
+    <th>질문 (왜?)</th>
+    <th>답변 (원인 / 근거)</th>
+    <th style="width:70px">검증</th>
+  </tr>
+  <tr><td class="lc">1st Why</td><td style="height:48px"></td><td></td><td></td></tr>
+  <tr><td class="lc">2nd Why</td><td style="height:48px"></td><td></td><td></td></tr>
+  <tr><td class="lc">3rd Why</td><td style="height:48px"></td><td></td><td></td></tr>
+  <tr><td class="lc">4th Why</td><td style="height:48px"></td><td></td><td></td></tr>
+  <tr>
+    <td class="lc" style="background:#ffd700;color:#1e3a5f;font-weight:900">5th Why<br>(발생 근본원인)</td>
+    <td style="height:55px;background:#fffae0;font-weight:700"></td>
+    <td style="background:#fffae0;font-weight:700"></td>
+    <td style="background:#fffae0"></td>
+  </tr>
 </table>
 
 <div class="sec">5-Why 분석 — 유출 원인 (왜 검출하지 못했는가)</div>
 <table>
-  <tr><td class="lc">유출 경로</td><td class="blank2"></td></tr>
-  <tr><td class="lc">유출 근본원인</td><td class="blank2"></td></tr>
+  <tr>
+    <th style="width:120px">단계</th>
+    <th>질문 (왜 검출 / 차단하지 못했는가?)</th>
+    <th>답변 (원인 / 근거)</th>
+    <th style="width:70px">검증</th>
+  </tr>
+  <tr><td class="lc">유출 경로</td><td style="height:44px"></td><td></td><td></td></tr>
+  <tr>
+    <td class="lc" style="background:#ffd700;color:#1e3a5f;font-weight:900">유출<br>근본원인</td>
+    <td style="height:50px;background:#fffae0;font-weight:700"></td>
+    <td style="background:#fffae0;font-weight:700"></td>
+    <td style="background:#fffae0"></td>
+  </tr>
 </table>
 
 <div class="sign sign3">
-  <div class="sbox"><div class="st">분석 담당자 (서명)</div></div>
-  <div class="sbox"><div class="st">부서장 (검토)</div></div>
-  <div class="sbox"><div class="st">품질보증팀장 (승인)</div></div>
+  <div class="sbox"><div class="st">분석 담당자 (서명 / 날짜)</div></div>
+  <div class="sbox"><div class="st">부서장 (검토 / 날짜)</div></div>
+  <div class="sbox"><div class="st">품질보증팀장 (승인 / 날짜)</div></div>
 </div>`
 }
 
