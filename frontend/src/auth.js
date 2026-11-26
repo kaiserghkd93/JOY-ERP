@@ -7,7 +7,7 @@ const ROLE_PERMISSIONS = {
   executive:  ['/', '/dashboard', '/monthly-sales', '/monthly-purchase', '/sales-target', '/inventory', '/cost', '/cost-actual', '/mrp', '/management', '/exceptions',
                '/hr-employee', '/hr-attendance', '/hr-payroll'],
   manager:    ['/', '/sales-target', '/cost-actual', '/exceptions'],
-  accounting: ['/management', '/hr-employee', '/hr-attendance', '/hr-payroll', '/receivable'],
+  accounting: ['/', '/dashboard', '/hr-employee', '/hr-attendance', '/hr-payroll', '/receivable'],
   sales:      ['/', '/sales', '/invoice', '/monthly-sales', '/sales-target', '/inventory'],
   purchase:   ['/', '/purchase', '/receipt', '/mrp', '/monthly-purchase',
                '/inventory', '/master', '/bom',
