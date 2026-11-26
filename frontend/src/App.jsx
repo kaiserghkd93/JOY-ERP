@@ -277,7 +277,7 @@ export default function App() {
         }>
           <Routes>
             <Route path="/" element={
-              (getRole() === 'executive' || getRole() === 'accounting')
+              getRole() === 'executive'
                 ? <Navigate to="/management" replace />
                 : <Dashboard />
             } />
