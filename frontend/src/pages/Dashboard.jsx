@@ -42,10 +42,10 @@ const ROLE_SECTIONS = {
   },
   // ── 재무·영업 ──────────────────────────────────────────────────
   accounting: {
-    // 경리: 매출·매입·이익·트렌드. 품질·외주처 제외
-    summary: true, kpi_delivery: false, kpi_quality: false, kpi_inventory: true, kpi_profit: true,
-    target: true, closing: true, stock_chart: false, monthly_trend: true,
-    sales_table: true, purchase_table: true, customer_scorecard: false,
+    // 경리: 마감 요약(거래처별 매출·매입)만 — 자금계획용
+    summary: false, kpi_delivery: false, kpi_quality: false, kpi_inventory: false, kpi_profit: false,
+    target: false, closing: true, stock_chart: false, monthly_trend: false,
+    sales_table: false, purchase_table: false, customer_scorecard: false,
     quality_dashboard: false, supplier_scorecard: false, material_scorecard: false,
   },
   sales: {
