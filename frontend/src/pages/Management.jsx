@@ -6,7 +6,7 @@ import {
 import api from '../api'
 import { getRole } from '../auth'
 
-const EXEC_ROLES = new Set(['admin', 'executive', 'owner'])
+const EXEC_ROLES = new Set(['admin', 'executive', 'owner', 'accounting'])
 
 const W  = (n) => n == null ? '—' : `₩${Math.round(n).toLocaleString()}`
 const WM = (n) => n == null ? '—' : `₩${Math.round(n / 10000).toLocaleString()}만`
@@ -281,7 +281,7 @@ export default function Management() {
           📊 경영관리 대시보드
         </div>
         <div style={{ fontSize: 11, color: '#9eb3cf', background: 'rgba(255,255,255,.1)', padding: '2px 10px', borderRadius: 12 }}>
-          대표/전무 전용
+          {role === 'accounting' ? '경리 — 열람 전용' : '대표/전무 전용'}
         </div>
         <select
           value={year}
