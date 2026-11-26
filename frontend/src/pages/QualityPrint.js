@@ -604,14 +604,18 @@ export function printIqcReport(insp) {
     { no:'8', name:'기능 확인', spec:'조립 가능 여부', unit:'-' },
   ]
 
-  const dimRows = DEFAULT_ITEMS.map(it => `
-    <tr style="height:21px">
+  const INP_STYLE = 'width:100%;border:none;outline:none;background:transparent;font-family:inherit;font-size:7.5pt;text-align:center;padding:0'
+  const SPEC_STYLE = 'width:100%;border:none;outline:none;background:transparent;font-family:inherit;font-size:7pt;color:#333;padding:0'
+  const dimRows = DEFAULT_ITEMS.map((it, ri) => `
+    <tr class="ir" data-unit="${it.unit}" data-ri="${ri}" style="height:24px">
       <td style="border:1px solid #000;padding:2px 4px;text-align:center;font-size:7.5pt;color:#666">${it.no}</td>
       <td style="border:1px solid #000;padding:2px 5px;font-size:7.5pt">${it.name}</td>
-      <td style="border:1px solid #000;padding:2px 4px;font-size:7pt;color:#444">${it.spec}</td>
+      <td style="border:1px solid #000;padding:1px 3px">
+        <input class="si" data-ri="${ri}" placeholder="${it.spec}" style="${SPEC_STYLE}">
+      </td>
       <td style="border:1px solid #000;padding:2px 3px;text-align:center;font-size:7pt">${it.unit}</td>
-      ${Array.from({length: shotCols}, () => '<td style="border:1px solid #000;padding:2px 3px;text-align:center;font-size:7.5pt"></td>').join('')}
-      <td style="border:1px solid #000;padding:2px 4px;text-align:center;font-size:8pt"></td>
+      ${Array.from({length: shotCols}, (_,ci) => `<td style="border:1px solid #000;padding:1px 2px"><input class="mi" data-ri="${ri}" data-ci="${ci}" style="${INP_STYLE}" type="text"></td>`).join('')}
+      <td class="jc" data-ri="${ri}" style="border:1px solid #000;padding:2px 4px;text-align:center;font-size:9pt;font-weight:900"></td>
     </tr>`).join('')
 
   const html = `<!DOCTYPE html><html lang="ko"><head><meta charset="UTF-8">
@@ -763,6 +767,84 @@ export function printIqcReport(insp) {
   <span>A4 (210mm × 297mm)</span>
   <span>출력일: ${today()}</span>
 </div>
+<script>
+(function(){
+  // 규격 문자열 파싱 → {min, max} 반환 / 육안·비고는 null
+  function parseSpec(s){
+    if(!s||!s.trim())return null;
+    s=s.trim();
+    // 한글만 있으면 육안 항목
+    if(/^[가-힣\s·\/\-]+$/.test(s))return null;
+    // ± 형식: "10 ± 0.1" 또는 "10±0.1"
+    var pm=s.match(/([+-]?[\d.]+)\s*[±]\s*([\d.]+)/);
+    if(pm){var c=parseFloat(pm[1]),t=parseFloat(pm[2]);return{min:c-t,max:c+t};}
+    // 범위 형식: "10~11" 또는 "10.0 ~ 11.0" (단, 음수 포함)
+    var rg=s.match(/^([+-]?[\d.]+)\s*[~～]\s*([+-]?[\d.]+)$/);
+    if(rg){var a=parseFloat(rg[1]),b=parseFloat(rg[2]);return{min:Math.min(a,b),max:Math.max(a,b)};}
+    // ≥ / MIN
+    var ge=s.match(/[≥>]\s*([\d.]+)/);if(ge)return{min:parseFloat(ge[1]),max:Infinity};
+    // ≤ / MAX
+    var le=s.match(/[≤<]\s*([\d.]+)/);if(le)return{min:-Infinity,max:parseFloat(le[1])};
+    // 단일 수치 (허용공차 ±0.5%)
+    var n=parseFloat(s);
+    if(!isNaN(n)&&s.match(/^[+-]?[\d.]+$/))return{min:n-Math.abs(n*0.005),max:n+Math.abs(n*0.005)};
+    return null;
+  }
+
+  function judgeRow(ri){
+    var row=document.querySelector('.ir[data-ri="'+ri+'"]');
+    if(!row)return;
+    var unit=row.dataset.unit||'';
+    var jc=document.querySelector('.jc[data-ri="'+ri+'"]');
+    // 육안/비고 항목: 버튼 토글 방식
+    if(unit==='육안'||unit==='-'){
+      if(!jc._toggled){
+        jc.style.cursor='pointer';
+        jc.title='클릭하여 ○/× 전환';
+        jc.addEventListener('click',function(){
+          if(this.textContent==='○'){this.textContent='×';this.style.color='#991b1b';}
+          else if(this.textContent==='×'){this.textContent='';this.style.color='';}
+          else{this.textContent='○';this.style.color='#166534';}
+        });
+        jc._toggled=true;
+      }
+      return;
+    }
+    // 수치 항목: 자동 계산
+    var specInp=document.querySelector('.si[data-ri="'+ri+'"]');
+    var spec=specInp?specInp.value.trim():(specInp&&specInp.placeholder)||'';
+    if(!spec)spec=specInp&&specInp.placeholder||'';
+    var range=parseSpec(spec);
+    var shotInps=[].slice.call(document.querySelectorAll('.mi[data-ri="'+ri+'"]'));
+    var vals=shotInps.map(function(i){return i.value.trim();}).filter(function(v){return v!=='';});
+    // 셀 색상 처리
+    shotInps.forEach(function(inp){
+      var v=inp.value.trim();
+      if(!v||!range){inp.style.background='';inp.style.color='#000';return;}
+      var n=parseFloat(v);
+      if(isNaN(n)){inp.style.background='#fff3cd';inp.style.color='#856404';return;}
+      if(n>=range.min&&n<=range.max){inp.style.background='#dcfce7';inp.style.color='#166534';}
+      else{inp.style.background='#fee2e2';inp.style.color='#991b1b';}
+    });
+    if(!range||vals.length===0){jc.textContent='';jc.style.color='';return;}
+    var allPass=vals.every(function(v){var n=parseFloat(v);return !isNaN(n)&&n>=range.min&&n<=range.max;});
+    jc.textContent=allPass?'○':'×';
+    jc.style.color=allPass?'#166534':'#991b1b';
+  }
+
+  // 이벤트 연결
+  document.querySelectorAll('.mi,.si').forEach(function(inp){
+    inp.addEventListener('input',function(){judgeRow(this.dataset.ri);});
+  });
+  // 초기화: 육안 항목 토글 준비
+  document.querySelectorAll('.ir').forEach(function(row){judgeRow(row.dataset.ri);});
+
+  // 인쇄 전 빈 input → placeholder 적용 방지용 CSS
+  var st=document.createElement('style');
+  st.textContent='@media print{input{border:none!important;background:transparent!important;} .mi:placeholder-shown{color:transparent!important;}}';
+  document.head.appendChild(st);
+})();
+</script>
 </body></html>`
   openPrint(html)
 }
