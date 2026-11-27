@@ -254,6 +254,17 @@ class InspectorPatch(BaseModel):
 class InspectTypePatch(BaseModel):
     inspect_type: str  # "sampling" | "skip"
 
+class InspItemsPatch(BaseModel):
+    insp_items: str | None = None  # JSON string
+
+@router.patch("/inspections/{insp_id}/insp-items")
+def patch_insp_items(insp_id: int, body: InspItemsPatch, db: Session = Depends(get_db), _: User = Depends(_require_quality)):
+    """치수·품질 검사 항목 저장"""
+    insp = _get_insp(insp_id, db)
+    insp.insp_items = body.insp_items
+    db.commit()
+    return {"ok": True}
+
 @router.patch("/inspections/{insp_id}/inspect-type")
 def patch_inspect_type(insp_id: int, body: InspectTypePatch, db: Session = Depends(get_db), _: User = Depends(_require_quality)):
     """검사방식 수정 (샘플링/무검사)"""

@@ -592,31 +592,49 @@ export function printIqcReport(insp) {
   const resultColor = insp.result === '합격' ? '#166534' : insp.result === '불합격' ? '#991b1b' : '#555'
   const resultBg   = insp.result === '합격' ? '#dcfce7' : insp.result === '불합격' ? '#fee2e2' : '#f8f8f8'
 
-  // 표준 검사항목 (IATF 16949 §8.6.1 수입검사 기본 항목)
+  // 저장된 치수 항목 or 표준 기본항목
+  let savedItems = []
+  if (insp.insp_items) { try { savedItems = JSON.parse(insp.insp_items) } catch(e) {} }
+  const hasSaved = Array.isArray(savedItems) && savedItems.length > 0
   const DEFAULT_ITEMS = [
-    { no:'1', name:'외관 검사', spec:'스크래치·크랙·이물·변형 없음', unit:'육안' },
-    { no:'2', name:'치수 검사 1', spec:'', unit:'mm' },
-    { no:'3', name:'치수 검사 2', spec:'', unit:'mm' },
-    { no:'4', name:'치수 검사 3', spec:'', unit:'mm' },
-    { no:'5', name:'치수 검사 4', spec:'', unit:'mm' },
-    { no:'6', name:'재질 / 경도', spec:'도면 재질 기준', unit:'-' },
-    { no:'7', name:'표면 처리', spec:'도금/도장 상태 기준', unit:'육안' },
-    { no:'8', name:'기능 확인', spec:'조립 가능 여부', unit:'-' },
+    { no:'1', name:'외관 검사', spec:'스크래치·크랙·이물·변형 없음', unit:'육안', shots:[], result:'' },
+    { no:'2', name:'치수 검사 1', spec:'', unit:'mm', shots:[], result:'' },
+    { no:'3', name:'치수 검사 2', spec:'', unit:'mm', shots:[], result:'' },
+    { no:'4', name:'치수 검사 3', spec:'', unit:'mm', shots:[], result:'' },
+    { no:'5', name:'치수 검사 4', spec:'', unit:'mm', shots:[], result:'' },
+    { no:'6', name:'재질 / 경도', spec:'도면 재질 기준', unit:'-', shots:[], result:'' },
+    { no:'7', name:'표면 처리', spec:'도금/도장 상태 기준', unit:'육안', shots:[], result:'' },
+    { no:'8', name:'기능 확인', spec:'조립 가능 여부', unit:'-', shots:[], result:'' },
   ]
+  const PRINT_ITEMS = hasSaved
+    ? savedItems.map((d, i) => ({ no: String(i+1), name: d.name||'', spec: d.spec||'', unit: d.unit||'-', shots: d.shots||[], result: d.result||'' }))
+    : DEFAULT_ITEMS
 
   const INP_STYLE = 'width:100%;border:none;outline:none;background:transparent;font-family:inherit;font-size:7.5pt;text-align:center;padding:0'
   const SPEC_STYLE = 'width:100%;border:none;outline:none;background:transparent;font-family:inherit;font-size:7pt;color:#333;padding:0'
-  const dimRows = DEFAULT_ITEMS.map((it, ri) => `
+  const dimRows = PRINT_ITEMS.map((it, ri) => {
+    const jColor = it.result==='합격' ? '#166534' : it.result==='불합격' ? '#991b1b' : ''
+    const jText = it.result==='합격' ? '○' : it.result==='불합격' ? '×' : ''
+    const shotCells = Array.from({length: shotCols}, (_,ci) => {
+      const val = (it.shots||[])[ci] || ''
+      return hasSaved
+        ? `<td style="border:1px solid #000;padding:1px 2px;text-align:center;font-size:7.5pt;font-family:monospace">${val}</td>`
+        : `<td style="border:1px solid #000;padding:1px 2px"><input class="mi" data-ri="${ri}" data-ci="${ci}" style="${INP_STYLE}" type="text" value="${val}"></td>`
+    }).join('')
+    return `
     <tr class="ir" data-unit="${it.unit}" data-ri="${ri}" style="height:24px">
       <td style="border:1px solid #000;padding:2px 4px;text-align:center;font-size:7.5pt;color:#666">${it.no}</td>
       <td style="border:1px solid #000;padding:2px 5px;font-size:7.5pt">${it.name}</td>
       <td style="border:1px solid #000;padding:1px 3px">
-        <input class="si" data-ri="${ri}" placeholder="${it.spec}" style="${SPEC_STYLE}">
+        ${hasSaved
+          ? `<span style="${SPEC_STYLE};display:block">${it.spec}</span>`
+          : `<input class="si" data-ri="${ri}" placeholder="${it.spec}" style="${SPEC_STYLE}">`}
       </td>
       <td style="border:1px solid #000;padding:2px 3px;text-align:center;font-size:7pt">${it.unit}</td>
-      ${Array.from({length: shotCols}, (_,ci) => `<td style="border:1px solid #000;padding:1px 2px"><input class="mi" data-ri="${ri}" data-ci="${ci}" style="${INP_STYLE}" type="text"></td>`).join('')}
-      <td class="jc" data-ri="${ri}" style="border:1px solid #000;padding:2px 4px;text-align:center;font-size:9pt;font-weight:900"></td>
-    </tr>`).join('')
+      ${shotCells}
+      <td class="jc" data-ri="${ri}" style="border:1px solid #000;padding:2px 4px;text-align:center;font-size:11pt;font-weight:900;color:${jColor}">${jText}</td>
+    </tr>`
+  }).join('')
 
   const html = `<!DOCTYPE html><html lang="ko"><head><meta charset="UTF-8">
 <title>수입검사 성적서 ${docNo}</title>

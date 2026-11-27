@@ -96,6 +96,8 @@ class Inspection(Base):
     re: Mapped[int | None] = mapped_column(Integer, nullable=True)
     inspect_type: Mapped[str | None] = mapped_column(String(20), nullable=True)  # "sampling" | "skip"
 
+    insp_items: Mapped[str | None] = mapped_column(Text, nullable=True)   # JSON: [{name,spec,unit,shots:[...],result}]
+
     # 승인 워크플로 필드
     approval_status: Mapped[str] = mapped_column(String(50), default="작성중", nullable=False)
     inspector_id: Mapped[str | None] = mapped_column(ForeignKey("user.username"), nullable=True)
