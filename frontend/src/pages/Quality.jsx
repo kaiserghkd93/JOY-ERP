@@ -3129,56 +3129,56 @@ function IqcDimsTab({ insp, onSaved }) {
     finally { setSaving(false) }
   }
 
-  const INP = { border:'1px solid var(--border)', borderRadius:3, padding:'2px 4px', fontSize:10, width:'100%', background:'var(--bg)', color:'var(--text)', fontFamily:'monospace' }
+  const INP = { border:'1px solid var(--border)', borderRadius:4, padding:'6px 8px', fontSize:13, width:'100%', background:'var(--bg)', color:'var(--text)', fontFamily:'inherit' }
   const rColor = r => r==='합격'?'#16a34a':r==='불합격'?'#dc2626':'var(--text-sm)'
 
   return (
     <div>
-      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:10 }}>
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:14 }}>
         <div>
-          <span style={{ fontWeight:700, fontSize:13 }}>치수 · 품질 검사 기록</span>
-          <span style={{ marginLeft:8, fontSize:11, color:'var(--text-sm)' }}>({shotCols}-Shot | IATF 16949 §8.6.3)</span>
+          <span style={{ fontWeight:700, fontSize:15 }}>치수 · 품질 검사 기록</span>
+          <span style={{ marginLeft:10, fontSize:12, color:'var(--text-sm)' }}>({shotCols}-Shot | IATF 16949 §8.6.3)</span>
         </div>
-        <div style={{ display:'flex', gap:6, alignItems:'center' }}>
-          {saved && <span style={{ fontSize:11, color:'#16a34a', fontWeight:700 }}>✓ 저장됨</span>}
-          <button className="btn btn-xs btn-outline" onClick={addRow}>＋ 행 추가</button>
-          <button className="btn btn-sm btn-primary" onClick={save} disabled={saving}>{saving?'저장중…':'저장'}</button>
+        <div style={{ display:'flex', gap:8, alignItems:'center' }}>
+          {saved && <span style={{ fontSize:13, color:'#16a34a', fontWeight:700 }}>✓ 저장됨</span>}
+          <button className="btn btn-sm btn-outline" onClick={addRow}>＋ 행 추가</button>
+          <button className="btn btn-primary" onClick={save} disabled={saving} style={{padding:'8px 20px',fontWeight:700}}>{saving?'저장중…':'저장'}</button>
         </div>
       </div>
       <div style={{ overflowX:'auto' }}>
-        <table style={{ width:'100%', borderCollapse:'collapse', fontSize:11 }}>
+        <table style={{ width:'100%', borderCollapse:'collapse', fontSize:13 }}>
           <thead>
             <tr style={{ background:'#0d1f3c', color:'#fff' }}>
-              <th style={{ border:'1px solid #334155', padding:'5px 6px', width:28 }}>No</th>
-              <th style={{ border:'1px solid #334155', padding:'5px 6px', minWidth:120 }}>검사 항목</th>
-              <th style={{ border:'1px solid #334155', padding:'5px 6px', minWidth:100 }}>규격/기준값</th>
-              <th style={{ border:'1px solid #334155', padding:'5px 6px', width:36 }}>단위</th>
+              <th style={{ border:'1px solid #334155', padding:'9px 8px', width:40, fontSize:12 }}>No</th>
+              <th style={{ border:'1px solid #334155', padding:'9px 10px', minWidth:160 }}>검사 항목</th>
+              <th style={{ border:'1px solid #334155', padding:'9px 10px', minWidth:160 }}>규격/기준값</th>
+              <th style={{ border:'1px solid #334155', padding:'9px 8px', width:52 }}>단위</th>
               {Array.from({length:shotCols},(_,i)=>(
-                <th key={i} style={{ border:'1px solid #334155', padding:'5px 4px', width:52 }}>X{i+1}</th>
+                <th key={i} style={{ border:'1px solid #334155', padding:'9px 6px', width:68, fontSize:12 }}>X{i+1}</th>
               ))}
-              <th style={{ border:'1px solid #334155', padding:'5px 6px', width:52 }}>판정</th>
+              <th style={{ border:'1px solid #334155', padding:'9px 8px', width:72 }}>판정</th>
             </tr>
           </thead>
           <tbody>
             {dims.map((d,ri)=>(
               <tr key={ri} style={{ background: ri%2===0 ? 'var(--bg)' : 'var(--surface)' }}>
-                <td style={{ border:'1px solid var(--border)', padding:'2px 4px', textAlign:'center', color:'#888', fontSize:10 }}>{ri+1}</td>
-                <td style={{ border:'1px solid var(--border)', padding:'2px 4px' }}>
+                <td style={{ border:'1px solid var(--border)', padding:'4px 8px', textAlign:'center', color:'#888', fontSize:12 }}>{ri+1}</td>
+                <td style={{ border:'1px solid var(--border)', padding:'4px 6px' }}>
                   <input style={INP} value={d.name} onChange={e=>setDimField(ri,'name',e.target.value)} placeholder="검사 항목명" />
                 </td>
-                <td style={{ border:'1px solid var(--border)', padding:'2px 4px' }}>
+                <td style={{ border:'1px solid var(--border)', padding:'4px 6px' }}>
                   <input style={INP} value={d.spec} onChange={e=>setDimField(ri,'spec',e.target.value)} placeholder="50 ± 0.1" />
                 </td>
-                <td style={{ border:'1px solid var(--border)', padding:'2px 4px' }}>
-                  <input style={{ ...INP, width:34, textAlign:'center' }} value={d.unit} onChange={e=>setDimField(ri,'unit',e.target.value)} />
+                <td style={{ border:'1px solid var(--border)', padding:'4px 6px' }}>
+                  <input style={{ ...INP, textAlign:'center', padding:'6px 4px' }} value={d.unit} onChange={e=>setDimField(ri,'unit',e.target.value)} />
                 </td>
                 {Array.from({length:shotCols},(_,ci)=>(
-                  <td key={ci} style={{ border:'1px solid var(--border)', padding:'1px 2px' }}>
-                    <input style={{ ...INP, textAlign:'center' }} value={(d.shots||[])[ci]||''} onChange={e=>setShot(ri,ci,e.target.value)} />
+                  <td key={ci} style={{ border:'1px solid var(--border)', padding:'4px 4px' }}>
+                    <input style={{ ...INP, textAlign:'center', padding:'6px 4px', fontFamily:'monospace' }} value={(d.shots||[])[ci]||''} onChange={e=>setShot(ri,ci,e.target.value)} />
                   </td>
                 ))}
-                <td style={{ border:'1px solid var(--border)', padding:'2px 3px' }}>
-                  <select style={{ ...INP, fontWeight:700, color:rColor(d.result), width:'100%' }} value={d.result||''} onChange={e=>setDimField(ri,'result',e.target.value)}>
+                <td style={{ border:'1px solid var(--border)', padding:'4px 4px' }}>
+                  <select style={{ ...INP, fontWeight:700, color:rColor(d.result), padding:'6px 4px' }} value={d.result||''} onChange={e=>setDimField(ri,'result',e.target.value)}>
                     <option value=""></option>
                     <option value="합격">합격</option>
                     <option value="불합격">불합격</option>
@@ -3189,7 +3189,7 @@ function IqcDimsTab({ insp, onSaved }) {
           </tbody>
         </table>
       </div>
-      <div style={{ marginTop:8, fontSize:10, color:'var(--text-sm)' }}>
+      <div style={{ marginTop:10, fontSize:12, color:'var(--text-sm)' }}>
         판정: ○ 합격 / × 불합격 &nbsp;|&nbsp; 측정값 단위: mm (별도 지정 없을 경우) &nbsp;|&nbsp; 외관 판정: Ac = 합격 / Rj = 불합격
       </div>
     </div>
