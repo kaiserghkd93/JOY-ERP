@@ -87,7 +87,7 @@ function NcrCreateModal({ onClose, onSaved }) {
   useEffect(() => {
     api.get('/master/items').then(r => setAllItems(r.data)).catch(() => {})
     api.get('/master/partners').then(r => setPartners(r.data)).catch(() => {})
-    api.get('/receipt').then(r => setReceipts(r.data || [])).catch(() => {})
+    api.get('/purchase/receipts').then(r => setReceipts(Array.isArray(r.data) ? r.data : [])).catch(() => {})
   }, [])
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
@@ -358,8 +358,8 @@ function InspectionModal({ onClose, onSaved, prefill }) {
 
   useEffect(() => {
     // 검사 대기 입고 목록
-    api.get('/receipt').then(r => {
-      const pending = (r.data || []).filter(rc => rc.status === 'pending')
+    api.get('/purchase/receipts').then(r => {
+      const pending = (Array.isArray(r.data) ? r.data : []).filter(rc => rc.status === 'pending')
       setReceipts(pending)
     }).catch(() => {})
     api.get('/quality/standards?active_only=true').then(r => setStandards(r.data)).catch(() => {})
