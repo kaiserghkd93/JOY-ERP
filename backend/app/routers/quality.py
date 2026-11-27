@@ -1244,6 +1244,8 @@ def list_oqc(
 def oqc_pending_shipments(db: Session = Depends(get_db)):
     from app.models.sales import Shipment as _Ship, SalesOrder
     from app.models.master import Partner, Item
+    # 자체 ERP에서 성적서를 직접 등록하는 거래처는 OQC 대기 목록 제외
+    _EXCLUDED_KEYWORDS = ["LS", "HD", "나라엠텍", "MCM"]
     registered = {o.sh_no for o in db.query(OqcInspection.sh_no).all()}
     ships = db.query(_Ship).filter(_Ship.status == "confirmed").all()
     out = []
@@ -1252,13 +1254,16 @@ def oqc_pending_shipments(db: Session = Depends(get_db)):
             continue
         so = db.get(SalesOrder, sh.so_no)
         partner = db.get(Partner, so.partner_id) if so else None
+        pname = partner.name if partner else ""
+        if any(kw in pname for kw in _EXCLUDED_KEYWORDS):
+            continue
         item = db.get(Item, sh.part_no)
         out.append({
             "sh_no": sh.sh_no,
             "so_no": sh.so_no,
             "ship_date": str(sh.ship_date),
             "partner_id": so.partner_id if so else None,
-            "partner_name": partner.name if partner else None,
+            "partner_name": pname or None,
             "part_no": sh.part_no,
             "part_name": item.name if item else None,
             "ship_qty": sh.qty,

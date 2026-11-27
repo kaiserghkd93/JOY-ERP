@@ -2694,46 +2694,51 @@ function OqcTab({ oqcList, oqcPending, onRefresh, showOqcModal, setShowOqcModal,
   }
 
   const handlePrint = (o) => {
-    // OQC 성적서 출력
     const docNo = `OQC-${(o.ship_date||'').replace(/-/g,'')}-${String(o.id||'001').padStart(3,'0')}`
     const jColor = o.result === '합격' ? '#16a34a' : '#dc2626'
-    let measHtml = ''
-    if (o.measurements) {
-      try {
-        const m = JSON.parse(o.measurements)
-        measHtml = Object.entries(m).map(([k,v]) =>
-          `<tr><td>${k}</td><td class="center">${Array.isArray(v)?v.join(' / '):v}</td></tr>`
-        ).join('')
-      } catch(e) { measHtml = '' }
-    }
+
+    let dimItems = []
+    if (o.measurements) { try { dimItems = JSON.parse(o.measurements) } catch(e) {} }
+    while (dimItems.length < 5) dimItems.push({name:'', spec:'', shots:['','',''], result:''})
+    const shotCols = Math.max(3, ...dimItems.map(d=>(d.shots||[]).length))
+    const shotHeaders = Array.from({length:shotCols},(_,i)=>`<th style="width:60px">측정${i+1}</th>`).join('')
+    const dimRows = dimItems.map((d,i) => {
+      const shots = Array.from({length:shotCols},(_,ci)=>(d.shots||[])[ci]||'')
+      const jCell = d.result==='합격'
+        ? `<td style="text-align:center;color:#16a34a;font-weight:900">○</td>`
+        : d.result==='불합격'
+        ? `<td style="text-align:center;color:#dc2626;font-weight:900">×</td>`
+        : `<td></td>`
+      return `<tr style="height:26px"><td style="text-align:center;color:#666">${i+1}</td><td>${d.name||''}</td><td style="text-align:center;font-family:monospace">${d.spec||''}</td>${shots.map(s=>`<td style="text-align:center;font-family:monospace">${s}</td>`).join('')}${jCell}</tr>`
+    }).join('')
+
     const html = `<!DOCTYPE html><html lang="ko"><head><meta charset="UTF-8">
 <title>출하검사 성적서 ${docNo}</title>
 <style>
   *{box-sizing:border-box;margin:0;padding:0}
-  body{font-family:'맑은 고딕',Arial,sans-serif;font-size:11pt;padding:12mm;color:#111}
-  h1{text-align:center;font-size:17pt;letter-spacing:4px;margin-bottom:8px}
-  .sub{text-align:center;font-size:9pt;color:#555;margin-bottom:16px}
-  .box4{display:grid;grid-template-columns:repeat(4,1fr);border:1.5px solid #000;margin-bottom:0}
-  .box2{display:grid;grid-template-columns:repeat(2,1fr);border:1.5px solid #000;margin-bottom:0}
-  .cell{border-right:1px solid #000;border-bottom:1px solid #000;padding:4px 8px}
-  .cell:last-child{border-right:none}
+  body{font-family:'맑은 고딕',Arial,sans-serif;font-size:10.5pt;padding:10mm 12mm;color:#111}
+  h1{text-align:center;font-size:18pt;letter-spacing:5px;margin-bottom:6px;font-weight:900}
+  .sub{text-align:center;font-size:9pt;color:#1d4ed8;margin-bottom:14px;font-style:italic}
+  .box4{display:grid;grid-template-columns:repeat(4,1fr);border:1.5px solid #000}
+  .box2{display:grid;grid-template-columns:repeat(2,1fr);border:1.5px solid #000}
+  .box4>div,.box2>div{border-right:1px solid #000;border-bottom:1px solid #000;padding:4px 8px}
+  .box4>div:last-child,.box2>div:last-child{border-right:none}
   .lbl{font-size:7.5pt;color:#555;font-weight:700;display:block;margin-bottom:2px}
-  .val{font-size:10pt;font-weight:700}
-  .sh{background:#0d1f3c;color:#fff;padding:4px 10px;font-size:9pt;font-weight:900;margin:10px 0 0;letter-spacing:1px}
+  .val{font-size:9.5pt;font-weight:700}
+  .sh{background:#0d1f3c;color:#fff;padding:4px 10px;font-size:9pt;font-weight:900;margin:8px 0 0;letter-spacing:1px}
   table{width:100%;border-collapse:collapse;margin-top:4px}
-  th,td{border:1px solid #ccc;padding:5px 8px;font-size:10pt}
-  th{background:#f0f0f0;font-weight:700;text-align:center}
-  .center{text-align:center}
-  .right{text-align:right}
-  .judgment{font-size:16pt;font-weight:900;color:${jColor};border:2.5px solid ${jColor};padding:4px 20px;display:inline-block;border-radius:4px}
-  .sign-row{display:flex;gap:16px;margin-top:16px}
-  .sign-box{flex:1;border:1px solid #aaa;border-radius:4px;padding:8px 10px;min-height:48px}
-  .sign-title{font-size:9pt;color:#555;font-weight:700;margin-bottom:4px}
-  .footer{display:flex;justify-content:space-between;margin-top:12px;font-size:8pt;color:#888}
-  @media print{body{padding:8mm}}
+  th,td{border:1px solid #bbb;padding:3px 5px;font-size:9pt}
+  th{background:#e8edf5;font-weight:700;text-align:center}
+  td{vertical-align:middle}
+  .judgment{font-size:17pt;font-weight:900;color:${jColor};border:2.5px solid ${jColor};padding:4px 22px;display:inline-block;border-radius:4px;letter-spacing:2px}
+  .sign-row{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:14px}
+  .sign-box{border:1px solid #aaa;border-radius:4px;padding:8px 10px;min-height:52px}
+  .sign-title{font-size:9pt;color:#333;font-weight:700;margin-bottom:4px}
+  .footer{display:flex;justify-content:space-between;margin-top:10px;font-size:7.5pt;color:#888;border-top:1px solid #ddd;padding-top:6px}
+  @media print{body{padding:7mm 10mm}@page{margin:5mm}}
 </style></head><body>
 <div style="display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:6px">
-  <div><div style="font-size:9pt;color:#555;font-weight:700">주식회사 조이산업</div><div style="font-size:8pt;color:#777">품질보증부 (QA)</div></div>
+  <div><div style="font-size:10pt;font-weight:900;color:#0d1f3c">주식회사 넥스젬</div><div style="font-size:8pt;color:#777">품질보증부 (QA)</div></div>
   <div style="text-align:right"><div style="font-size:8.5pt">문서번호: <strong>${docNo}</strong></div><div style="font-size:8pt;color:#777">발행일: ${new Date().toLocaleDateString('ko-KR')}</div></div>
 </div>
 <h1>출하검사 성적서</h1>
@@ -2741,35 +2746,38 @@ function OqcTab({ oqcList, oqcPending, onRefresh, showOqcModal, setShowOqcModal,
 
 <div class="sh">1. 기본 정보</div>
 <div class="box4">
-  <div class="cell"><span class="lbl">출하번호</span><span class="val">${o.sh_no}</span></div>
-  <div class="cell"><span class="lbl">수주번호</span><span class="val">${o.so_no||'—'}</span></div>
-  <div class="cell"><span class="lbl">출하일</span><span class="val">${o.ship_date||'—'}</span></div>
-  <div class="cell"><span class="lbl">검사일</span><span class="val">${o.inspect_date||'—'}</span></div>
+  <div><span class="lbl">출하번호</span><span class="val">${o.sh_no}</span></div>
+  <div><span class="lbl">수주번호</span><span class="val">${o.so_no||'—'}</span></div>
+  <div><span class="lbl">출하일</span><span class="val">${o.ship_date||'—'}</span></div>
+  <div><span class="lbl">검사일</span><span class="val">${o.inspect_date||'—'}</span></div>
 </div>
 <div class="box4" style="border-top:none">
-  <div class="cell"><span class="lbl">납품처</span><span class="val">${o.partner_name||o.partner_id||'—'}</span></div>
-  <div class="cell"><span class="lbl">품번</span><span class="val" style="font-family:monospace">${o.part_no||'—'}</span></div>
-  <div class="cell"><span class="lbl">품명</span><span class="val">${o.part_name||'—'}</span></div>
-  <div class="cell"><span class="lbl">검사자</span><span class="val">${o.inspector||'—'}</span></div>
+  <div><span class="lbl">납품처</span><span class="val">${o.partner_name||o.partner_id||'—'}</span></div>
+  <div><span class="lbl">품번</span><span class="val" style="font-family:monospace">${o.part_no||'—'}</span></div>
+  <div><span class="lbl">품명</span><span class="val">${o.part_name||'—'}</span></div>
+  <div><span class="lbl">검사자</span><span class="val">${o.inspector||'—'}</span></div>
 </div>
 
-<div class="sh">2. 검사 결과</div>
-<div class="box4" style="margin-bottom:4px">
-  <div class="cell"><span class="lbl">출하수량</span><span class="val">${(o.ship_qty||0).toLocaleString()}</span></div>
-  <div class="cell"><span class="lbl">검사수량</span><span class="val">${(o.inspect_qty||0).toLocaleString()}</span></div>
-  <div class="cell"><span class="lbl">합격수량</span><span class="val" style="color:#16a34a">${(o.pass_qty||0).toLocaleString()}</span></div>
-  <div class="cell"><span class="lbl">불량수량</span><span class="val" style="color:${(o.fail_qty||0)>0?'#dc2626':'#111'}">${(o.fail_qty||0).toLocaleString()}</span></div>
+<div class="sh">2. 수량 검사 결과</div>
+<div class="box4" style="margin-bottom:0">
+  <div><span class="lbl">출하수량</span><span class="val">${(o.ship_qty||0).toLocaleString()}</span></div>
+  <div><span class="lbl">검사수량</span><span class="val">${(o.inspect_qty||0).toLocaleString()}</span></div>
+  <div><span class="lbl">합격수량</span><span class="val" style="color:#16a34a">${(o.pass_qty||0).toLocaleString()}</span></div>
+  <div><span class="lbl">불량수량</span><span class="val" style="color:${(o.fail_qty||0)>0?'#dc2626':'inherit'}">${(o.fail_qty||0).toLocaleString()}</span></div>
 </div>
-<div class="box2" style="border-top:none;margin-bottom:4px">
-  <div class="cell"><span class="lbl">외관검사</span><span class="val">${o.appearance_ok===true?'합격 ○':o.appearance_ok===false?'불합격 ×':'—'}</span></div>
-  <div class="cell"><span class="lbl">불량 내용</span><span class="val">${o.defect_note||'—'}</span></div>
+<div class="box2" style="border-top:none">
+  <div><span class="lbl">외관검사</span><span class="val">${o.appearance_ok===true?'합격 ○':o.appearance_ok===false?'불합격 ×':'—'}</span></div>
+  <div><span class="lbl">불량 내용</span><span class="val" style="color:${o.defect_note?'#dc2626':'inherit'}">${o.defect_note||'—'}</span></div>
 </div>
 
-${measHtml ? `<div class="sh">3. 치수 측정값</div>
-<table><thead><tr><th style="width:40%">측정 항목</th><th>측정값</th></tr></thead><tbody>${measHtml}</tbody></table>` : ''}
+<div class="sh">3. 치수 측정 성적 (Dimensional Inspection)</div>
+<table>
+  <thead><tr><th style="width:28px">No</th><th style="min-width:100px">측정 항목</th><th style="width:90px">규격 (Spec)</th>${shotHeaders}<th style="width:36px">판정</th></tr></thead>
+  <tbody>${dimRows}</tbody>
+</table>
 
-<div style="display:flex;justify-content:flex-end;margin-top:14px;align-items:center;gap:16px">
-  ${o.note?`<span style="font-size:9pt;color:#555">비고: ${o.note}</span>`:''}
+<div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px">
+  <div style="font-size:9pt;color:#555">${o.note?'비고: '+o.note:''}</div>
   <div class="judgment">${o.result==='합격'?'합격 (PASS)':'불합격 (FAIL)'}</div>
 </div>
 
@@ -2779,11 +2787,11 @@ ${measHtml ? `<div class="sh">3. 치수 측정값</div>
   <div class="sign-box"><div class="sign-title">승인 (서명)</div></div>
 </div>
 <div class="footer">
-  <span>주식회사 조이산업 — 출하검사 절차 (IATF 16949 §8.6.1)</span>
+  <span>주식회사 넥스젬 — 출하검사 절차 (IATF 16949 §8.6.1)</span>
   <span>출력일: ${new Date().toLocaleDateString('ko-KR')}</span>
 </div>
 </body></html>`
-    const w = window.open('','_blank','width=900,height=700')
+    const w = window.open('','_blank','width=1000,height=800')
     w.document.write(html)
     w.document.close()
     setTimeout(()=>w.print(),400)
@@ -2931,49 +2939,54 @@ ${measHtml ? `<div class="sh">3. 치수 측정값</div>
 function OqcModal({ form, setForm, editTarget, onClose, onSaved }) {
   const set = (k,v) => setForm(f=>({...f,[k]:v}))
 
-  const handleShChange = (sh_no) => {
-    set('sh_no', sh_no)
+  const initDims = () => {
+    if (form.measurements) {
+      try { const d = JSON.parse(form.measurements); if (Array.isArray(d) && d.length > 0) return d } catch(e) {}
+    }
+    return Array.from({length:5},()=>({name:'',spec:'',shots:['','',''],result:''}))
   }
+  const [dims, setDims] = React.useState(initDims)
+  const setDimField = (ri, field, val) => setDims(ds=>ds.map((d,i)=>i===ri?{...d,[field]:val}:d))
+  const setShot = (ri, ci, val) => setDims(ds=>ds.map((d,i)=>i===ri?{...d,shots:d.shots.map((s,j)=>j===ci?val:s)}:d))
+  const addDimRow = () => setDims(ds=>[...ds,{name:'',spec:'',shots:['','',''],result:''}])
 
   const submit = async () => {
     if (!form.sh_no) return alert('출하번호를 선택하세요')
+    const activeDims = dims.filter(d=>d.name||d.spec||d.shots.some(s=>s))
+    const payload = {...form, measurements: activeDims.length > 0 ? JSON.stringify(activeDims) : null}
     try {
-      if (editTarget) {
-        await api.patch(`/quality/oqc/${editTarget.id}`, form)
-      } else {
-        await api.post('/quality/oqc', form)
-      }
+      if (editTarget) { await api.patch(`/quality/oqc/${editTarget.id}`, payload) }
+      else { await api.post('/quality/oqc', payload) }
       onSaved()
-    } catch(e) {
-      alert(e.response?.data?.detail || '저장 실패')
-    }
+    } catch(e) { alert(e.response?.data?.detail || '저장 실패') }
   }
+
+  const INP = {border:'1px solid var(--border)',borderRadius:4,padding:'3px 6px',fontSize:11,width:'100%',background:'var(--bg)',color:'var(--text)'}
+  const rColor = r => r==='합격'?'#16a34a':r==='불합격'?'#dc2626':'var(--text-sm)'
 
   return (
     <div className="modal-overlay">
-      <div className="modal" style={{maxWidth:560}}>
+      <div className="modal" style={{maxWidth:760,maxHeight:'92vh',overflowY:'auto'}}>
         <h3>{editTarget ? 'OQC 성적서 수정' : 'OQC 출하검사 성적서 등록'}</h3>
 
-        <div className="form-group">
-          <label>출하번호 *</label>
-          {editTarget
-            ? <input value={form.sh_no} disabled style={{background:'var(--bg-secondary)'}} />
-            : <input value={form.sh_no} onChange={e=>handleShChange(e.target.value)} placeholder="SH-20261123-027" />
-          }
-        </div>
-
-        <div className="grid-2">
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+          <div className="form-group">
+            <label>출하번호 *</label>
+            {editTarget
+              ? <input value={form.sh_no} disabled style={{background:'var(--bg-secondary)'}} />
+              : <input value={form.sh_no} onChange={e=>set('sh_no',e.target.value)} placeholder="SH-20261123-027" />
+            }
+          </div>
           <div className="form-group">
             <label>검사일 *</label>
             <input type="date" value={form.inspect_date} onChange={e=>set('inspect_date',e.target.value)} />
           </div>
+        </div>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr 1fr',gap:8}}>
           <div className="form-group">
             <label>검사자</label>
-            <input value={form.inspector} onChange={e=>set('inspector',e.target.value)} placeholder="이름 입력" />
+            <input value={form.inspector} onChange={e=>set('inspector',e.target.value)} placeholder="이름" />
           </div>
-        </div>
-
-        <div className="grid-2" style={{gridTemplateColumns:'1fr 1fr 1fr',gap:8}}>
           <div className="form-group">
             <label>검사수량</label>
             <input type="number" value={form.inspect_qty} onChange={e=>{const q=+e.target.value;set('inspect_qty',q);set('pass_qty',q-(form.fail_qty||0))}} />
@@ -2987,8 +3000,7 @@ function OqcModal({ form, setForm, editTarget, onClose, onSaved }) {
             <input type="number" value={form.pass_qty} readOnly style={{background:'var(--bg-secondary)'}} />
           </div>
         </div>
-
-        <div className="grid-2">
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8}}>
           <div className="form-group">
             <label>외관검사</label>
             <select value={form.appearance_ok===true?'합격':form.appearance_ok===false?'불합격':'미실시'} onChange={e=>set('appearance_ok',e.target.value==='합격'?true:e.target.value==='불합격'?false:null)}>
@@ -2996,8 +3008,12 @@ function OqcModal({ form, setForm, editTarget, onClose, onSaved }) {
             </select>
           </div>
           <div className="form-group">
+            <label>불량 내용</label>
+            <input value={form.defect_note} onChange={e=>set('defect_note',e.target.value)} placeholder="치수불량, 외관불량 등" />
+          </div>
+          <div className="form-group">
             <label>최종 판정</label>
-            <select value={form.result} onChange={e=>set('result',e.target.value)} style={{fontWeight:700,color:form.result==='합격'?'#16a34a':form.result==='불합격'?'#dc2626':'#d97706'}}>
+            <select value={form.result} onChange={e=>set('result',e.target.value)} style={{fontWeight:900,color:form.result==='합격'?'#16a34a':form.result==='불합격'?'#dc2626':'#d97706'}}>
               <option value="합격">합격</option>
               <option value="불합격">불합격</option>
               <option value="검사대기">검사대기</option>
@@ -3005,12 +3021,52 @@ function OqcModal({ form, setForm, editTarget, onClose, onSaved }) {
           </div>
         </div>
 
-        <div className="form-group">
-          <label>불량 내용</label>
-          <input value={form.defect_note} onChange={e=>set('defect_note',e.target.value)} placeholder="치수불량, 외관불량 등" />
+        <div style={{margin:'10px 0 4px',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+          <span style={{fontWeight:700,fontSize:12}}>치수 측정 항목 (Dimensional Inspection)</span>
+          <button className="btn btn-xs btn-outline" onClick={addDimRow}>＋ 행 추가</button>
+        </div>
+        <div style={{overflowX:'auto'}}>
+          <table style={{width:'100%',borderCollapse:'collapse',fontSize:11}}>
+            <thead>
+              <tr style={{background:'#e8edf5'}}>
+                <th style={{border:'1px solid var(--border)',padding:'4px 6px',width:28}}>No</th>
+                <th style={{border:'1px solid var(--border)',padding:'4px 6px',minWidth:100}}>측정 항목</th>
+                <th style={{border:'1px solid var(--border)',padding:'4px 6px',width:90}}>규격 (Spec)</th>
+                <th style={{border:'1px solid var(--border)',padding:'4px 6px',width:70}}>측정 1</th>
+                <th style={{border:'1px solid var(--border)',padding:'4px 6px',width:70}}>측정 2</th>
+                <th style={{border:'1px solid var(--border)',padding:'4px 6px',width:70}}>측정 3</th>
+                <th style={{border:'1px solid var(--border)',padding:'4px 6px',width:60}}>판정</th>
+              </tr>
+            </thead>
+            <tbody>
+              {dims.map((d,ri)=>(
+                <tr key={ri}>
+                  <td style={{border:'1px solid var(--border)',padding:'2px 4px',textAlign:'center',color:'#888'}}>{ri+1}</td>
+                  <td style={{border:'1px solid var(--border)',padding:'2px 4px'}}>
+                    <input style={INP} value={d.name} onChange={e=>setDimField(ri,'name',e.target.value)} placeholder="예: 전체길이" />
+                  </td>
+                  <td style={{border:'1px solid var(--border)',padding:'2px 4px'}}>
+                    <input style={INP} value={d.spec} onChange={e=>setDimField(ri,'spec',e.target.value)} placeholder="50 ± 0.1" />
+                  </td>
+                  {[0,1,2].map(ci=>(
+                    <td key={ci} style={{border:'1px solid var(--border)',padding:'2px 4px'}}>
+                      <input style={{...INP,textAlign:'center',fontFamily:'monospace'}} value={(d.shots||[])[ci]||''} onChange={e=>setShot(ri,ci,e.target.value)} />
+                    </td>
+                  ))}
+                  <td style={{border:'1px solid var(--border)',padding:'2px 4px'}}>
+                    <select style={{...INP,fontWeight:700,color:rColor(d.result)}} value={d.result} onChange={e=>setDimField(ri,'result',e.target.value)}>
+                      <option value=""></option>
+                      <option value="합격">합격</option>
+                      <option value="불합격">불합격</option>
+                    </select>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
 
-        <div className="form-group">
+        <div className="form-group" style={{marginTop:8}}>
           <label>비고</label>
           <textarea rows={2} value={form.note} onChange={e=>set('note',e.target.value)} style={{width:'100%',padding:8,borderRadius:6,border:'1px solid var(--border)'}} />
         </div>
