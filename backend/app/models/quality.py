@@ -326,3 +326,34 @@ class ProcessOutgoingDefect(Base):
     reviewed_at: Mapped[date | None] = mapped_column(Date)            # 검토완료일
 
     partner: Mapped["Partner | None"] = relationship(foreign_keys=[partner_id])
+
+
+# ── OQC 출하검사 ─────────────────────────────────────────────────────
+class OqcResult(str, enum.Enum):
+    pending = "검사대기"
+    pass_   = "합격"
+    fail    = "불합격"
+
+
+class OqcInspection(Base):
+    """출하검사(OQC) 성적서 — Shipment 1건당 1건"""
+    __tablename__ = "oqc_inspection"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    sh_no: Mapped[str] = mapped_column(ForeignKey("shipment.sh_no"), nullable=False, unique=True, index=True)
+    inspect_date: Mapped[date] = mapped_column(Date, nullable=False)
+    inspector: Mapped[str | None] = mapped_column(String(50))
+    inspect_qty: Mapped[int] = mapped_column(Integer, nullable=False)
+    pass_qty: Mapped[int] = mapped_column(Integer, nullable=False)
+    fail_qty: Mapped[int] = mapped_column(Integer, default=0)
+    result: Mapped[OqcResult] = mapped_column(
+        SAEnum(OqcResult, native_enum=False), default=OqcResult.pending
+    )
+    defect_note: Mapped[str | None] = mapped_column(Text)
+    measurements: Mapped[str | None] = mapped_column(Text)   # JSON
+    appearance_ok: Mapped[bool | None] = mapped_column(default=None)
+    note: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+    updated_at: Mapped[datetime | None] = mapped_column(DateTime, onupdate=datetime.now)
+
+    shipment: Mapped["Shipment"] = relationship(foreign_keys=[sh_no])

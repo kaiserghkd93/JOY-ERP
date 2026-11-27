@@ -1616,6 +1616,12 @@ export default function Quality() {
   const [editingInspector, setEditingInspector] = useState(null)
   const [selectedInsp, setSelectedInsp] = useState(null)
   const [inspDetailTab, setInspDetailTab] = useState('info')
+  // OQC
+  const [oqcList, setOqcList] = useState([])
+  const [oqcPending, setOqcPending] = useState([])
+  const [showOqcModal, setShowOqcModal] = useState(false)
+  const [oqcForm, setOqcForm] = useState(null)
+  const [oqcEditTarget, setOqcEditTarget] = useState(null)
 
   const load = useCallback(() => {
     api.get('/quality/claims').then(r => setClaims(r.data)).catch(() => {})
@@ -1625,6 +1631,8 @@ export default function Quality() {
     api.get('/quality/ncr').then(r => setNcrList(r.data)).catch(() => {})
     api.get('/quality/defect-reg').then(r => setDefRegList(Array.isArray(r.data) ? r.data : [])).catch(() => {})
     api.get('/master/partners').then(r => setPartners(r.data)).catch(() => {})
+    api.get('/quality/oqc').then(r => setOqcList(Array.isArray(r.data) ? r.data : [])).catch(() => {})
+    api.get('/quality/oqc/pending-shipments').then(r => setOqcPending(Array.isArray(r.data) ? r.data : [])).catch(() => {})
   }, [])
 
   useEffect(() => { load() }, [load])
@@ -1669,6 +1677,7 @@ export default function Quality() {
           <div className="qdate-bar">
             {[
               ['defreg','공정/출하 불량등록'],
+              ['oqc','출하검사(OQC)'],
               ['inspections','입고검사'], ['standards','검사기준'], ['ncr','부적합관리'],
               ['claims','클레임 목록'], ['rates','외주처별 불량율'], ['loss','공정불량 로스'],
               ['spc','SPC 관리도'], ['cp','관리계획서'], ['pfmea','PFMEA'],
@@ -1680,6 +1689,7 @@ export default function Quality() {
           </div>
           <div className="spacer"/>
           {tab === 'defreg' && <button className="btn btn-sm btn-primary" onClick={()=>setShowDefRegModal(true)}>＋ 불량 등록</button>}
+          {tab === 'oqc' && <button className="btn btn-sm btn-primary" onClick={()=>{setOqcEditTarget(null);setOqcForm({sh_no:'',inspect_date:new Date().toISOString().slice(0,10),inspector:'',inspect_qty:0,pass_qty:0,fail_qty:0,result:'합격',defect_note:'',appearance_ok:true,note:''});setShowOqcModal(true)}}>＋ OQC 성적서 등록</button>}
           {tab === 'inspections' && <button className="btn btn-sm btn-primary" onClick={()=>setShowInspModal(true)}>＋ 검사 등록</button>}
           {tab === 'ncr' && <button className="btn btn-sm btn-primary" onClick={()=>setShowNcrModal(true)}>＋ 부적합 통보</button>}
           {tab === 'claims' && <button className="btn btn-sm btn-primary" onClick={()=>setShowModal(true)}>＋ 클레임 등록</button>}
@@ -1687,6 +1697,18 @@ export default function Quality() {
         </div>
       </div>
 
+      {tab === 'oqc' && (
+        <OqcTab
+          oqcList={oqcList} oqcPending={oqcPending}
+          onRefresh={()=>{
+            api.get('/quality/oqc').then(r=>setOqcList(Array.isArray(r.data)?r.data:[])).catch(()=>{})
+            api.get('/quality/oqc/pending-shipments').then(r=>setOqcPending(Array.isArray(r.data)?r.data:[])).catch(()=>{})
+          }}
+          showOqcModal={showOqcModal} setShowOqcModal={setShowOqcModal}
+          oqcForm={oqcForm} setOqcForm={setOqcForm}
+          oqcEditTarget={oqcEditTarget} setOqcEditTarget={setOqcEditTarget}
+        />
+      )}
       {tab === 'inspections' && (
         <div style={{ display: 'grid', gridTemplateColumns: '290px 1fr', gap: 12, alignItems: 'start' }}>
           {/* 좌측: 검사 목록 */}
@@ -2643,6 +2665,359 @@ function ClaimDetailModal({ claim, onClose, onSaved }) {
         <div className="modal-footer" style={{ marginTop: 16 }}>
           <button className="btn btn-outline" onClick={onClose}>닫기</button>
           <button className="btn btn-primary" onClick={save} disabled={saving}>{saving ? '저장 중...' : '저장'}</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+
+// ════════════════════════════════════════════════════════════════════
+// OQC 출하검사 탭
+// ════════════════════════════════════════════════════════════════════
+function OqcTab({ oqcList, oqcPending, onRefresh, showOqcModal, setShowOqcModal, oqcForm, setOqcForm, oqcEditTarget, setOqcEditTarget }) {
+  const [filterPartner, setFilterPartner] = React.useState('')
+  const [filterResult, setFilterResult] = React.useState('')
+  const [selectedOqc, setSelectedOqc] = React.useState(null)
+  const [viewTab, setViewTab] = React.useState('list') // 'list' | 'pending'
+
+  const filtered = oqcList.filter(o => {
+    if (filterPartner && !(o.partner_name||'').includes(filterPartner) && !(o.partner_id||'').includes(filterPartner)) return false
+    if (filterResult && o.result !== filterResult) return false
+    return true
+  })
+
+  const resultColor = (r) => {
+    if (r === '합격') return '#16a34a'
+    if (r === '불합격') return '#dc2626'
+    return '#d97706'
+  }
+
+  const handlePrint = (o) => {
+    // OQC 성적서 출력
+    const docNo = `OQC-${(o.ship_date||'').replace(/-/g,'')}-${String(o.id||'001').padStart(3,'0')}`
+    const jColor = o.result === '합격' ? '#16a34a' : '#dc2626'
+    let measHtml = ''
+    if (o.measurements) {
+      try {
+        const m = JSON.parse(o.measurements)
+        measHtml = Object.entries(m).map(([k,v]) =>
+          `<tr><td>${k}</td><td class="center">${Array.isArray(v)?v.join(' / '):v}</td></tr>`
+        ).join('')
+      } catch(e) { measHtml = '' }
+    }
+    const html = `<!DOCTYPE html><html lang="ko"><head><meta charset="UTF-8">
+<title>출하검사 성적서 ${docNo}</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'맑은 고딕',Arial,sans-serif;font-size:11pt;padding:12mm;color:#111}
+  h1{text-align:center;font-size:17pt;letter-spacing:4px;margin-bottom:8px}
+  .sub{text-align:center;font-size:9pt;color:#555;margin-bottom:16px}
+  .box4{display:grid;grid-template-columns:repeat(4,1fr);border:1.5px solid #000;margin-bottom:0}
+  .box2{display:grid;grid-template-columns:repeat(2,1fr);border:1.5px solid #000;margin-bottom:0}
+  .cell{border-right:1px solid #000;border-bottom:1px solid #000;padding:4px 8px}
+  .cell:last-child{border-right:none}
+  .lbl{font-size:7.5pt;color:#555;font-weight:700;display:block;margin-bottom:2px}
+  .val{font-size:10pt;font-weight:700}
+  .sh{background:#0d1f3c;color:#fff;padding:4px 10px;font-size:9pt;font-weight:900;margin:10px 0 0;letter-spacing:1px}
+  table{width:100%;border-collapse:collapse;margin-top:4px}
+  th,td{border:1px solid #ccc;padding:5px 8px;font-size:10pt}
+  th{background:#f0f0f0;font-weight:700;text-align:center}
+  .center{text-align:center}
+  .right{text-align:right}
+  .judgment{font-size:16pt;font-weight:900;color:${jColor};border:2.5px solid ${jColor};padding:4px 20px;display:inline-block;border-radius:4px}
+  .sign-row{display:flex;gap:16px;margin-top:16px}
+  .sign-box{flex:1;border:1px solid #aaa;border-radius:4px;padding:8px 10px;min-height:48px}
+  .sign-title{font-size:9pt;color:#555;font-weight:700;margin-bottom:4px}
+  .footer{display:flex;justify-content:space-between;margin-top:12px;font-size:8pt;color:#888}
+  @media print{body{padding:8mm}}
+</style></head><body>
+<div style="display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:6px">
+  <div><div style="font-size:9pt;color:#555;font-weight:700">주식회사 조이산업</div><div style="font-size:8pt;color:#777">품질보증부 (QA)</div></div>
+  <div style="text-align:right"><div style="font-size:8.5pt">문서번호: <strong>${docNo}</strong></div><div style="font-size:8pt;color:#777">발행일: ${new Date().toLocaleDateString('ko-KR')}</div></div>
+</div>
+<h1>출하검사 성적서</h1>
+<div class="sub">OUTGOING QUALITY CONTROL REPORT (IATF 16949 §8.6)</div>
+
+<div class="sh">1. 기본 정보</div>
+<div class="box4">
+  <div class="cell"><span class="lbl">출하번호</span><span class="val">${o.sh_no}</span></div>
+  <div class="cell"><span class="lbl">수주번호</span><span class="val">${o.so_no||'—'}</span></div>
+  <div class="cell"><span class="lbl">출하일</span><span class="val">${o.ship_date||'—'}</span></div>
+  <div class="cell"><span class="lbl">검사일</span><span class="val">${o.inspect_date||'—'}</span></div>
+</div>
+<div class="box4" style="border-top:none">
+  <div class="cell"><span class="lbl">납품처</span><span class="val">${o.partner_name||o.partner_id||'—'}</span></div>
+  <div class="cell"><span class="lbl">품번</span><span class="val" style="font-family:monospace">${o.part_no||'—'}</span></div>
+  <div class="cell"><span class="lbl">품명</span><span class="val">${o.part_name||'—'}</span></div>
+  <div class="cell"><span class="lbl">검사자</span><span class="val">${o.inspector||'—'}</span></div>
+</div>
+
+<div class="sh">2. 검사 결과</div>
+<div class="box4" style="margin-bottom:4px">
+  <div class="cell"><span class="lbl">출하수량</span><span class="val">${(o.ship_qty||0).toLocaleString()}</span></div>
+  <div class="cell"><span class="lbl">검사수량</span><span class="val">${(o.inspect_qty||0).toLocaleString()}</span></div>
+  <div class="cell"><span class="lbl">합격수량</span><span class="val" style="color:#16a34a">${(o.pass_qty||0).toLocaleString()}</span></div>
+  <div class="cell"><span class="lbl">불량수량</span><span class="val" style="color:${(o.fail_qty||0)>0?'#dc2626':'#111'}">${(o.fail_qty||0).toLocaleString()}</span></div>
+</div>
+<div class="box2" style="border-top:none;margin-bottom:4px">
+  <div class="cell"><span class="lbl">외관검사</span><span class="val">${o.appearance_ok===true?'합격 ○':o.appearance_ok===false?'불합격 ×':'—'}</span></div>
+  <div class="cell"><span class="lbl">불량 내용</span><span class="val">${o.defect_note||'—'}</span></div>
+</div>
+
+${measHtml ? `<div class="sh">3. 치수 측정값</div>
+<table><thead><tr><th style="width:40%">측정 항목</th><th>측정값</th></tr></thead><tbody>${measHtml}</tbody></table>` : ''}
+
+<div style="display:flex;justify-content:flex-end;margin-top:14px;align-items:center;gap:16px">
+  ${o.note?`<span style="font-size:9pt;color:#555">비고: ${o.note}</span>`:''}
+  <div class="judgment">${o.result==='합격'?'합격 (PASS)':'불합격 (FAIL)'}</div>
+</div>
+
+<div class="sign-row">
+  <div class="sign-box"><div class="sign-title">검사자 (서명)</div></div>
+  <div class="sign-box"><div class="sign-title">확인자 (서명)</div></div>
+  <div class="sign-box"><div class="sign-title">승인 (서명)</div></div>
+</div>
+<div class="footer">
+  <span>주식회사 조이산업 — 출하검사 절차 (IATF 16949 §8.6.1)</span>
+  <span>출력일: ${new Date().toLocaleDateString('ko-KR')}</span>
+</div>
+</body></html>`
+    const w = window.open('','_blank','width=900,height=700')
+    w.document.write(html)
+    w.document.close()
+    setTimeout(()=>w.print(),400)
+  }
+
+  return (
+    <div>
+      {/* 상단 뷰 전환 */}
+      <div style={{display:'flex',gap:8,marginBottom:12,alignItems:'center'}}>
+        <button className={`btn btn-sm ${viewTab==='pending'?'btn-primary':'btn-outline'}`} onClick={()=>setViewTab('pending')}>
+          검사대기 ({oqcPending.length})
+        </button>
+        <button className={`btn btn-sm ${viewTab==='list'?'btn-primary':'btn-outline'}`} onClick={()=>setViewTab('list')}>
+          검사완료 목록 ({oqcList.length})
+        </button>
+        {viewTab==='list' && <>
+          <input style={{border:'1px solid var(--border)',borderRadius:4,padding:'4px 8px',fontSize:12,width:140}} placeholder="납품처 검색" value={filterPartner} onChange={e=>setFilterPartner(e.target.value)} />
+          <select style={{border:'1px solid var(--border)',borderRadius:4,padding:'4px 8px',fontSize:12}} value={filterResult} onChange={e=>setFilterResult(e.target.value)}>
+            <option value="">전체</option>
+            <option value="합격">합격</option>
+            <option value="불합격">불합격</option>
+            <option value="검사대기">검사대기</option>
+          </select>
+        </>}
+      </div>
+
+      {/* 검사대기 탭 */}
+      {viewTab==='pending' && (
+        <div>
+          <div style={{background:'var(--surface)',border:'1px solid var(--border)',borderRadius:6,overflow:'hidden'}}>
+            <div style={{padding:'8px 14px',borderBottom:'1px solid var(--border)',background:'#fef9c3',display:'flex',justifyContent:'space-between'}}>
+              <span style={{fontWeight:700,fontSize:12}}>OQC 미등록 출하건 (검사 대기)</span>
+              <span style={{fontSize:11,color:'#92400e'}}>{oqcPending.length}건</span>
+            </div>
+            {oqcPending.length===0 && <div style={{padding:40,textAlign:'center',color:'var(--text-sm)',fontSize:12}}>대기 중인 출하건 없음</div>}
+            <table style={{width:'100%',borderCollapse:'collapse'}}>
+              {oqcPending.length>0 && <thead><tr style={{borderBottom:'1px solid var(--border)',background:'#f8fafc'}}>
+                {['출하번호','수주번호','출하일','납품처','품번','품명','수량','액션'].map(h=><th key={h} style={{padding:'6px 10px',fontSize:11,fontWeight:700,textAlign:'left'}}>{h}</th>)}
+              </tr></thead>}
+              <tbody>
+                {oqcPending.map(sh=>(
+                  <tr key={sh.sh_no} style={{borderBottom:'1px solid var(--border)'}}>
+                    <td style={{padding:'7px 10px',fontSize:12,fontFamily:'monospace'}}>{sh.sh_no}</td>
+                    <td style={{padding:'7px 10px',fontSize:11,color:'var(--text-sm)'}}>{sh.so_no}</td>
+                    <td style={{padding:'7px 10px',fontSize:11}}>{sh.ship_date}</td>
+                    <td style={{padding:'7px 10px',fontSize:12,fontWeight:600}}>{sh.partner_name||sh.partner_id}</td>
+                    <td style={{padding:'7px 10px',fontSize:11,fontFamily:'monospace'}}>{sh.part_no}</td>
+                    <td style={{padding:'7px 10px',fontSize:11}}>{sh.part_name}</td>
+                    <td style={{padding:'7px 10px',fontSize:11,textAlign:'right'}}>{(sh.ship_qty||0).toLocaleString()}</td>
+                    <td style={{padding:'7px 10px'}}>
+                      <button className="btn btn-xs btn-primary" onClick={()=>{
+                        setOqcEditTarget(null)
+                        setOqcForm({sh_no:sh.sh_no,inspect_date:new Date().toISOString().slice(0,10),inspector:'',inspect_qty:sh.ship_qty||0,pass_qty:sh.ship_qty||0,fail_qty:0,result:'합격',defect_note:'',appearance_ok:true,note:''})
+                        setShowOqcModal(true)
+                      }}>성적서 등록</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* 완료 목록 탭 */}
+      {viewTab==='list' && (
+        <div>
+          {selectedOqc && (
+            <div style={{background:'var(--surface)',border:'1px solid var(--border)',borderRadius:6,padding:16,marginBottom:12}}>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
+                <span style={{fontWeight:700,fontSize:13}}>OQC 성적서 상세</span>
+                <div style={{display:'flex',gap:6}}>
+                  <button className="btn btn-xs btn-outline" onClick={()=>handlePrint(selectedOqc)}>🖨 출력</button>
+                  <button className="btn btn-xs btn-outline" onClick={()=>{
+                    setOqcEditTarget(selectedOqc)
+                    setOqcForm({sh_no:selectedOqc.sh_no,inspect_date:selectedOqc.inspect_date,inspector:selectedOqc.inspector||'',inspect_qty:selectedOqc.inspect_qty,pass_qty:selectedOqc.pass_qty,fail_qty:selectedOqc.fail_qty||0,result:selectedOqc.result,defect_note:selectedOqc.defect_note||'',appearance_ok:selectedOqc.appearance_ok,note:selectedOqc.note||''})
+                    setShowOqcModal(true)
+                  }}>수정</button>
+                  <button className="btn btn-xs btn-danger" onClick={async()=>{if(window.confirm('삭제하시겠습니까?')){await api.delete(`/quality/oqc/${selectedOqc.id}`);setSelectedOqc(null);onRefresh()}}}>삭제</button>
+                  <button className="btn btn-xs btn-outline" onClick={()=>setSelectedOqc(null)}>닫기</button>
+                </div>
+              </div>
+              <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:8,fontSize:12}}>
+                {[['출하번호',selectedOqc.sh_no],['납품처',selectedOqc.partner_name||selectedOqc.partner_id],['품번',selectedOqc.part_no],['품명',selectedOqc.part_name],
+                  ['출하일',selectedOqc.ship_date],['검사일',selectedOqc.inspect_date],['검사자',selectedOqc.inspector||'—'],['외관검사',selectedOqc.appearance_ok===true?'합격':selectedOqc.appearance_ok===false?'불합격':'—'],
+                  ['출하수량',(selectedOqc.ship_qty||0).toLocaleString()],['검사수량',(selectedOqc.inspect_qty||0).toLocaleString()],['합격수량',(selectedOqc.pass_qty||0).toLocaleString()],['불량수량',(selectedOqc.fail_qty||0).toLocaleString()],
+                ].map(([l,v])=>(
+                  <div key={l} style={{background:'var(--bg)',border:'1px solid var(--border)',borderRadius:4,padding:'6px 10px'}}>
+                    <div style={{fontSize:10,color:'var(--text-sm)',fontWeight:700}}>{l}</div>
+                    <div style={{fontWeight:700,marginTop:2}}>{v}</div>
+                  </div>
+                ))}
+              </div>
+              {selectedOqc.defect_note && <div style={{marginTop:8,fontSize:12,color:'#dc2626'}}>불량내용: {selectedOqc.defect_note}</div>}
+              {selectedOqc.note && <div style={{marginTop:4,fontSize:12,color:'var(--text-sm)'}}>비고: {selectedOqc.note}</div>}
+            </div>
+          )}
+          <div style={{background:'var(--surface)',border:'1px solid var(--border)',borderRadius:6,overflow:'hidden'}}>
+            <table style={{width:'100%',borderCollapse:'collapse'}}>
+              <thead><tr style={{borderBottom:'1px solid var(--border)',background:'#f8fafc'}}>
+                {['검사일','출하번호','납품처','품번','품명','검사수량','합격','불량','판정','검사자','액션'].map(h=>(
+                  <th key={h} style={{padding:'7px 10px',fontSize:11,fontWeight:700,textAlign:'left'}}>{h}</th>
+                ))}
+              </tr></thead>
+              <tbody>
+                {filtered.length===0 && <tr><td colSpan={11} style={{padding:40,textAlign:'center',color:'var(--text-sm)',fontSize:12}}>OQC 성적서 없음</td></tr>}
+                {filtered.map(o=>(
+                  <tr key={o.id} style={{borderBottom:'1px solid var(--border)',background:selectedOqc?.id===o.id?'#eff6ff':'',cursor:'pointer'}} onClick={()=>setSelectedOqc(selectedOqc?.id===o.id?null:o)}>
+                    <td style={{padding:'7px 10px',fontSize:11}}>{o.inspect_date}</td>
+                    <td style={{padding:'7px 10px',fontSize:11,fontFamily:'monospace'}}>{o.sh_no}</td>
+                    <td style={{padding:'7px 10px',fontSize:12,fontWeight:600}}>{o.partner_name||o.partner_id}</td>
+                    <td style={{padding:'7px 10px',fontSize:11,fontFamily:'monospace'}}>{o.part_no}</td>
+                    <td style={{padding:'7px 10px',fontSize:11}}>{o.part_name}</td>
+                    <td style={{padding:'7px 10px',fontSize:11,textAlign:'right'}}>{(o.inspect_qty||0).toLocaleString()}</td>
+                    <td style={{padding:'7px 10px',fontSize:11,textAlign:'right',color:'#16a34a'}}>{(o.pass_qty||0).toLocaleString()}</td>
+                    <td style={{padding:'7px 10px',fontSize:11,textAlign:'right',color:(o.fail_qty||0)>0?'#dc2626':'inherit'}}>{(o.fail_qty||0).toLocaleString()}</td>
+                    <td style={{padding:'7px 10px'}}>
+                      <span style={{fontWeight:900,fontSize:11,color:resultColor(o.result)}}>{o.result}</span>
+                    </td>
+                    <td style={{padding:'7px 10px',fontSize:11}}>{o.inspector||'—'}</td>
+                    <td style={{padding:'7px 10px',whiteSpace:'nowrap'}} onClick={e=>e.stopPropagation()}>
+                      <button className="btn btn-xs btn-outline" style={{marginRight:4}} onClick={()=>handlePrint(o)}>🖨</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* OQC 등록/수정 모달 */}
+      {showOqcModal && oqcForm && (
+        <OqcModal
+          form={oqcForm} setForm={setOqcForm}
+          editTarget={oqcEditTarget}
+          onClose={()=>{setShowOqcModal(false);setOqcEditTarget(null)}}
+          onSaved={()=>{setShowOqcModal(false);setOqcEditTarget(null);onRefresh()}}
+        />
+      )}
+    </div>
+  )
+}
+
+function OqcModal({ form, setForm, editTarget, onClose, onSaved }) {
+  const set = (k,v) => setForm(f=>({...f,[k]:v}))
+
+  const handleShChange = (sh_no) => {
+    set('sh_no', sh_no)
+  }
+
+  const submit = async () => {
+    if (!form.sh_no) return alert('출하번호를 선택하세요')
+    try {
+      if (editTarget) {
+        await api.patch(`/quality/oqc/${editTarget.id}`, form)
+      } else {
+        await api.post('/quality/oqc', form)
+      }
+      onSaved()
+    } catch(e) {
+      alert(e.response?.data?.detail || '저장 실패')
+    }
+  }
+
+  return (
+    <div className="modal-overlay">
+      <div className="modal" style={{maxWidth:560}}>
+        <h3>{editTarget ? 'OQC 성적서 수정' : 'OQC 출하검사 성적서 등록'}</h3>
+
+        <div className="form-group">
+          <label>출하번호 *</label>
+          {editTarget
+            ? <input value={form.sh_no} disabled style={{background:'var(--bg-secondary)'}} />
+            : <input value={form.sh_no} onChange={e=>handleShChange(e.target.value)} placeholder="SH-20261123-027" />
+          }
+        </div>
+
+        <div className="grid-2">
+          <div className="form-group">
+            <label>검사일 *</label>
+            <input type="date" value={form.inspect_date} onChange={e=>set('inspect_date',e.target.value)} />
+          </div>
+          <div className="form-group">
+            <label>검사자</label>
+            <input value={form.inspector} onChange={e=>set('inspector',e.target.value)} placeholder="이름 입력" />
+          </div>
+        </div>
+
+        <div className="grid-2" style={{gridTemplateColumns:'1fr 1fr 1fr',gap:8}}>
+          <div className="form-group">
+            <label>검사수량</label>
+            <input type="number" value={form.inspect_qty} onChange={e=>{const q=+e.target.value;set('inspect_qty',q);set('pass_qty',q-(form.fail_qty||0))}} />
+          </div>
+          <div className="form-group">
+            <label>불량수량</label>
+            <input type="number" value={form.fail_qty} onChange={e=>{const f=+e.target.value;set('fail_qty',f);set('pass_qty',(form.inspect_qty||0)-f)}} />
+          </div>
+          <div className="form-group">
+            <label>합격수량</label>
+            <input type="number" value={form.pass_qty} readOnly style={{background:'var(--bg-secondary)'}} />
+          </div>
+        </div>
+
+        <div className="grid-2">
+          <div className="form-group">
+            <label>외관검사</label>
+            <select value={form.appearance_ok===true?'합격':form.appearance_ok===false?'불합격':'미실시'} onChange={e=>set('appearance_ok',e.target.value==='합격'?true:e.target.value==='불합격'?false:null)}>
+              <option>합격</option><option>불합격</option><option>미실시</option>
+            </select>
+          </div>
+          <div className="form-group">
+            <label>최종 판정</label>
+            <select value={form.result} onChange={e=>set('result',e.target.value)} style={{fontWeight:700,color:form.result==='합격'?'#16a34a':form.result==='불합격'?'#dc2626':'#d97706'}}>
+              <option value="합격">합격</option>
+              <option value="불합격">불합격</option>
+              <option value="검사대기">검사대기</option>
+            </select>
+          </div>
+        </div>
+
+        <div className="form-group">
+          <label>불량 내용</label>
+          <input value={form.defect_note} onChange={e=>set('defect_note',e.target.value)} placeholder="치수불량, 외관불량 등" />
+        </div>
+
+        <div className="form-group">
+          <label>비고</label>
+          <textarea rows={2} value={form.note} onChange={e=>set('note',e.target.value)} style={{width:'100%',padding:8,borderRadius:6,border:'1px solid var(--border)'}} />
+        </div>
+
+        <div className="modal-footer">
+          <button className="btn btn-outline" onClick={onClose}>취소</button>
+          <button className="btn btn-primary" onClick={submit}>{editTarget?'수정':'등록'}</button>
         </div>
       </div>
     </div>

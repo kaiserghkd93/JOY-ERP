@@ -32,6 +32,7 @@ from app.models import quality_advanced as _qa_models  # noqa: ensure tables
 from app.models import inventory_adj as _inv_adj_models  # noqa: ensure tables registered
 from app.models import audit as _audit_models  # noqa: ensure audit_log table
 from app.models import tps as _tps_models  # noqa: ensure TPS tables
+from app.models.quality import OqcInspection as _oqc_model  # noqa: ensure oqc_inspection table
 
 Base.metadata.create_all(bind=engine, checkfirst=True)
 

@@ -10,6 +10,7 @@ from app.models.quality import (
     InspectionStandard, InspectionItem, StandardStatus,
     NonConformance, NcrAppeal, NcrStatus, AppealStatus,
     ProcessOutgoingDefect, InspectType,
+    OqcInspection, OqcResult,
 )
 from app.models.master import Partner, Item
 from app.models.purchase import Receipt
@@ -1150,3 +1151,158 @@ def vda_quality_analysis(year: int, month: int, db: Session = Depends(get_db)):
         # 6. 3개월 추이
         "trend": trend_months,
     }
+
+
+# ════════════════════════════════════════════════════════════════════
+# OQC 출하검사 API
+# ════════════════════════════════════════════════════════════════════
+
+class OqcCreate(BaseModel):
+    sh_no: str
+    inspect_date: date
+    inspector: str | None = None
+    inspect_qty: int
+    pass_qty: int
+    fail_qty: int = 0
+    result: str = "합격"
+    defect_note: str | None = None
+    measurements: str | None = None
+    appearance_ok: bool | None = None
+    note: str | None = None
+
+
+class OqcUpdate(BaseModel):
+    inspect_date: date | None = None
+    inspector: str | None = None
+    inspect_qty: int | None = None
+    pass_qty: int | None = None
+    fail_qty: int | None = None
+    result: str | None = None
+    defect_note: str | None = None
+    measurements: str | None = None
+    appearance_ok: bool | None = None
+    note: str | None = None
+
+
+def _oqc_row(o, db):
+    from app.models.sales import Shipment as _Ship, SalesOrder
+    from app.models.master import Partner, Item
+    sh = db.get(_Ship, o.sh_no)
+    so = db.get(SalesOrder, sh.so_no) if sh else None
+    partner = db.get(Partner, so.partner_id) if so else None
+    item = db.get(Item, sh.part_no) if sh else None
+    return {
+        "id": o.id,
+        "sh_no": o.sh_no,
+        "so_no": sh.so_no if sh else None,
+        "ship_date": str(sh.ship_date) if sh else None,
+        "partner_id": so.partner_id if so else None,
+        "partner_name": partner.name if partner else None,
+        "part_no": sh.part_no if sh else None,
+        "part_name": item.name if item else None,
+        "ship_qty": sh.qty if sh else None,
+        "inspect_date": str(o.inspect_date),
+        "inspector": o.inspector,
+        "inspect_qty": o.inspect_qty,
+        "pass_qty": o.pass_qty,
+        "fail_qty": o.fail_qty,
+        "result": o.result,
+        "defect_note": o.defect_note,
+        "measurements": o.measurements,
+        "appearance_ok": o.appearance_ok,
+        "note": o.note,
+        "created_at": str(o.created_at),
+    }
+
+
+@router.get("/oqc")
+def list_oqc(
+    partner_id: str | None = None,
+    result: str | None = None,
+    start: str | None = None,
+    end: str | None = None,
+    db: Session = Depends(get_db),
+):
+    q = db.query(OqcInspection)
+    if start:
+        q = q.filter(OqcInspection.inspect_date >= start)
+    if end:
+        q = q.filter(OqcInspection.inspect_date <= end)
+    if result:
+        q = q.filter(OqcInspection.result == result)
+    rows = q.order_by(OqcInspection.inspect_date.desc(), OqcInspection.id.desc()).all()
+    out = []
+    for o in rows:
+        d = _oqc_row(o, db)
+        if partner_id and d.get("partner_id") != partner_id:
+            continue
+        out.append(d)
+    return out
+
+
+@router.get("/oqc/pending-shipments")
+def oqc_pending_shipments(db: Session = Depends(get_db)):
+    from app.models.sales import Shipment as _Ship, SalesOrder
+    from app.models.master import Partner, Item
+    registered = {o.sh_no for o in db.query(OqcInspection.sh_no).all()}
+    ships = db.query(_Ship).filter(_Ship.status == "confirmed").all()
+    out = []
+    for sh in ships:
+        if sh.sh_no in registered:
+            continue
+        so = db.get(SalesOrder, sh.so_no)
+        partner = db.get(Partner, so.partner_id) if so else None
+        item = db.get(Item, sh.part_no)
+        out.append({
+            "sh_no": sh.sh_no,
+            "so_no": sh.so_no,
+            "ship_date": str(sh.ship_date),
+            "partner_id": so.partner_id if so else None,
+            "partner_name": partner.name if partner else None,
+            "part_no": sh.part_no,
+            "part_name": item.name if item else None,
+            "ship_qty": sh.qty,
+        })
+    out.sort(key=lambda x: x["ship_date"], reverse=True)
+    return out
+
+
+@router.post("/oqc", status_code=201)
+def create_oqc(body: OqcCreate, db: Session = Depends(get_db)):
+    if db.query(OqcInspection).filter(OqcInspection.sh_no == body.sh_no).first():
+        raise HTTPException(400, f"이미 등록된 OQC 성적서입니다: {body.sh_no}")
+    o = OqcInspection(**body.model_dump())
+    db.add(o)
+    db.commit()
+    db.refresh(o)
+    return _oqc_row(o, db)
+
+
+@router.patch("/oqc/{oqc_id}")
+def update_oqc(oqc_id: int, body: OqcUpdate, db: Session = Depends(get_db)):
+    o = db.get(OqcInspection, oqc_id)
+    if not o:
+        raise HTTPException(404, "OQC 성적서 없음")
+    for k, v in body.model_dump(exclude_none=True).items():
+        setattr(o, k, v)
+    o.updated_at = datetime.now()
+    db.commit()
+    db.refresh(o)
+    return _oqc_row(o, db)
+
+
+@router.get("/oqc/detail/{oqc_id}")
+def get_oqc(oqc_id: int, db: Session = Depends(get_db)):
+    o = db.get(OqcInspection, oqc_id)
+    if not o:
+        raise HTTPException(404, "OQC 성적서 없음")
+    return _oqc_row(o, db)
+
+
+@router.delete("/oqc/{oqc_id}", status_code=204)
+def delete_oqc(oqc_id: int, db: Session = Depends(get_db)):
+    o = db.get(OqcInspection, oqc_id)
+    if not o:
+        raise HTTPException(404, "OQC 성적서 없음")
+    db.delete(o)
+    db.commit()
